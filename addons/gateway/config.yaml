@@ -1,0 +1,22 @@
+name: "Home Assistant Gateway"
+description: "Home Assistant Gateway is a HTTP/S proxy with integrated DNS and Letsencrypt support"
+version: "0.1.0"
+slug: "home_assistant_gateway"
+startup: "services"
+homeassistant_api: true
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+options:
+  domains: []
+schema:
+  domains:
+    - str
+ports:
+  53/tcp: 10053
+  53/udp: 10053
+  80/tcp: 10080
+  443/tcp: 10443
