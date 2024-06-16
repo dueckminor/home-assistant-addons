@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+if [[ ! -d /addons ]]; then
+    echo "This command has to be executed on home-assistant"
+fi
+
+rm -rf /addons/dueckminor_gateway/
+mkdir -p /addons/dueckminor_gateway
+cp -a ./addons/gateway/* /addons/dueckminor_gateway/
+
+go build -o build/gateway go/tools/gateway/gateway.go   
+
+cp build/gateway /addons/dueckminor_gateway/gateway
