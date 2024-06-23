@@ -1,13 +1,35 @@
 #!/usr/bin/env bash
 
-if [[ ! -d /addons ]]; then
+set -e
+
+if [[ "$(uname -s)" != "Darwin" ]] && [[ ! -d /addons ]]; then
     echo "This command has to be executed on home-assistant"
+    exit 1
 fi
 
-rm -rf /addons/dueckminor_gateway/
-mkdir -p /addons/dueckminor_gateway
-cp -a ./addons/gateway/* /addons/dueckminor_gateway/
+# prepare ./gen/addons/gateway
 
-go build -o build/gateway go/tools/gateway/gateway.go   
+mkdir -p gen/addons/gateway
+rm -rf gen/addons/gateway/*
 
-cp build/gateway /addons/dueckminor_gateway/gateway
+GOOS=linux GOARCH=arm64 go build -o gen/addons/gateway/gateway go/tools/gateway/gateway.go   
+cp -a ./addons/gateway/* gen/addons/gateway/
+
+# copy files to /addons/dueckminor_gateway on homeassistant.local
+
+(cd gen/addons/gateway; tar czf - .) | (
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    ssh hassio@homeassistant.local '
+        sudo rm -rf /addons/dueckminor_gateway/
+        sudo mkdir /addons/dueckminor_gateway
+        cd /addons/dueckminor_gateway
+        sudo tar xzvf -
+        sudo chown -R root.root .
+    '
+else
+    rm -rf /addons/dueckminor_gateway/
+    mkdir /addons/dueckminor_gateway
+    cd /addons/dueckminor_gateway
+    tar xzvf -
+fi
+)

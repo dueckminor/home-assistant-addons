@@ -11,9 +11,17 @@ arch:
   - armhf
   - armv7
   - i386
+map:
+  - ssl
+  - share
 options:
   domains: []
   servers: []
+  external_ip:
+    entity: null
+  dev:
+    domain: ""
+    ip: ""
 schema:
   domains:
     - str
@@ -21,8 +29,13 @@ schema:
     - hostname: str
       target: str
       mode: str
+  external_ip:
+    entity: str
+  dev:
+    domain: str
+    ip: str
 ports:
-  53/tcp: 10053
-  53/udp: 10053
-  80/tcp: 10080
-  443/tcp: 10443
+  53/tcp: 53
+  53/udp: 53
+  80/tcp: 80
+  443/tcp: 443
