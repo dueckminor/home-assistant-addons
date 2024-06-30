@@ -5,16 +5,50 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
+	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 )
 
-func login(c *gin.Context) {
+func RegisterAuthServer(r *gin.Engine, distFolder string) {
+	a := new(AuthServer)
+	a.dist = distFolder
+
+	r.Use(static.ServeRoot("/", distFolder))
+	r.NoRoute(func(c *gin.Context) {
+		c.File(path.Join(distFolder, "index.html"))
+	})
+
+	a.Register(r)
+}
+
+type AuthServer struct {
+	dist string
+}
+
+func (a *AuthServer) Register(r *gin.Engine) {
+
+	store := cookie.NewStore([]byte("222222"), nil, []byte("333333"))
+	r.Use(cors.Default())
+
+	rg := r.Group("")
+	rg.Use(sessions.Sessions("MYPI_AUTH_SESSION", store))
+	rg.POST("/login", a.login)
+	rg.POST("/logout", a.handleLogout)
+	rg.GET("/status", a.handleStatus)
+	rg.GET("/oauth/authorize", a.handleOauthAuthorize)
+	rg.POST("/oauth/token", a.handleOauthToken)
+}
+
+func (a *AuthServer) login(c *gin.Context) {
 	var params struct {
 		Username string
 		Password string
@@ -71,7 +105,7 @@ type ClaimsWithScope struct {
 	jwt.StandardClaims
 }
 
-func handleOauthAuthorize(c *gin.Context) {
+func (a *AuthServer) handleOauthAuthorize(c *gin.Context) {
 	session := sessions.Default(c)
 	secret, _ := session.Get("secret").(string)
 
@@ -139,7 +173,7 @@ func basicAuth(c *gin.Context) string {
 	return clientID
 }
 
-func handleOauthToken(c *gin.Context) {
+func (a *AuthServer) handleOauthToken(c *gin.Context) {
 	err := c.Request.ParseForm()
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
@@ -182,7 +216,7 @@ func handleOauthToken(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusOK, response)
 }
 
-func handleLogout(c *gin.Context) {
+func (a *AuthServer) handleLogout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
 	err := session.Save()
@@ -197,7 +231,7 @@ type status struct {
 	Username string `json:"username"`
 }
 
-func handleStatus(c *gin.Context) {
+func (a *AuthServer) handleStatus(c *gin.Context) {
 	session := sessions.Default(c)
 
 	username, _ := session.Get("username").(string)

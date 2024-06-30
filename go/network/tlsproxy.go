@@ -52,7 +52,9 @@ func (d dialCtx) DialCtx(ctx context.Context, sni string) (net.Conn, error) {
 type TLSProxy interface {
 	Serve
 	ListenAndServe(ctx context.Context, network string, address string) error
+	SetExternalIp(address string)
 	AddHandler(sni string, handler any)
+	InternalOnly(sni string)
 	AddTLSConfig(sni string, tlsConfig *tls.Config)
 }
 
@@ -60,6 +62,8 @@ type tlsProxy struct {
 	serveHandlers map[string]ServeCtx
 	dialHandlers  map[string]DialCtx
 	tlsConfigs    map[string]*tls.Config
+	internal      map[string]bool
+	externalAddr  net.IP
 }
 
 func NewTLSProxy() (TLSProxy, error) {
@@ -67,6 +71,7 @@ func NewTLSProxy() (TLSProxy, error) {
 		serveHandlers: make(map[string]ServeCtx),
 		dialHandlers:  make(map[string]DialCtx),
 		tlsConfigs:    make(map[string]*tls.Config),
+		internal:      make(map[string]bool),
 	}, nil
 }
 
@@ -96,6 +101,10 @@ func (tp *tlsProxy) ListenAndServe(ctx context.Context, network string, address 
 	}
 }
 
+func (tp *tlsProxy) SetExternalIp(address string) {
+	tp.externalAddr = net.ParseIP(address)
+}
+
 func (tp *tlsProxy) AddHandler(sni string, handler any) {
 	var serveHandler ServeCtx
 	var dialHandler DialCtx
@@ -121,28 +130,29 @@ func (tp *tlsProxy) AddHandler(sni string, handler any) {
 	}
 }
 
+func (tp *tlsProxy) InternalOnly(sni string) {
+	tp.internal[sni] = true
+}
+
 func (tp *tlsProxy) AddTLSConfig(sni string, tlsConfig *tls.Config) {
 	tp.tlsConfigs[sni] = tlsConfig
 }
 
-func (tp *tlsProxy) getHandler(sni string) (serve ServeCtx, dial DialCtx) {
+func (tp *tlsProxy) getHandler(sni string) (serve ServeCtx, dial DialCtx, internal bool) {
 	if !tp.isValidHostname(sni) {
-		return nil, nil
+		return nil, nil, false
 	}
-	if serve, ok := tp.serveHandlers[sni]; ok {
-		return serve, nil
+	wildcard := "*." + strings.Join(strings.Split(sni, ".")[1:], ".")
+	internal = tp.internal[sni] || tp.internal[wildcard]
+	var ok bool
+	if serve, ok = tp.serveHandlers[sni]; !ok {
+		if dial, ok = tp.dialHandlers[sni]; !ok {
+			if serve, ok = tp.serveHandlers[wildcard]; !ok {
+				dial, ok = tp.dialHandlers[wildcard]
+			}
+		}
 	}
-	if dial, ok := tp.dialHandlers[sni]; ok {
-		return nil, dial
-	}
-	sni = "*." + strings.Join(strings.Split(sni, ".")[1:], ".")
-	if serve, ok := tp.serveHandlers[sni]; ok {
-		return serve, nil
-	}
-	if dial, ok := tp.dialHandlers[sni]; ok {
-		return nil, dial
-	}
-	return nil, nil
+	return serve, dial, internal
 }
 
 func (tp *tlsProxy) getTLSConfig(sni string) *tls.Config {
@@ -190,13 +200,20 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 	var sni string
 	var serve ServeCtx
 	var dial DialCtx
+	var internal bool
 
 	tlsConn := tls.Server(clientWrapper, &tls.Config{GetConfigForClient: func(clientHelloInfo *tls.ClientHelloInfo) (*tls.Config, error) {
 		clientWrapper.cacheRead = false
 		sni = clientHelloInfo.ServerName
 		fmt.Println("ServerName:", sni)
 
-		serve, dial = tp.getHandler(sni)
+		serve, dial, internal = tp.getHandler(sni)
+
+		fmt.Println("Remote:", conn.RemoteAddr())
+		if internal {
+			fmt.Println("Internal!")
+		}
+
 		if nil == serve && nil == dial {
 			fmt.Println("-> dropped")
 			return nil, os.ErrInvalid

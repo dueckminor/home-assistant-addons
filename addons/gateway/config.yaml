@@ -20,8 +20,9 @@ options:
   external_ip:
     entity: null
   dev:
-    domain: ""
-    ip: ""
+    hostname: ""
+    target: ""
+    mode: ""
 schema:
   domains:
     - str
@@ -30,10 +31,13 @@ schema:
       target: str
       mode: str
   external_ip:
+    source: str
     entity: str
+    cname: str
   dev:
-    domain: str
-    ip: str
+    hostname: str
+    target: str
+    mode: str
 ports:
   53/tcp: 53
   53/udp: 53

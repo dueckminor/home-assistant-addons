@@ -1,20 +1,20 @@
 package network
 
 import (
-	"context"
 	"crypto/tls"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
 
+	"github.com/dueckminor/home-assistant-addons/go/auth"
 	"github.com/gin-gonic/gin"
 )
 
 type ReverseProxyOptions struct {
 	UseTargetHostname bool
 	InsecureTLS       bool
+	AuthClient        auth.AuthClient
 }
 
 func ParseReverseProxyOptions(options string) (result ReverseProxyOptions) {
@@ -29,33 +29,17 @@ func ParseReverseProxyOptions(options string) (result ReverseProxyOptions) {
 	return result
 }
 
-type HostImplReverseProxy struct {
-	listener Listener
-	r        *gin.Engine
-	options  ReverseProxyOptions
-}
+func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) ServeCtx {
+	r := gin.Default()
 
-func (h *HostImplReverseProxy) Serve(conn net.Conn) {
-	// no need to do this here: defer conn.Close()
-	// the connection will be closed by the gin.Engine
-	h.listener <- conn
-}
-func (h *HostImplReverseProxy) ServeCtx(ctx context.Context, conn net.Conn) {
-	// no need to do this here: defer conn.Close()
-	// the connection will be closed by the gin.Engine
-	h.listener <- conn
-}
-
-func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) *HostImplReverseProxy {
-	h := new(HostImplReverseProxy)
-	h.r = gin.Default()
+	combinedOptions := ReverseProxyOptions{}
 
 	for _, opt := range options {
 		if opt.UseTargetHostname {
-			h.options.UseTargetHostname = true
+			combinedOptions.UseTargetHostname = true
 		}
 		if opt.InsecureTLS {
-			h.options.InsecureTLS = true
+			combinedOptions.InsecureTLS = true
 		}
 	}
 
@@ -64,10 +48,9 @@ func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) *HostIm
 	// 	ac.RegisterHandler(h.r)
 	// }
 
-	h.listener = MakeListener()
-	go h.r.RunListener(h.listener) // nolint:errcheck
-	h.r.Use(SingleHostReverseProxy(uri, h.options))
-	return h
+	r.Use(SingleHostReverseProxy(uri, combinedOptions))
+
+	return NewGinHandler(r)
 }
 
 func SingleHostReverseProxy(target string, options ReverseProxyOptions) gin.HandlerFunc {

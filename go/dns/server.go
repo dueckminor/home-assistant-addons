@@ -68,6 +68,18 @@ func (d *domainWithHost) makeA(ip net.IP) dns.RR {
 	}
 }
 
+func (d *domainWithHost) makeCNAME(cname string) dns.RR {
+	return &dns.CNAME{
+		Hdr: dns.RR_Header{
+			Name:   d.query,
+			Rrtype: dns.TypeCNAME,
+			Class:  dns.ClassINET,
+			Ttl:    60,
+		},
+		Target: cname + ".",
+	}
+}
+
 func (d *domainWithHost) makeACME() dns.RR {
 	return &dns.TXT{
 		Hdr: dns.RR_Header{
@@ -87,10 +99,18 @@ type server struct {
 
 	domains []*domain
 	address net.IP
+	cname   string
 }
 
 func (s *server) SetExternalIp(address string) error {
-	s.address = net.ParseIP(address)
+	ip := net.ParseIP(address)
+	if ip != nil {
+		s.address = ip
+		s.cname = ""
+	} else {
+		s.address = nil
+		s.cname = address
+	}
 	return nil
 }
 
@@ -205,13 +225,24 @@ func (s *server) dnsHandleFunc(w dns.ResponseWriter, r *dns.Msg) {
 				m.Answer = append(m.Answer, d.makeACME())
 				m.Ns = append(m.Ns, d.makeNS())
 			}
+		case dns.TypeCNAME:
+			if d.host != "" {
+				m.Ns = append(m.Ns, d.makeNS())
+			}
 		case dns.TypeA:
 			if d.host != "" {
-				m.Answer = append(m.Answer, d.makeA(s.address))
+				if s.address != nil {
+					m.Answer = append(m.Answer, d.makeA(s.address))
+				} else if s.cname != "" {
+					m.Answer = append(m.Answer, d.makeCNAME(s.cname))
+				}
 				m.Ns = append(m.Ns, d.makeNS())
 			}
 		case dns.TypeAAAA:
-			fmt.Println("AAAA", r.Question[0].Name)
+			if s.cname != "" {
+				m.Answer = append(m.Answer, d.makeCNAME(s.cname))
+			}
+			m.Ns = append(m.Ns, d.makeNS())
 		default:
 			fmt.Println("?", r.Question[0].Name)
 		}
