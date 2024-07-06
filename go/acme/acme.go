@@ -148,7 +148,7 @@ func (c *client) acceptChallenges(ctx context.Context, order *acme.Order) (err e
 }
 
 func NewClient(dataDir string, challengeHandler ChallengeHandler) (c Client, err error) {
-	key, err := crypto.GetOrCreatePrivateKey(path.Join(dataDir, "account_key.pem"))
+	key, err := crypto.GetOrCreatePrivateKeyFile(path.Join(dataDir, "account_key.pem"))
 	if err != nil {
 		return nil, err
 	}

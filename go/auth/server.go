@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto"
 	"encoding/base64"
 	"net"
 	"net/http"
@@ -18,25 +19,43 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
-func RegisterAuthServer(r *gin.Engine, distFolder string) {
-	a := new(AuthServer)
-	a.dist = distFolder
+func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer, err error) {
+	a = new(AuthServer)
+	a.distDir = distDir
+	a.dataDir = dataDir
+	a.clients = NewAuthClientConfigManager(path.Join(dataDir, "clients"))
 
-	r.Use(static.ServeRoot("/", distFolder))
+	a.config, err = NewAuthServerConfigFile(path.Join(dataDir, "server.yml"))
+	if err != nil {
+		return nil, err
+	}
+
+	a.users, err = NewUsers(dataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	r.Use(static.ServeRoot("/", distDir))
 	r.NoRoute(func(c *gin.Context) {
-		c.File(path.Join(distFolder, "index.html"))
+		c.File(path.Join(distDir, "index.html"))
 	})
 
 	a.Register(r)
+	return a, nil
 }
 
 type AuthServer struct {
-	dist string
+	distDir      string
+	dataDir      string
+	config       *AuthServerConfig
+	clients      AuthClientConfigManager
+	sessionStore sessions.Store
+	users        Users
 }
 
 func (a *AuthServer) Register(r *gin.Engine) {
 
-	store := cookie.NewStore([]byte("222222"), nil, []byte("333333"))
+	store := a.GetSessionStore()
 	r.Use(cors.Default())
 
 	rg := r.Group("")
@@ -46,6 +65,21 @@ func (a *AuthServer) Register(r *gin.Engine) {
 	rg.GET("/status", a.handleStatus)
 	rg.GET("/oauth/authorize", a.handleOauthAuthorize)
 	rg.POST("/oauth/token", a.handleOauthToken)
+}
+
+func (a *AuthServer) GetPublicKey() (p crypto.PublicKey) {
+	return a.config.JWTKey.Public()
+}
+
+func (a *AuthServer) GetAuthClientConfig(clientId string) (c *AuthClientConfig, err error) {
+	return a.clients.NewAuthClientConfig(clientId, false)
+}
+
+func (a *AuthServer) GetSessionStore() sessions.Store {
+	if a.sessionStore == nil {
+		a.sessionStore = cookie.NewStore(a.config.AuthKey, a.config.EncKey)
+	}
+	return a.sessionStore
 }
 
 func (a *AuthServer) login(c *gin.Context) {
@@ -59,10 +93,10 @@ func (a *AuthServer) login(c *gin.Context) {
 		return
 	}
 
-	// if !users.CheckPassword(params.Username, params.Password) {
-	// 	c.AbortWithStatus(http.StatusUnauthorized)
-	// 	return
-	// }
+	if !a.users.CheckPassword(params.Username, params.Password) {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
 
 	session := sessions.Default(c)
 
@@ -139,7 +173,7 @@ type OauthTokenResponse struct {
 	AccessToken string `json:"access_token"`
 }
 
-func basicAuth(c *gin.Context) string {
+func (a *AuthServer) basicAuth(c *gin.Context) string {
 	s := strings.SplitN(c.Request.Header.Get("Authorization"), " ", 2)
 	if len(s) != 2 {
 		return ""
@@ -161,14 +195,13 @@ func basicAuth(c *gin.Context) string {
 		return ""
 	}
 
-	// clientConfig, err := config.ReadConfigFile(dirMypiAuthClients, clientID+".yml")
-	// if err != nil {
-	// 	return ""
-	// }
-	// clientSecret := clientConfig.GetString("client_secret")
-	// if clientSecret != pair[1] {
-	// 	return ""
-	// }
+	clientConfig, err := a.clients.GewAuthClientConfig(clientID)
+	if err != nil {
+		return ""
+	}
+	if clientConfig.ClientSecret != pair[1] {
+		return ""
+	}
 
 	return clientID
 }
@@ -194,7 +227,7 @@ func (a *AuthServer) handleOauthToken(c *gin.Context) {
 		return
 	}
 
-	username := basicAuth(c)
+	username := a.basicAuth(c)
 	if username != clientID {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
@@ -206,12 +239,11 @@ func (a *AuthServer) handleOauthToken(c *gin.Context) {
 		return
 	}
 
-	// token := jwt.NewWithClaims(jwt.SigningMethodRS256, ClaimsWithScope{})
-	// key, _ := config.ReadRSAPrivateKey("etc/mypi-auth/server/server_priv.pem")
-	// jwt, _ := token.SignedString(key)
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, ClaimsWithScope{})
+	jwt, _ := token.SignedString(a.config.JWTKey.RSA())
 
 	response := OauthTokenResponse{
-		//AccessToken: jwt,
+		AccessToken: jwt,
 	}
 	c.AbortWithStatusJSON(http.StatusOK, response)
 }

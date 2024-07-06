@@ -15,6 +15,11 @@ rm -rf gen/addons/gateway/*
 GOOS=linux GOARCH=arm64 go build -o gen/addons/gateway/gateway go/tools/gateway/gateway.go   
 cp -a ./addons/gateway/* gen/addons/gateway/
 
+pushd web/auth
+npm run build
+popd
+cp -a ./web/auth/dist gen/addons/gateway/
+
 # copy files to /addons/dueckminor_gateway on homeassistant.local
 
 (cd gen/addons/gateway; tar czf - .) | (

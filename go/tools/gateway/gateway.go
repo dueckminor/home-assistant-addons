@@ -71,24 +71,64 @@ func init() {
 	}
 }
 
-func configureServer(proxy network.TLSProxy, server configServer) {
+type Gateway struct {
+	authServer *auth.AuthServer
+	authClient *auth.AuthClient
+}
+
+func (g *Gateway) configureServer(proxy network.TLSProxy, server configServer) {
 	if strings.HasPrefix(server.Target, "http://") || strings.HasPrefix(server.Target, "https://") {
 		options := network.ParseReverseProxyOptions(server.Mode)
+		if options.Auth {
+			options.AuthClient = new(auth.AuthClient)
+			*options.AuthClient = *g.authClient
+			options.AuthClient.Secret = options.AuthSecret
+			options.SessionStore = g.authServer.GetSessionStore()
+		}
 		proxy.AddHandler(server.Hostname, network.NewHostImplReverseProxy(server.Target, options))
 	}
 	if strings.HasPrefix(server.Target, "tcp://") {
 		proxy.AddHandler(server.Hostname, network.NewDialTCPRaw("tcp", server.Target[6:]))
 	}
-	if server.Target == "@auth" {
-		r := gin.Default()
-		auth.RegisterAuthServer(r, distDir)
-		proxy.AddHandler(server.Hostname, network.NewGinHandler(r))
-	}
 }
 
-func configureServers(proxy network.TLSProxy, servers []configServer) {
+func (g *Gateway) configureAuthServer(proxy network.TLSProxy, server configServer) {
+	if g.authServer != nil {
+		panic("only one auth-server allowed")
+	}
+	r := gin.Default()
+	var err error
+	g.authServer, err = auth.NewAuthServer(r, distDir, path.Join(dataDir, "auth"))
+	if err != nil {
+		panic(err)
+	}
+
+	acc, err := g.authServer.GetAuthClientConfig("gateway")
+	if err != nil {
+		panic(err)
+	}
+
+	g.authClient = &auth.AuthClient{
+		AuthURI:      "https://" + server.Hostname,
+		ClientID:     acc.ClientId,
+		ClientSecret: acc.ClientSecret,
+		ServerKey:    g.authServer.GetPublicKey(),
+		Secret:       "",
+	}
+
+	proxy.AddHandler(server.Hostname, network.NewGinHandler(r))
+}
+
+func (g *Gateway) configureServers(proxy network.TLSProxy, servers []configServer) {
 	for _, server := range servers {
-		configureServer(proxy, server)
+		if server.Target == "@auth" {
+			g.configureAuthServer(proxy, server)
+		}
+	}
+	for _, server := range servers {
+		if server.Target != "@auth" {
+			g.configureServer(proxy, server)
+		}
 	}
 }
 
@@ -136,6 +176,8 @@ func main() {
 		panic(err)
 	}
 
+	g := new(Gateway)
+
 	httpServer := network.NewHttpToHttps()
 
 	httpsServer, err := network.NewTLSProxy()
@@ -155,10 +197,10 @@ func main() {
 		//domain := strings.Join(strings.Split(theConfig.Dev.Hostname, ".")[1:], ".")
 		//dnsServer.AddDomains(domain)
 		httpsServer.InternalOnly(theConfig.Dev.Hostname)
-		configureServer(httpsServer, theConfig.Dev)
+		g.configureServer(httpsServer, theConfig.Dev)
 	}
 
-	configureServers(httpsServer, theConfig.Servers)
+	g.configureServers(httpsServer, theConfig.Servers)
 
 	wg.Add(1)
 	go func() {

@@ -1,8 +1,8 @@
 package auth
 
 import (
+	"crypto"
 	"crypto/rand"
-	"crypto/rsa"
 	"encoding/base32"
 	"encoding/json"
 	"fmt"
@@ -21,7 +21,7 @@ type AuthClient struct {
 	AuthURI      string
 	ClientID     string
 	ClientSecret string
-	ServerKey    *rsa.PublicKey
+	ServerKey    crypto.PublicKey
 	Secret       string
 }
 

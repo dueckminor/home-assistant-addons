@@ -2,6 +2,7 @@ package pki
 
 import (
 	"crypto/tls"
+	"fmt"
 	"os"
 	"time"
 
@@ -53,41 +54,69 @@ func (sc *serverCertificate) GetCertAndKey() (crypto.PrivateKey, crypto.Certific
 	return sc.key, sc.chain
 }
 
-func (sc *serverCertificate) refreshLoop() (err error) {
+func (sc *serverCertificate) refreshLoop() {
 	for {
-		key, err := crypto.GetPrivateKey(sc.keyFile)
-		if os.IsNotExist(err) {
-			sc.createCert()
-			continue
-		}
+		err := sc.refreshLoopStep()
 		if err != nil {
+			fmt.Println(err)
 			time.Sleep(time.Second * 5)
-			continue
 		}
-
-		chain, err := crypto.GetCertificateChain(sc.certFile)
-		if err != nil {
-			time.Sleep(time.Second * 5)
-			continue
-		}
-
-		sc.tlsConfig = &tls.Config{
-			Certificates: []tls.Certificate{
-				{
-					Certificate: chain.ASN1(),
-					PrivateKey:  key,
-					Leaf:        chain[0].OBJ(),
-				},
-			},
-		}
-
-		sc.updateTLSServer()
-		return nil
 	}
 }
 
+func (sc *serverCertificate) refreshLoopStep() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in refreshLoopStep: %v", r)
+		}
+	}()
+	key, err := crypto.ReadPrivateKey(sc.keyFile)
+	if os.IsNotExist(err) {
+		sc.createCert()
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	chain, err := crypto.GetCertificateChain(sc.certFile)
+	if err != nil {
+		return err
+	}
+
+	sc.tlsConfig = &tls.Config{
+		Certificates: []tls.Certificate{
+			{
+				Certificate: chain.ASN1(),
+				PrivateKey:  key,
+				Leaf:        chain[0].OBJ(),
+			},
+		},
+	}
+
+	sc.updateTLSServer()
+
+	lifetime := chain[0].OBJ().NotAfter.Sub(chain[0].OBJ().NotBefore)
+	used := time.Now().UTC().Sub(chain[0].OBJ().NotBefore)
+	percentUsed := float64(used) * 100.0 / float64(lifetime)
+
+	fmt.Printf("Certificate (%s) has used %.2f%% of its lifetime\n", sc.dnsNames[0], percentUsed)
+	fmt.Println("Valid-NotBefore:", chain[0].OBJ().NotBefore)
+	fmt.Println("Valid-NotAfter:", chain[0].OBJ().NotAfter)
+
+	if percentUsed < 60.0 {
+		fmt.Println("no need to update")
+		time.Sleep(time.Hour * 24)
+		return nil
+	}
+
+	fmt.Println("trying to get a new certificate")
+	sc.createCert()
+	return nil
+}
+
 func (sc *serverCertificate) createCert() (err error) {
-	key, err := crypto.GetOrCreatePrivateKey(sc.newKeyFile)
+	key, err := crypto.GetOrCreatePrivateKeyFile(sc.newKeyFile)
 	if err != nil {
 		return err
 	}

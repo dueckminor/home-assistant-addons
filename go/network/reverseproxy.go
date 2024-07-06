@@ -8,13 +8,17 @@ import (
 	"strings"
 
 	"github.com/dueckminor/home-assistant-addons/go/auth"
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
 type ReverseProxyOptions struct {
 	UseTargetHostname bool
 	InsecureTLS       bool
-	AuthClient        auth.AuthClient
+	Auth              bool
+	AuthClient        *auth.AuthClient
+	AuthSecret        string
+	SessionStore      sessions.Store
 }
 
 func ParseReverseProxyOptions(options string) (result ReverseProxyOptions) {
@@ -24,6 +28,12 @@ func ParseReverseProxyOptions(options string) (result ReverseProxyOptions) {
 		}
 		if option == "use-target-hostname" {
 			result.UseTargetHostname = true
+		}
+		if option == "auth" {
+			result.Auth = true
+		}
+		if strings.HasPrefix(option, "secret=") {
+			result.AuthSecret = option[7:]
 		}
 	}
 	return result
@@ -41,12 +51,24 @@ func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) ServeCt
 		if opt.InsecureTLS {
 			combinedOptions.InsecureTLS = true
 		}
+		if opt.Auth {
+			combinedOptions.Auth = true
+		}
+		if opt.AuthClient != nil {
+			combinedOptions.AuthClient = opt.AuthClient
+		}
+		if opt.AuthSecret != "" {
+			combinedOptions.AuthSecret = opt.AuthSecret
+		}
+		if opt.SessionStore != nil {
+			combinedOptions.SessionStore = opt.SessionStore
+		}
 	}
 
-	// if ac != nil {
-	// 	h.r.Use(sessions.Sessions("MYPI_ROUTER_SESSION", store))
-	// 	ac.RegisterHandler(h.r)
-	// }
+	if combinedOptions.AuthClient != nil {
+		r.Use(sessions.Sessions("MYPI_ROUTER_SESSION", combinedOptions.SessionStore))
+		combinedOptions.AuthClient.RegisterHandler(r)
+	}
 
 	r.Use(SingleHostReverseProxy(uri, combinedOptions))
 
@@ -72,10 +94,14 @@ func SingleHostReverseProxy(target string, options ReverseProxyOptions) gin.Hand
 		}
 		return nil
 	}
+
+	var tlsConfig *tls.Config
+
 	if options.InsecureTLS {
-		proxy.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		tlsConfig = &tls.Config{
+			InsecureSkipVerify: true,
 		}
+		proxy.Transport = &http.Transport{TLSClientConfig: tlsConfig}
 	}
 
 	return func(c *gin.Context) {
@@ -85,6 +111,8 @@ func SingleHostReverseProxy(target string, options ReverseProxyOptions) gin.Hand
 		req := c.Request
 		if options.UseTargetHostname {
 			req.Host = hostname
+		} else if tlsConfig != nil {
+			tlsConfig.ServerName = req.Host
 		}
 		proxy.ServeHTTP(c.Writer, req)
 	}
