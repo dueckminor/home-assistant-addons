@@ -40,11 +40,18 @@ type configServer struct {
 	Mode     string `yaml:"mode"`
 }
 
+type configDev struct {
+	Domain      string `yaml:"domain"`
+	HttpTarget  string `yaml:"http_target"`
+	HttpsTarget string `yaml:"https_target"`
+	DnsTarget   string `yaml:"dns_target"`
+}
+
 type config struct {
 	Domains    []string         `yaml:"domains"`
 	ExternalIp configExternalIp `yaml:"external_ip"`
 	Servers    []configServer   `yaml:"servers"`
-	Dev        configServer     `yaml:"dev"`
+	Dev        configDev        `yaml:"dev"`
 }
 
 var theConfig config
@@ -185,19 +192,23 @@ func main() {
 		panic(err)
 	}
 
-	serverCertificates := make([]pki.ServerCertificate, 0)
-
 	for _, domain := range theConfig.Domains {
 		serverCertificate := pki.NewServerCertificate(path.Join(dataDir, domain), acmeClient, "*."+domain)
 		serverCertificate.SetTLSServer(httpsServer)
-		serverCertificates = append(serverCertificates, serverCertificate)
 	}
 
-	if theConfig.Dev.Target != "" {
-		//domain := strings.Join(strings.Split(theConfig.Dev.Hostname, ".")[1:], ".")
-		//dnsServer.AddDomains(domain)
-		httpsServer.InternalOnly(theConfig.Dev.Hostname)
-		g.configureServer(httpsServer, theConfig.Dev)
+	if theConfig.Dev.Domain != "" {
+		if theConfig.Dev.HttpsTarget != "" {
+			httpsServer.InternalOnly("*." + theConfig.Dev.Domain)
+			g.configureServer(httpsServer, configServer{
+				Hostname: "*." + theConfig.Dev.Domain,
+				Target:   theConfig.Dev.HttpsTarget,
+				Mode:     "raw",
+			})
+		}
+		if theConfig.Dev.DnsTarget != "" {
+			dnsServer.AddProxyDomain(theConfig.Dev.Domain, theConfig.Dev.DnsTarget)
+		}
 	}
 
 	g.configureServers(httpsServer, theConfig.Servers)

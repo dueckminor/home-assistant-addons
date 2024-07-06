@@ -12,12 +12,14 @@ import (
 type Server interface {
 	SetExternalIp(address string) error
 	AddDomains(domains ...string) error
+	AddProxyDomain(domain string, target string) error
 	SetChallenge(domain string, challenge string) error
 }
 
 type domain struct {
-	name      string
-	challenge string
+	name         string
+	challenge    string
+	proxy_target string
 }
 
 func (d *domain) makeNS() dns.RR {
@@ -136,6 +138,18 @@ func (s *server) AddDomains(domains ...string) error {
 	return nil
 }
 
+func (s *server) AddProxyDomain(name string, target string) error {
+	d := s.getDomain(name)
+	if d == nil {
+		d = &domain{
+			name: name,
+		}
+		s.domains = append(s.domains, d)
+	}
+	d.proxy_target = target
+	return nil
+}
+
 func (s *server) SetChallenge(domain string, challenge string) error {
 	d := s.getDomain(domain)
 	if d == nil {
@@ -216,6 +230,25 @@ func (s *server) dnsHandleFunc(w dns.ResponseWriter, r *dns.Msg) {
 	fmt.Println("DNS: Remote-Addr:", w.RemoteAddr())
 
 	d := s.questionToHostAndDomain(r.Question[0])
+
+	if d != nil && d.proxy_target != "" {
+		dnsClient := new(dns.Client)
+		target := d.proxy_target
+		target = strings.TrimPrefix(target, "udp://")
+		if strings.HasPrefix(target, "tcp://") {
+			target = target[6:]
+			dnsClient.Net = "tcp"
+		}
+		resp, runtime, err := dnsClient.Exchange(r, target)
+		fmt.Println("runtime:", runtime)
+		fmt.Println("err:", err)
+		if resp != nil {
+			w.WriteMsg(resp)
+		} else {
+			w.WriteMsg(m)
+		}
+		return
+	}
 
 	if d != nil {
 		switch r.Question[0].Qtype {
