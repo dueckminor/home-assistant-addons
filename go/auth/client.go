@@ -90,13 +90,32 @@ func (ac *AuthClient) handleAuthForApi(c *gin.Context) {
 }
 
 func (ac *AuthClient) handleAuth(c *gin.Context) {
-	if ac.verifySession(c) || c.IsAborted() {
+	if c.IsAborted() {
 		return
 	}
+	sessionVerified := ac.verifySession(c)
 
 	if ac.Secret != "" {
-		secret := c.Request.URL.Query().Get("mypi-secret")
-		if secret == ac.Secret {
+		if !sessionVerified {
+			secret := c.Request.URL.Query().Get("mypi-secret")
+			if secret == "" {
+				secret = c.Request.URL.Query().Get("secret")
+			}
+			if secret == ac.Secret {
+				session := sessions.Default(c)
+				session.Set("access_token", "anonymous")
+				session.Set("hostname", ginutil.GetHostname(c))
+				err := session.Save()
+				if err != nil {
+					c.AbortWithStatus(http.StatusInternalServerError)
+					return
+				}
+				return
+			}
+		}
+		path := c.Request.URL.Path
+		pattern := "/secret/" + ac.Secret
+		if path == pattern || strings.HasPrefix(path, pattern+"/") {
 			session := sessions.Default(c)
 			session.Set("access_token", "anonymous")
 			session.Set("hostname", ginutil.GetHostname(c))
@@ -105,8 +124,16 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 				c.AbortWithStatus(http.StatusInternalServerError)
 				return
 			}
-			return
+			if path == pattern {
+				c.Request.URL.Path = "/"
+			} else {
+				c.Request.URL.Path = path[len(pattern):]
+			}
 		}
+	}
+
+	if sessionVerified {
+		return
 	}
 
 	scheme := ginutil.GetScheme(c)
