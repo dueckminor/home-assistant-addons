@@ -14,8 +14,6 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/acme"
 	"github.com/dueckminor/home-assistant-addons/go/auth"
 	"github.com/dueckminor/home-assistant-addons/go/dns"
-	"github.com/dueckminor/home-assistant-addons/go/homeassistant"
-	"github.com/dueckminor/home-assistant-addons/go/httpbin"
 	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/pki"
 	"github.com/gin-gonic/gin"
@@ -29,9 +27,8 @@ var httpPort int
 var httpsPort int
 
 type configExternalIp struct {
-	Source string `yaml:"source"`
-	Entity string `yaml:"entity"`
-	CName  string `yaml:"cname"`
+	Source  string `yaml:"source"`
+	Options string `yaml:"options"`
 }
 
 type configServer struct {
@@ -48,10 +45,11 @@ type configDev struct {
 }
 
 type config struct {
-	Domains    []string         `yaml:"domains"`
-	ExternalIp configExternalIp `yaml:"external_ip"`
-	Servers    []configServer   `yaml:"servers"`
-	Dev        configDev        `yaml:"dev"`
+	Domains      []string         `yaml:"domains"`
+	ExternalIp   configExternalIp `yaml:"external_ip"`
+	ExternalIpv6 configExternalIp `yaml:"external_ipv6"`
+	Servers      []configServer   `yaml:"servers"`
+	Dev          configDev        `yaml:"dev"`
 }
 
 var theConfig config
@@ -155,27 +153,26 @@ func main() {
 
 	fmt.Println("gateway started...")
 	fmt.Println("External-IP-Source:", theConfig.ExternalIp.Source)
-	var extIp string
 	var err error
+
+	var extIPv4 dns.ExternalIP
+	var extIPv6 dns.ExternalIP
+
 	switch theConfig.ExternalIp.Source {
-	case "httpbin":
-		extIp, err = httpbin.NewAPI().GetExternalIp()
-	case "cname":
-		extIp = theConfig.ExternalIp.CName
-	default:
-		haApi := homeassistant.NewAPI()
-		extIp, err = haApi.GetEntityValue("sensor.fritz_box_7590_externe_ip")
+	case "dns":
+		extIPv4 = dns.NewExternalIP("ip4", theConfig.ExternalIp.Options)
 	}
-	if err != nil {
-		panic(err)
+	switch theConfig.ExternalIpv6.Source {
+	case "dns":
+		extIPv6 = dns.NewExternalIP("ip6", theConfig.ExternalIpv6.Options)
 	}
-	fmt.Println("External IP:", extIp)
 
 	dnsServer, err := dns.NewServer(fmt.Sprintf(":%d", dnsPort))
 	if err != nil {
 		panic(err)
 	}
-	dnsServer.SetExternalIp(extIp)
+	dnsServer.SetExternalIP(extIPv4)
+	dnsServer.SetExternalIPv6(extIPv6)
 	dnsServer.AddDomains(theConfig.Domains...)
 
 	acmeClient, err := acme.NewClient(dataDir, dnsServer)

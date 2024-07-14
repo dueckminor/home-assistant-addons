@@ -10,7 +10,8 @@ import (
 )
 
 type Server interface {
-	SetExternalIp(address string) error
+	SetExternalIP(externalIP ExternalIP) error
+	SetExternalIPv6(externalIP ExternalIP) error
 	AddDomains(domains ...string) error
 	AddProxyDomain(domain string, target string) error
 	SetChallenge(domain string, challenge string) error
@@ -69,6 +70,17 @@ func (d *domainWithHost) makeA(ip net.IP) dns.RR {
 		A: ip,
 	}
 }
+func (d *domainWithHost) makeAAAA(ip net.IP) dns.RR {
+	return &dns.AAAA{
+		Hdr: dns.RR_Header{
+			Name:   d.query,
+			Rrtype: dns.TypeAAAA,
+			Class:  dns.ClassINET,
+			Ttl:    60,
+		},
+		AAAA: ip,
+	}
+}
 
 func (d *domainWithHost) makeCNAME(cname string) dns.RR {
 	return &dns.CNAME{
@@ -100,19 +112,18 @@ type server struct {
 	tcp *dns.Server
 
 	domains []*domain
-	address net.IP
-	cname   string
+
+	ipv4 ExternalIP
+	ipv6 ExternalIP
 }
 
-func (s *server) SetExternalIp(address string) error {
-	ip := net.ParseIP(address)
-	if ip != nil {
-		s.address = ip
-		s.cname = ""
-	} else {
-		s.address = nil
-		s.cname = address
-	}
+func (s *server) SetExternalIP(externalIP ExternalIP) error {
+	s.ipv4 = externalIP
+	return nil
+}
+
+func (s *server) SetExternalIPv6(externalIP ExternalIP) error {
+	s.ipv6 = externalIP
 	return nil
 }
 
@@ -264,16 +275,16 @@ func (s *server) dnsHandleFunc(w dns.ResponseWriter, r *dns.Msg) {
 			}
 		case dns.TypeA:
 			if d.host != "" {
-				if s.address != nil {
-					m.Answer = append(m.Answer, d.makeA(s.address))
-				} else if s.cname != "" {
-					m.Answer = append(m.Answer, d.makeCNAME(s.cname))
+				addr := s.ipv4.ExternalIP()
+				if len(addr) == 4 {
+					m.Answer = append(m.Answer, d.makeA(addr))
 				}
 				m.Ns = append(m.Ns, d.makeNS())
 			}
 		case dns.TypeAAAA:
-			if s.cname != "" {
-				m.Answer = append(m.Answer, d.makeCNAME(s.cname))
+			addr := s.ipv6.ExternalIP()
+			if len(addr) == 16 {
+				m.Answer = append(m.Answer, d.makeAAAA(addr))
 			}
 			m.Ns = append(m.Ns, d.makeNS())
 		default:
