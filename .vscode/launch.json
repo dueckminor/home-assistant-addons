@@ -18,6 +18,17 @@
                 "--http-port=10080",
                 "--https-port=10443",
             ]
+        },
+        {
+            "name": "Launch MQTT-Bridge",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/go/tools/mqtt-bridge/mqtt-bridge.go",
+            "args": [
+                "--data-dir=${workspaceFolder}/gen/data/mqtt-bridge"
+            ]
         }
+
     ]
 }

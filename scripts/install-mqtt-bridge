@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+set -e
+
+if [[ "$(uname -s)" != "Darwin" ]] && [[ ! -d /addons ]]; then
+    echo "This command has to be executed on home-assistant"
+    exit 1
+fi
+
+# prepare ./gen/addons/mqtt-bridge
+
+mkdir -p gen/addons/mqtt-bridge
+rm -rf gen/addons/mqtt-bridge/*
+
+GOOS=linux GOARCH=arm64 go build -o gen/addons/mqtt-bridge/mqtt-bridge go/tools/mqtt-bridge/mqtt-bridge.go
+cp -a ./addons/mqtt-bridge/* gen/addons/mqtt-bridge/
+
+# copy files to /addons/dueckminor_mqtt_bridge on homeassistant.local
+
+(cd gen/addons/mqtt-bridge; tar czf - .) | (
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    ssh hassio@homeassistant.local '
+        sudo rm -rf /addons/dueckminor_mqtt_bridge/
+        sudo mkdir /addons/dueckminor_mqtt_bridge
+        cd /addons/dueckminor_mqtt_bridge
+        sudo tar xzvf -
+        sudo chown -R root.root .
+    '
+else
+    rm -rf /addons/dueckminor_mqtt_bridge/
+    mkdir /addons/dueckminor_mqtt_bridge
+    cd /addons/dueckminor_mqtt_bridge
+    tar xzvf -
+fi
+)

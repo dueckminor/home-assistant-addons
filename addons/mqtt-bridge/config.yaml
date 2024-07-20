@@ -1,0 +1,43 @@
+name: "Home Assistant MQTT-Bridge"
+description: "Home Assistant MQTT-Bridge connect different services to MQTT"
+version: "0.1.0"
+slug: "home_assistant_mqtt_bridge"
+startup: "services"
+init: false
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+options:
+  mqtt_uri: "tcp://homeassistant.local:1883"
+  mqtt_user: ""
+  mqtt_password: ""
+  influx_db_uri: "http://homeassistant.local:8086"
+  influx_db_user: ""
+  influx_db_password: ""
+  legacy:
+    mqtt_uri: ""
+    mqtt_user: ""
+    mqtt_password: ""
+    influx_db_uri: ""
+    influx_db_user: ""
+    influx_db_password: ""
+  alphaess_uri: ""
+schema:
+  mqtt_uri: str
+  mqtt_user: str
+  mqtt_password: str
+  influx_db_uri: str
+  influx_db_user: str
+  influx_db_password: str
+  legacy:
+    mqtt_uri: str
+    mqtt_user: str
+    mqtt_password: str
+    influx_db_uri: str
+    influx_db_user: str
+    influx_db_password: str
+  alphaess_uri: str
+
