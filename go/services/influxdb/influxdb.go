@@ -10,8 +10,57 @@ import (
 type Client interface {
 	Close() error
 	Flush()
-	SendMetric(name string, value float64)
-	SendMetricAtTs(name string, value float64, ts time.Time)
+	SendMetric(measurement string, value float64, tags map[string]string)
+	SendMetricAtTs(measurement string, value float64, tags map[string]string, ts time.Time)
+}
+
+type client struct {
+	client influxdb1.HTTPClient
+	config influxdb1.BatchPointsConfig
+}
+
+func (c *client) Close() error {
+	return c.client.Close()
+}
+
+func (c *client) Flush() {
+
+}
+
+func (c *client) SendMetric(measurement string, value float64, tags map[string]string) {
+	c.SendMetricAtTs(measurement, value, tags, time.Now().UTC())
+}
+
+func (c *client) SendMetricAtTs(measurement string, value float64, tags map[string]string, ts time.Time) {
+	points, err := influxdb1.NewBatchPoints(c.config)
+	if err != nil {
+		return
+	}
+	point, err := influxdb1.NewPoint(measurement, tags, map[string]any{"value": value}, ts)
+	if err != nil {
+		return
+	}
+
+	points.AddPoint(point)
+
+	err = c.client.Write(points)
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func NewClient(uri, database, user, password string) (c Client, err error) {
+	client := &client{}
+	client.config.Database = database
+	client.client, err = influxdb1.NewHTTPClient(influxdb1.HTTPConfig{
+		Addr:     uri,
+		Username: user,
+		Password: password,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 func Foo(uri, user, password string) (err error) {
@@ -55,16 +104,5 @@ func Foo(uri, user, password string) (err error) {
 		}
 	}
 
-	// client.Write()
-
-	// influxdb1.NewBatchPoints()
-
-	// influxdb1.NewPoint("Wh",map[string]string{
-	// 	"device_class", "energy",
-	// 	"domain", "sensor",
-	// 	"device", "alphaess",
-	// 	"source", "mypi",
-	// 	"entity_id", name)
-	// })
 	return nil
 }

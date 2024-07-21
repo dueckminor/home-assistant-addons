@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
-	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
 )
 
@@ -24,15 +23,9 @@ import (
 //
 // Otherwise only the measurement itself and the up-status will be sent to
 // mqtt.
-//
-// If 'influxdb' is enabled, the state of some objects will be sent to
-// the influxdb. In contrast to 'homeassistant', the state will be sent
-// even if it hasn't changed. This ensures that there are no gaps in the
-// graphs (but there will be gaps in case of an outage)
 
 type Registry interface {
 	EnableMqtt(broker mqtt.Broker)
-	EnableInfluxDB(influx influxdb.Client)
 	EnableHomeAssistant()
 	CreateNode(name string) Node
 }
@@ -72,7 +65,6 @@ type Climate interface {
 type registry struct {
 	nodes                 map[string]Node
 	broker                mqtt.Broker
-	influx                influxdb.Client
 	homeAssistant         bool
 	homeAssistantMqttConn mqtt.Conn
 }
@@ -92,9 +84,6 @@ func (r *registry) CreateNode(name string) Node {
 
 func (r *registry) EnableMqtt(broker mqtt.Broker) {
 	r.broker = broker
-}
-func (r *registry) EnableInfluxDB(influx influxdb.Client) {
-	r.influx = influx
 }
 func (r *registry) EnableHomeAssistant() {
 	r.homeAssistant = true
@@ -167,7 +156,6 @@ func (node *node) CreateSensor(template *SensorTemplate) Sensor {
 
 	sensor := &sensor{}
 	sensor.node = node
-	sensor.influx = node.registry.influx
 	sensor.template = *template
 
 	sensor.object.stateTopic = fmt.Sprintf("%s/sensor/%s/state", node.name, template.name)
@@ -217,7 +205,6 @@ func (node *node) CreateClimate(template *ObjectTemplate) Climate {
 
 type object struct {
 	node              *node
-	influx            influxdb.Client
 	stateTopic        string
 	availabilityTopic string
 }
@@ -248,14 +235,8 @@ func (sensor *sensor) publish() {
 		value = fmt.Sprintf("%d", v)
 	case float32:
 		value = sensor.float2string(float64(v))
-		if sensor.influx != nil {
-			sensor.influx.SendMetric(sensor.template.name, float64(v))
-		}
 	case float64:
 		value = sensor.float2string(float64(v))
-		if sensor.influx != nil {
-			sensor.influx.SendMetric(sensor.template.name, v)
-		}
 	}
 
 	sensor.node.Publish(sensor.stateTopic, value)
