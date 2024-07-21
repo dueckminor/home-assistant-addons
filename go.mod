@@ -11,6 +11,7 @@ require (
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/influxdata/influxdb v1.11.5
 	github.com/miekg/dns v1.1.61
+	github.com/simonvetter/modbus v1.6.1
 	golang.org/x/crypto v0.24.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -25,6 +26,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.20.0 // indirect
+	github.com/goburrow/serial v0.1.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/gorilla/context v1.1.2 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect

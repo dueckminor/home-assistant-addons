@@ -13,6 +13,8 @@ import (
 	"syscall"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
+	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
+	"github.com/dueckminor/home-assistant-addons/go/services/automation"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
 	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
@@ -61,6 +63,7 @@ type BrigeLegacyConfig struct {
 type BrigeConfig struct {
 	MqttConfig     `yaml:",inline"`
 	InfluxDbConfig `yaml:",inline"`
+	AlphaEssUri    string             `yaml:"alphaess_uri"`
 	Legacy         *BrigeLegacyConfig `yaml:"legacy"`
 }
 
@@ -196,6 +199,12 @@ func main() {
 
 	if theConfig.InfluxDbUri != "" {
 		toInflux(mqttConn, theConfig.InfluxDbConfig)
+	}
+
+	if theConfig.AlphaEssUri != "" {
+		automation.GetRegistry().EnableMqtt(mqttBroker)
+		automation.GetRegistry().EnableHomeAssistant()
+		alphaess.Run(theConfig.AlphaEssUri)
 	}
 
 	wg.Add(1)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
 )
@@ -94,10 +95,16 @@ func (r *registry) publishHomeAssistantConfig(node string, objectType string, co
 		return nil
 	}
 
+	id, err := rand.GetString(10)
+	if err != nil {
+		return err
+	}
+	clientId := "mqtt-bridge-" + id
+
 	topic := fmt.Sprintf("homeassistant/%s/%s/%s/config", objectType, node, config.Name)
 
 	if r.homeAssistantMqttConn == nil {
-		r.homeAssistantMqttConn, err = r.broker.Dial("mypi-mqtt-bridge", "")
+		r.homeAssistantMqttConn, err = r.broker.Dial(clientId, "")
 		if err != nil {
 			return err
 		}
