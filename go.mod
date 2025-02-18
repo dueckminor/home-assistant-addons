@@ -11,7 +11,7 @@ require (
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/influxdata/influxdb v1.11.5
 	github.com/miekg/dns v1.1.61
-	github.com/simonvetter/modbus v1.6.1
+	github.com/simonvetter/modbus v1.6.3
 	golang.org/x/crypto v0.31.0
 	gopkg.in/yaml.v3 v3.0.1
 )
