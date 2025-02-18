@@ -9,7 +9,7 @@ require (
 	github.com/gin-contrib/static v1.1.2
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/influxdata/influxdb v1.11.5
+	github.com/influxdata/influxdb v1.11.8
 	github.com/miekg/dns v1.1.61
 	github.com/simonvetter/modbus v1.6.3
 	golang.org/x/crypto v0.31.0
