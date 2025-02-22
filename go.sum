@@ -71,6 +71,7 @@ github.com/influxdata/influxdb v1.11.5 h1:+em5VOl6lhAZubXj5o6SobCwvrRs3XDlBx/MUI
 github.com/influxdata/influxdb v1.11.5/go.mod h1:k8sWREQl1/9t46VrkrH5adUM4UNGIt206ipO3plbkw8=
 github.com/influxdata/influxdb v1.11.8 h1:lX8MJDfk91O7nqzzonQkjk87gOeQy9V/Xp3gpELhG1s=
 github.com/influxdata/influxdb v1.11.8/go.mod h1:zRTAuk/Ie/V1LGxJUv8jfDmfv+ypz22lxfhc1MxC3rI=
+github.com/influxdata/influxdb/v2 v2.7.11/go.mod h1:zNOyzQy6WbfvGi1CK1aJ2W8khOq9+Gdsj8yLj8bHHqg=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/klauspost/cpuid/v2 v2.0.9/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa0213Md/qVLRg=
