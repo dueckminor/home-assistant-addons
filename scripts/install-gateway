@@ -29,7 +29,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         sudo mkdir /addons/dueckminor_gateway
         cd /addons/dueckminor_gateway
         sudo tar xzvf -
-        sudo chown -R root.root .
+        sudo chown -R "root:root" .
     '
 else
     rm -rf /addons/dueckminor_gateway/

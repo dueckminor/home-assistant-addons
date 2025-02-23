@@ -24,7 +24,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         sudo mkdir /addons/dueckminor_mqtt_bridge
         cd /addons/dueckminor_mqtt_bridge
         sudo tar xzvf -
-        sudo chown -R root.root .
+        sudo chown -R "root:root" .
     '
 else
     rm -rf /addons/dueckminor_mqtt_bridge/
