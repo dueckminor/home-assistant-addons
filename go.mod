@@ -6,7 +6,7 @@ toolchain go1.24.0
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.0
-	github.com/gin-contrib/cors v1.7.3
+	github.com/gin-contrib/cors v1.7.4
 	github.com/gin-contrib/sessions v1.0.2
 	github.com/gin-contrib/static v1.1.3
 	github.com/gin-gonic/gin v1.10.0
@@ -16,7 +16,7 @@ require (
 	github.com/miekg/dns v1.1.63
 	github.com/simonvetter/modbus v1.6.3
 	golang.org/x/crypto v0.36.0
-	golang.org/x/net v0.33.0
+	golang.org/x/net v0.37.0
 	golang.org/x/text v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
 )
