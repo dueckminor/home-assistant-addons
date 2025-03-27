@@ -16,7 +16,7 @@ require (
 	github.com/miekg/dns v1.1.63
 	github.com/simonvetter/modbus v1.6.3
 	golang.org/x/crypto v0.36.0
-	golang.org/x/net v0.33.0
+	golang.org/x/net v0.38.0
 	golang.org/x/text v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
 )
