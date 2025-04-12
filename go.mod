@@ -11,7 +11,7 @@ require (
 	github.com/gin-contrib/static v1.1.3
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/influxdata/influxdb v1.11.8
+	github.com/influxdata/influxdb/v2 v2.7.11
 	github.com/influxdata/influxdb/v2 v2.7.11
 	github.com/miekg/dns v1.1.65
 	github.com/simonvetter/modbus v1.6.3
