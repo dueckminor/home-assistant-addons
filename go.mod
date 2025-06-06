@@ -2,7 +2,7 @@ module github.com/dueckminor/home-assistant-addons
 
 go 1.23.0
 
-toolchain go1.24.3
+toolchain go1.24.4
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.0
@@ -11,7 +11,7 @@ require (
 	github.com/gin-contrib/static v1.1.5
 	github.com/gin-gonic/gin v1.10.1
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/influxdata/influxdb/v2 v2.7.12
+	github.com/influxdata/influxdb v1.12.0
 	github.com/influxdata/influxdb/v2 v2.7.12
 	github.com/miekg/dns v1.1.66
 	github.com/simonvetter/modbus v1.6.3
