@@ -111,6 +111,8 @@ github.com/influxdata/influxdb v1.11.8 h1:lX8MJDfk91O7nqzzonQkjk87gOeQy9V/Xp3gpE
 github.com/influxdata/influxdb v1.11.8/go.mod h1:zRTAuk/Ie/V1LGxJUv8jfDmfv+ypz22lxfhc1MxC3rI=
 github.com/influxdata/influxdb v1.12.0 h1:hVFeHtEUh/MkI6YCmB1TAXlPgV4ZNh/V5FP6z7ywRLo=
 github.com/influxdata/influxdb v1.12.0/go.mod h1:11RjLuBNkuWaJQFViRF/rpNzICfU6X0nuO003yeleKY=
+github.com/influxdata/influxdb v1.12.1 h1:TgjoadnkBC/Ev6qXztHWGfCrd1IxjP8B6BELMHMb3uM=
+github.com/influxdata/influxdb v1.12.1/go.mod h1:EwqFMB6GKV0Huug82Msa5f8QfXhqETUmC4L9A0QZJQM=
 github.com/influxdata/influxdb/v2 v2.7.11/go.mod h1:zNOyzQy6WbfvGi1CK1aJ2W8khOq9+Gdsj8yLj8bHHqg=
 github.com/influxdata/influxdb/v2 v2.7.12/go.mod h1:Mb0O9zNkhn4JTmr5vsr4ELa75um/ai6dY1pcoW192AU=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
