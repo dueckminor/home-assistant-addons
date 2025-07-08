@@ -2,7 +2,7 @@ module github.com/dueckminor/home-assistant-addons
 
 go 1.23.0
 
-toolchain go1.24.4
+toolchain go1.24.5
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.0
