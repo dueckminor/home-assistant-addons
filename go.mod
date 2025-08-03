@@ -13,7 +13,7 @@ require (
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/influxdata/influxdb v1.12.1
 	github.com/influxdata/influxdb/v2 v2.7.12
-	github.com/miekg/dns v1.1.66
+	github.com/miekg/dns v1.1.68
 	github.com/simonvetter/modbus v1.6.3
 	golang.org/x/crypto v0.39.0
 	golang.org/x/net v0.41.0
