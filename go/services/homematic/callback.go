@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -60,16 +61,28 @@ func (ccuc *CcuClientImpl) StartCallbackHandler() error {
 	if err == nil {
 		port = parsedURI.Port()
 	}
+	if runtime.GOOS == "darwin" {
+		port = ""
+	}
+
+	fmt.Println("CCU URL: ", ccuc.uri)
 
 	ln, err := net.Listen("tcp", ":"+port)
 	if err != nil {
+		fmt.Println("Failed to start listener: ", err)
 		return err
 	}
 
 	port = strconv.FormatInt(int64(ln.Addr().(*net.TCPAddr).Port), 10)
 
-	ownURL := "http://" + ccuc.GetOwnIP() + ":" + port
-	ownID := "MYPI-" + ccuc.GetOwnIP() + "-" + port
+	ownIp := ccuc.GetOwnIP()
+	//ownIp := "192.168.0.116"
+
+	ownURL := "http://" + ownIp + ":" + port
+	ownID := "MYPI-" + ownIp + "-" + port
+
+	fmt.Println("Own URL: ", ownURL)
+	fmt.Println("Own ID: ", ownID)
 
 	go http.Serve(ln, httpHandler) // nolint: errcheck
 	err = ccuc.Init(ownURL, ownID)

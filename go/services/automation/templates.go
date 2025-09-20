@@ -13,6 +13,7 @@ const (
 	Unit_V
 	Unit_A
 	Unit_Percent
+	Unit_m3
 )
 
 func (u Unit) String() string {
@@ -33,6 +34,8 @@ func (u Unit) String() string {
 		return "A"
 	case Unit_Percent:
 		return "%"
+	case Unit_m3:
+		return "m³"
 	default:
 		panic("unsupported 'Unit'")
 	}
@@ -45,6 +48,7 @@ type StateClass int64
 const (
 	StateClass_Measurement StateClass = iota
 	StateClass_Total
+	StateClass_TotalIncreasing
 )
 
 func (sc StateClass) String() string {
@@ -53,6 +57,8 @@ func (sc StateClass) String() string {
 		return "measurement"
 	case StateClass_Total:
 		return "total"
+	case StateClass_TotalIncreasing:
+		return "total_increasing"
 	default:
 		panic("unsupported 'StateClass'")
 	}
@@ -64,12 +70,15 @@ type DeviceClass int64
 
 const (
 	DeviceClass_Energy DeviceClass = iota
+	DeviceClass_Gas
 )
 
 func (dc DeviceClass) String() string {
 	switch dc {
 	case DeviceClass_Energy:
 		return "energy"
+	case DeviceClass_Gas:
+		return "gas"
 	default:
 		panic("unsupported 'DeviceClass'")
 	}
@@ -85,6 +94,7 @@ const (
 	Icon_V
 	Icon_A
 	Icon_Battery
+	Icon_MeterGas
 )
 
 func (i Icon) String() string {
@@ -95,6 +105,8 @@ func (i Icon) String() string {
 		return "mdi:flash"
 	case Icon_Battery:
 		return "mdi:battery-10"
+	case Icon_MeterGas:
+		return "mdi:meter-gas"
 	default:
 		panic("unsupported 'Icon'")
 	}

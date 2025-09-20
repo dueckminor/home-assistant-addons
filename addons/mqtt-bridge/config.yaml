@@ -25,6 +25,10 @@ options:
     influx_db_user: ""
     influx_db_password: ""
   alphaess_uri: ""
+  homematic_uri: ""
+  homematic_user: ""
+  homematic_password: ""
+
 schema:
   mqtt_uri: str
   mqtt_user: str
@@ -40,4 +44,10 @@ schema:
     influx_db_user: str
     influx_db_password: str
   alphaess_uri: str
+  homematic_uri: str
+  homematic_user: str
+  homematic_password: str
 
+ports:
+  2001/tcp: 2001
+  2010/tcp: 2010

@@ -67,7 +67,7 @@ func (c *conn) Publish(topic string, payload string) {
 }
 
 func (c *conn) PublishRetain(topic string, payload string) {
-	c.client.Publish(topic, 0, true, payload)
+	c.client.Publish(topic, 2, true, payload)
 }
 
 func (c *conn) Subscribe(topic string, cb func(topic string, payload string)) {

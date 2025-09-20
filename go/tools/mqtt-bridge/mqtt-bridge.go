@@ -16,6 +16,7 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
 	"github.com/dueckminor/home-assistant-addons/go/services/automation"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
+	"github.com/dueckminor/home-assistant-addons/go/services/homematic"
 	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
 	"gopkg.in/yaml.v3"
@@ -61,10 +62,11 @@ type BrigeLegacyConfig struct {
 }
 
 type BrigeConfig struct {
-	MqttConfig     `yaml:",inline"`
-	InfluxDbConfig `yaml:",inline"`
-	AlphaEssUri    string             `yaml:"alphaess_uri"`
-	Legacy         *BrigeLegacyConfig `yaml:"legacy"`
+	MqttConfig                `yaml:",inline"`
+	InfluxDbConfig            `yaml:",inline"`
+	homematic.HomematicConfig `yaml:",inline"`
+	AlphaEssUri               string             `yaml:"alphaess_uri"`
+	Legacy                    *BrigeLegacyConfig `yaml:"legacy"`
 }
 
 func fromLegacyMqtt(mqttConn mqtt.Conn, legacyConfig MqttConfig, mqttClientId string) {
@@ -193,6 +195,8 @@ func main() {
 		panic(err)
 	}
 
+	automation.GetRegistry().EnableMqtt(mqttBroker)
+
 	if theConfig.Legacy != nil && theConfig.Legacy.MqttURI != "" {
 		fromLegacyMqtt(mqttConn, theConfig.Legacy.MqttConfig, mqttClientId)
 	}
@@ -202,9 +206,12 @@ func main() {
 	}
 
 	if theConfig.AlphaEssUri != "" {
-		automation.GetRegistry().EnableMqtt(mqttBroker)
 		automation.GetRegistry().EnableHomeAssistant()
 		alphaess.Run(theConfig.AlphaEssUri)
+	}
+
+	if theConfig.HomematicUri != "" {
+		homematic.StartMqttBridge(theConfig.HomematicConfig)
 	}
 
 	wg.Add(1)
