@@ -8,7 +8,7 @@
 // Composables
 import { createRouter, createWebHistory } from 'vue-router'
 
-// Define routes manually for now
+// Define routes manually
 const routes = [
   {
     path: '/',

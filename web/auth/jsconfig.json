@@ -16,5 +16,9 @@
       "dom.iterable",
       "scripthost"
     ]
-  }
+  },
+  "include": [
+    "src/**/*",
+    "typed-router.d.ts"
+  ]
 }

@@ -12,7 +12,11 @@ import { fileURLToPath, URL } from 'node:url'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
-    VueRouter(),
+    VueRouter({
+      routesFolder: 'src/pages',
+      extensions: ['.vue'],
+      dts: './typed-router.d.ts'
+    }),
     Vue({
       template: { transformAssetUrls }
     }),
