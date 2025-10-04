@@ -1,4 +1,2 @@
 # Use pre-built images from GitHub Container Registry
-image:
-  aarch64: ghcr.io/dueckminor/home-assistant-addons-gateway:0.1.0-arm64
-  amd64: ghcr.io/dueckminor/home-assistant-addons-gateway:0.1.0-amd64
+image: ghcr.io/dueckminor/home-assistant-addons-gateway:0.1.0
