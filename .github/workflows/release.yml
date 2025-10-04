@@ -50,12 +50,9 @@ jobs:
         run: |
           # Build AMD64 binary
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-amd64 ./go/tools/${{ matrix.addon }}/
-          
-          # Build ARM64 binary  
+
+          # Build ARM64 binary
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-arm64 ./go/tools/${{ matrix.addon }}/
-          
-          # For local development, also create the default binary (using current host arch)
-          CGO_ENABLED=0 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }} ./go/tools/${{ matrix.addon }}/
 
       - name: Build web assets
         if: matrix.addon == 'gateway'
