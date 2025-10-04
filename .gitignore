@@ -1,12 +1,7 @@
 gen
 __debug_*
 
-# Temporary build files copied into addon directories
-addons/*/go/
-addons/*/web/
-addons/*/go.mod
-addons/*/go.sum
-
+# Files required for docker build will be copied to the addons/* directory
 addons/*/dist
-addons/gateway/gateway
-addons/mqtt-bridge/mqtt-bridge
+addons/*/*-amd64
+addons/*/*-arm64

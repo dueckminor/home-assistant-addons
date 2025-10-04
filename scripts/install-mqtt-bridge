@@ -12,7 +12,10 @@ fi
 mkdir -p gen/addons/mqtt-bridge
 rm -rf gen/addons/mqtt-bridge/*
 
-GOOS=linux GOARCH=arm64 go build -o gen/addons/mqtt-bridge/mqtt-bridge go/tools/mqtt-bridge/mqtt-bridge.go
+# Build binaries for all platforms (for platform selector)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o gen/addons/mqtt-bridge/mqtt-bridge-amd64 go/tools/mqtt-bridge/mqtt-bridge.go
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o gen/addons/mqtt-bridge/mqtt-bridge-arm64 go/tools/mqtt-bridge/mqtt-bridge.go
+
 cp -a ./addons/mqtt-bridge/* gen/addons/mqtt-bridge/
 
 # Generate local build.yml for source-based builds

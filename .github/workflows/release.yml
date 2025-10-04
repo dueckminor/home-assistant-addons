@@ -46,46 +46,34 @@ jobs:
             echo "version=latest" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build and push AMD64 image
+      - name: Build binaries for all platforms
         run: |
-          # Build binaries for AMD64
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }} ./go/tools/${{ matrix.addon }}/
+          # Build AMD64 binary
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-amd64 ./go/tools/${{ matrix.addon }}/
           
-          # Build web assets for gateway
-          if [ "${{ matrix.addon }}" = "gateway" ]; then
-            cd web/auth
-            npm ci
-            npm run build
-            cp -r dist ../../addons/${{ matrix.addon }}/
-            cd ../..
-          fi
+          # Build ARM64 binary  
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-arm64 ./go/tools/${{ matrix.addon }}/
+          
+          # For local development, also create the default binary (using current host arch)
+          CGO_ENABLED=0 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }} ./go/tools/${{ matrix.addon }}/
 
-      - name: Build and push AMD64 image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./addons/${{ matrix.addon }}
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/home-assistant-addons-${{ matrix.addon }}:${{ steps.version.outputs.version }}-amd64
-            ghcr.io/${{ github.repository_owner }}/home-assistant-addons-${{ matrix.addon }}:latest-amd64
-          cache-from: type=gha,scope=${{ matrix.addon }}-amd64
-          cache-to: type=gha,mode=max,scope=${{ matrix.addon }}-amd64
-
-      - name: Prepare ARM64 build
+      - name: Build web assets
+        if: matrix.addon == 'gateway'
         run: |
-          # Clean up AMD64 binary and build ARM64
-          rm -f addons/${{ matrix.addon }}/${{ matrix.addon }}
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }} ./go/tools/${{ matrix.addon }}/
+          cd web/auth
+          npm ci
+          npm run build
+          cp -r dist ../../addons/${{ matrix.addon }}/
+          cd ../..
 
-      - name: Build and push ARM64 image
+      - name: Build and push multi-arch image
         uses: docker/build-push-action@v5
         with:
           context: ./addons/${{ matrix.addon }}
-          platforms: linux/arm64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/home-assistant-addons-${{ matrix.addon }}:${{ steps.version.outputs.version }}-arm64
-            ghcr.io/${{ github.repository_owner }}/home-assistant-addons-${{ matrix.addon }}:latest-arm64
-          cache-from: type=gha,scope=${{ matrix.addon }}-arm64
-          cache-to: type=gha,mode=max,scope=${{ matrix.addon }}-arm64
+            ghcr.io/${{ github.repository_owner }}/home-assistant-addons-${{ matrix.addon }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/home-assistant-addons-${{ matrix.addon }}:latest
+          cache-from: type=gha,scope=${{ matrix.addon }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.addon }}

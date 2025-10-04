@@ -12,7 +12,10 @@ fi
 mkdir -p gen/addons/gateway
 rm -rf gen/addons/gateway/*
 
-GOOS=linux GOARCH=arm64 go build -o gen/addons/gateway/gateway go/tools/gateway/gateway.go
+# Build binaries for all platforms (for platform selector)
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o gen/addons/gateway/gateway-amd64 go/tools/gateway/gateway.go
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o gen/addons/gateway/gateway-arm64 go/tools/gateway/gateway.go
+
 cp -a ./addons/gateway/* gen/addons/gateway/
 
 # Generate local build.yml for source-based builds
