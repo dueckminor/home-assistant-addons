@@ -64,7 +64,7 @@ jobs:
           cd ../..
 
       - name: Build and push multi-arch image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./addons/${{ matrix.addon }}
           platforms: linux/amd64,linux/arm64
