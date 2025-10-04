@@ -1,2 +1,12 @@
 gen
 __debug_*
+
+# Temporary build files copied into addon directories
+addons/*/go/
+addons/*/web/
+addons/*/go.mod
+addons/*/go.sum
+
+addons/*/dist
+addons/gateway/gateway
+addons/mqtt-bridge/mqtt-bridge

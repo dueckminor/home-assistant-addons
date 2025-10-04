@@ -1,0 +1,83 @@
+name: Builder
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  init:
+    runs-on: ubuntu-latest
+    name: Initialize builds
+    outputs:
+      changed_addons: ${{ steps.changed_addons.outputs.addons }}
+      changed: ${{ steps.changed_addons.outputs.changed }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Get changed files
+        id: changed_files
+        uses: jitterbit/get-changed-files@v1
+
+      - name: Find add-on directories
+        id: changed_addons
+        run: |
+          declare -a changed_addons
+          for file in ${{ steps.changed_files.outputs.all }}; do
+            if [[ $file =~ ^addons\/(.+)\/ ]]; then
+              addon="${BASH_REMATCH[1]}"
+              if [[ ! " ${changed_addons[@]} " =~ " ${addon} " ]]; then
+                changed_addons+=("${addon}")
+              fi
+            fi
+          done
+          
+          changed=$(printf "%s\n" "${changed_addons[@]}" | jq -R . | jq -s .)
+          echo "changed=${changed}" >> $GITHUB_OUTPUT
+          echo "addons=${changed}" >> $GITHUB_OUTPUT
+
+  build:
+    runs-on: ubuntu-latest
+    name: Build ${{ matrix.addon }} add-on
+    needs: init
+    if: needs.init.outputs.changed == 'true'
+    strategy:
+      matrix:
+        addon: ${{ fromJson(needs.init.outputs.changed_addons) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Get information
+        id: info
+        uses: home-assistant/actions/helpers/info@master
+        with:
+          path: "./addons/${{ matrix.addon }}"
+
+      - name: Check if add-on should be built
+        id: check
+        run: |
+          if [[ "${{ steps.info.outputs.architectures }}" =~ ${{ matrix.arch }} ]]; then
+             echo "build_arch=true" >> $GITHUB_OUTPUT
+          else
+             echo "build_arch=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Login to GitHub Container Registry
+        if: env.BUILD_ARCH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ${{ matrix.addon }} add-on
+        uses: home-assistant/builder@master
+        with:
+          args: |
+            --target /data/addons/${{ matrix.addon }}
+            --generic ${{ steps.info.outputs.version }}
