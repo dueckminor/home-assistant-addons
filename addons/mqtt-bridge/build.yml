@@ -1,2 +1,2 @@
-# Use pre-built images from GitHub Container Registry
+# Use pre-built multi-arch images from GitHub Container Registry
 image: ghcr.io/dueckminor/home-assistant-addons-mqtt-bridge:v0.1.0

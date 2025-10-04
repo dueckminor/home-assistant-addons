@@ -1,2 +1,2 @@
-# Use pre-built images from GitHub Container Registry
-image: ghcr.io/dueckminor/home-assistant-addons-gateway:0.1.0
+# Use pre-built multi-arch images from GitHub Container Registry
+image: ghcr.io/dueckminor/home-assistant-addons-gateway:v0.1.0
