@@ -54,12 +54,13 @@ jobs:
 
   test-build:
     runs-on: ubuntu-latest
-    name: Test build ${{ matrix.addon }}
+    name: Test build ${{ matrix.addon }} (${{ matrix.arch }})
     needs: detect-changes
     if: needs.detect-changes.outputs.has_changes == 'true'
     strategy:
       matrix:
         addon: ${{ fromJson(needs.detect-changes.outputs.changed_addons) }}
+        arch: [amd64, arm64]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -75,10 +76,13 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Build Go binary
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Go binary for ${{ matrix.arch }}
         run: |
-          echo "Building ${{ matrix.addon }} binary..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }} ./go/tools/${{ matrix.addon }}/
+          echo "Building ${{ matrix.addon }} binary for ${{ matrix.arch }}..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -o addons/${{ matrix.addon }}/${{ matrix.addon }} ./go/tools/${{ matrix.addon }}/
 
       - name: Build web assets
         if: matrix.addon == 'gateway'
@@ -90,10 +94,14 @@ jobs:
           cp -r dist ../../addons/${{ matrix.addon }}/
           cd ../..
 
-      - name: Test Docker build
+      - name: Test Docker build for ${{ matrix.arch }}
         run: |
-          echo "Testing Docker build for ${{ matrix.addon }}..."
-          docker build -t test-${{ matrix.addon }}:latest ./addons/${{ matrix.addon }}/
+          echo "Testing Docker build for ${{ matrix.addon }} on ${{ matrix.arch }}..."
+          docker buildx build \
+            --platform linux/${{ matrix.arch }} \
+            --load \
+            -t test-${{ matrix.addon }}:${{ matrix.arch }} \
+            ./addons/${{ matrix.addon }}/
 
       - name: Validate addon config
         run: |
