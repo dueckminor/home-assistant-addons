@@ -15,6 +15,17 @@ rm -rf gen/addons/mqtt-bridge/*
 GOOS=linux GOARCH=arm64 go build -o gen/addons/mqtt-bridge/mqtt-bridge go/tools/mqtt-bridge/mqtt-bridge.go
 cp -a ./addons/mqtt-bridge/* gen/addons/mqtt-bridge/
 
+# Generate local build.yml for source-based builds
+cat > gen/addons/mqtt-bridge/build.yml << 'EOF'
+# Local development build configuration
+build_from:
+  aarch64: "ghcr.io/hassio-addons/base:16.3.6"
+  amd64: "ghcr.io/hassio-addons/base:16.3.6"
+  armhf: "ghcr.io/hassio-addons/base:16.3.6"
+  armv7: "ghcr.io/hassio-addons/base:16.3.6"
+  i386: "ghcr.io/hassio-addons/base:16.3.6"
+EOF
+
 # copy files to /addons/dueckminor_mqtt_bridge on homeassistant.local
 
 (cd gen/addons/mqtt-bridge; tar czf - .) | (

@@ -15,6 +15,17 @@ rm -rf gen/addons/gateway/*
 GOOS=linux GOARCH=arm64 go build -o gen/addons/gateway/gateway go/tools/gateway/gateway.go
 cp -a ./addons/gateway/* gen/addons/gateway/
 
+# Generate local build.yml for source-based builds
+cat > gen/addons/gateway/build.yml << 'EOF'
+# Local development build configuration
+build_from:
+  aarch64: "ghcr.io/hassio-addons/base:16.3.6"
+  amd64: "ghcr.io/hassio-addons/base:16.3.6"
+  armhf: "ghcr.io/hassio-addons/base:16.3.6"
+  armv7: "ghcr.io/hassio-addons/base:16.3.6"
+  i386: "ghcr.io/hassio-addons/base:16.3.6"
+EOF
+
 pushd web/auth
 npm run build
 popd
