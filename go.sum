@@ -53,6 +53,7 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/influxdata/influxdb v1.12.2 h1:Y0ZBu47gYVbDCRPMFOrlRRZ3grdqPGIJxerFysVSq+g=
 github.com/influxdata/influxdb v1.12.2/go.mod h1:EwqFMB6GKV0Huug82Msa5f8QfXhqETUmC4L9A0QZJQM=
+github.com/influxdata/influxdb/v2 v2.7.12/go.mod h1:Mb0O9zNkhn4JTmr5vsr4ELa75um/ai6dY1pcoW192AU=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/klauspost/cpuid/v2 v2.3.0 h1:S4CRMLnYUhGeDFDqkGriYKdfoFlDnMtqTiI/sFzhA9Y=
