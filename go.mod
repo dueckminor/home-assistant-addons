@@ -11,8 +11,7 @@ require (
 	github.com/gin-contrib/static v1.1.5
 	github.com/gin-gonic/gin v1.11.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/influxdata/influxdb/v2 v2.7.12
-	github.com/influxdata/influxdb/v2 v2.7.12
+	github.com/influxdata/influxdb v1.12.2
 	github.com/miekg/dns v1.1.68
 	github.com/simonvetter/modbus v1.6.3
 	golang.org/x/crypto v0.42.0
@@ -25,7 +24,6 @@ require (
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
