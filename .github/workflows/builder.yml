@@ -19,7 +19,7 @@ jobs:
       web_changed: ${{ steps.changes.outputs.web_changed }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -62,7 +62,7 @@ jobs:
         addon: ${{ fromJson(needs.detect-changes.outputs.changed_addons) }}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
         uses: actions/setup-go@v6
