@@ -1,5 +1,5 @@
 # Multi-arch Dockerfile with platform selector
-ARG BUILD_FROM=ghcr.io/hassio-addons/base:16.3.6
+ARG BUILD_FROM=ghcr.io/hassio-addons/base:18.1.4
 
 # Platform selector stage
 FROM alpine:3.22 AS platform_selector
