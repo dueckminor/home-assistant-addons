@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	influxdb1 "github.com/influxdata/influxdb/client/v2"
+	_ "github.com/influxdata/influxdb1-client" // this is important because of the bug in go mod
+	influxdb1 "github.com/influxdata/influxdb1-client/v2"
 )
 
 type Client interface {
@@ -15,7 +16,7 @@ type Client interface {
 }
 
 type client struct {
-	client influxdb1.HTTPClient
+	client influxdb1.Client
 	config influxdb1.BatchPointsConfig
 }
 
