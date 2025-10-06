@@ -54,17 +54,33 @@ You need to create the following DNS record:
 
 ## IP-V6 Support
 
-If your home network has an external IP-V6 address, you would run into
-trouble, if the integrated DNS server would answer with the external IP-V6 address.
-
-If your browser would use the external IP-V6 address from your home-network, you would see the configuration-UI of your router, instead of the Home Assistant Gateway.
-
-To get rid of this problem, the integrated DNS server will use its own IP-V6 address. If you now access `ha.home.example.com` from you local network, there will be no hop in between, but from the internet, it will
-be routed by your internet-router. From the internet only the ports
-forwarded by the router are allowed. From the local network, every port
-is accessible.
+If your home network has an external IP-V6 address, it makes sense to use it.
 
 ![IPv6 Routing Diagram](./ipv6-routing.svg)
+
+Clients from the internet can access your home network using either the external
+IP-V4 or the external IP-V6 address of your internet router.
+The router forwards the requests to the Home Assistant Gateway.
+
+But if a client from your local network uses the IPv6 address of your router
+to access `ha.home.example.com`, it will be routed directly to the management
+of the router.
+
+This is a completely different behavior.
+
+But if clients use the IPv6 address of the Raspberry Pi, they will be routed
+to the home assistant gateway, which is the desired behavior.
+
+Clients from the local network will connect directly to the Raspberry Pi
+and can use all ports exposed by the Raspberry Pi.
+
+Clients from the internet will be routed over your internet router, but they
+are limited to the configured port forwarding. Hence they can use only the ports
+53, 80 and 443.
+
+The integrated DNS server will answer all DNS queries for your domain
+with the IPv6 address of the Raspberry Pi, if available. Otherwise it will
+answer with the IPv4 address of your internet router.
 
 ## Letsencrypt
 
