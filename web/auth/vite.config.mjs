@@ -37,6 +37,7 @@ export default defineConfig({
       },
     }),
   ],
+  base: './', // Generate relative paths instead of absolute
   define: { 'process.env': {} },
   resolve: {
     alias: {

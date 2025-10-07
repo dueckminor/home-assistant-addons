@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
@@ -14,6 +15,7 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/acme"
 	"github.com/dueckminor/home-assistant-addons/go/auth"
 	"github.com/dueckminor/home-assistant-addons/go/dns"
+	"github.com/dueckminor/home-assistant-addons/go/gatewayconfig"
 	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/pki"
 	"github.com/gin-gonic/gin"
@@ -56,7 +58,7 @@ var theConfig config
 
 func init() {
 	flag.StringVar(&dataDir, "data-dir", "/data", "the data dir")
-	flag.StringVar(&distDir, "dist-dir", "/data", "the dist dir")
+	flag.StringVar(&distDir, "dist-dir", "", "the dist dir")
 	flag.IntVar(&dnsPort, "dns-port", 53, "the DNS port")
 	flag.IntVar(&httpPort, "http-port", 80, "the HTTP port")
 	flag.IntVar(&httpsPort, "https-port", 443, "the HTTPS port")
@@ -224,6 +226,24 @@ func main() {
 		err := httpsServer.ListenAndServe(ctx, "tcp", fmt.Sprintf(":%d", httpsPort))
 		if err != nil {
 			fmt.Println(err)
+		}
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		r := gin.Default()
+
+		gatewayconfig.NewGatewayConfigServer(r, "")
+
+		fmt.Println("Starting configuration server on port 8099...")
+		configServer := &http.Server{
+			Addr:    ":8099",
+			Handler: r,
+		}
+		err := configServer.ListenAndServe()
+		if err != nil {
+			fmt.Printf("Config server error: %v\n", err)
 		}
 		wg.Done()
 	}()

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto"
+	"embed"
 	"encoding/base64"
 	"net"
 	"net/http"
@@ -19,9 +20,11 @@ import (
 	"github.com/golang-jwt/jwt"
 )
 
+//go:embed dist/*
+var distFS embed.FS
+
 func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer, err error) {
 	a = new(AuthServer)
-	a.distDir = distDir
 	a.dataDir = dataDir
 	a.clients = NewAuthClientConfigManager(path.Join(dataDir, "clients"))
 
@@ -35,7 +38,13 @@ func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer
 		return nil, err
 	}
 
-	r.Use(static.ServeRoot("/", distDir))
+	if distDir != "" {
+		r.Use(static.ServeRoot("/", distDir))
+	} else {
+		fs, _ := static.EmbedFolder(distFS, "dist")
+		r.Use(static.Serve("/", fs))
+	}
+
 	r.NoRoute(func(c *gin.Context) {
 		c.File(path.Join(distDir, "index.html"))
 	})
@@ -45,7 +54,6 @@ func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer
 }
 
 type AuthServer struct {
-	distDir      string
 	dataDir      string
 	config       *AuthServerConfig
 	clients      AuthClientConfigManager

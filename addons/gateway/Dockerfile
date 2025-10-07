@@ -21,6 +21,5 @@ FROM $BUILD_FROM
 
 COPY rootfs /
 COPY --from=platform_selector /binaries/gateway /usr/local/bin/gateway
-COPY dist /usr/local/bin/dist/
 
 RUN chmod a+x /usr/local/bin/gateway

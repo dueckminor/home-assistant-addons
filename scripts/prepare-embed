@@ -1,0 +1,22 @@
+#!/bin/bash
+# Build script for local development with multi-arch binaries
+
+set -e
+
+if [[ "${1}" == "--fast" ]]; then
+    if [[ -f go/auth/dist/index.html ]] && [[ -f go/gatewayconfig/dist/index.html ]]; then
+        echo "Fast build, skipping web assets..."
+        exit 0
+    fi
+fi
+
+echo "Building web assets..."
+pushd web/auth
+npm run build
+cp -r dist ../../go/auth/
+popd
+
+pushd web/gatewayconfig
+npm run build
+cp -r dist ../../go/gatewayconfig/
+popd
