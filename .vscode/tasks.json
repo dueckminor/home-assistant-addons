@@ -36,6 +36,23 @@
                 "panel": "shared"
             },
             "problemMatcher": []
+        },
+        {
+            "label": "serve",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/serve",
+            "args": ["start"],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "silent",
+                "focus": false,
+                "panel": "shared"
+            },
+            "problemMatcher": []
         }
     ]
 }

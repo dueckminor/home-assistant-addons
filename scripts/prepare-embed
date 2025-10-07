@@ -1,22 +1,23 @@
 #!/bin/bash
 # Build script for local development with multi-arch binaries
 
-set -e
+set -eou pipefail
 
-if [[ "${1}" == "--fast" ]]; then
-    if [[ -f go/auth/dist/index.html ]] && [[ -f go/gatewayconfig/dist/index.html ]]; then
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+
+if [[ "${1:-}" == "--fast" ]]; then
+    if [[ -f "${ROOT_DIR}/go/auth/dist/index.html" ]] && [[ -f "${ROOT_DIR}/go/gatewayconfig/dist/index.html" ]]; then
         echo "Fast build, skipping web assets..."
         exit 0
     fi
 fi
 
 echo "Building web assets..."
-pushd web/auth
+
+pushd "${ROOT_DIR}/web/auth"
 npm run build
-cp -r dist ../../go/auth/
 popd
 
-pushd web/gatewayconfig
+pushd "${ROOT_DIR}/web/gatewayconfig"
 npm run build
-cp -r dist ../../go/gatewayconfig/
 popd

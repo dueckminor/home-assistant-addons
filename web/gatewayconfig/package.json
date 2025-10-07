@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build --emptyOutDir",
     "dev": "vite",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "serve": "vite serve"
   },
   "dependencies": {
     "vue": "^3.4.23",

@@ -11,11 +11,11 @@ import (
 	"strings"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
+	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
-	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 )
@@ -39,15 +39,10 @@ func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer
 	}
 
 	if distDir != "" {
-		r.Use(static.ServeRoot("/", distDir))
+		ginutil.ServeFromUri(r, distDir)
 	} else {
-		fs, _ := static.EmbedFolder(distFS, "dist")
-		r.Use(static.Serve("/", fs))
+		ginutil.ServeEmbedFS(r, distFS, "dist")
 	}
-
-	r.NoRoute(func(c *gin.Context) {
-		c.File(path.Join(distDir, "index.html"))
-	})
 
 	a.Register(r)
 	return a, nil

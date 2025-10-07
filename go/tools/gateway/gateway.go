@@ -23,7 +23,6 @@ import (
 )
 
 var dataDir string
-var distDir string
 var dnsPort int
 var httpPort int
 var httpsPort int
@@ -58,7 +57,6 @@ var theConfig config
 
 func init() {
 	flag.StringVar(&dataDir, "data-dir", "/data", "the data dir")
-	flag.StringVar(&distDir, "dist-dir", "", "the dist dir")
 	flag.IntVar(&dnsPort, "dns-port", 53, "the DNS port")
 	flag.IntVar(&httpPort, "http-port", 80, "the HTTP port")
 	flag.IntVar(&httpsPort, "https-port", 443, "the HTTPS port")
@@ -105,7 +103,7 @@ func (g *Gateway) configureAuthServer(proxy network.TLSProxy, server configServe
 	}
 	r := gin.Default()
 	var err error
-	g.authServer, err = auth.NewAuthServer(r, distDir, path.Join(dataDir, "auth"))
+	g.authServer, err = auth.NewAuthServer(r, os.Getenv("DIST_AUTH"), path.Join(dataDir, "auth"))
 	if err != nil {
 		panic(err)
 	}
@@ -234,7 +232,7 @@ func main() {
 	go func() {
 		r := gin.Default()
 
-		gatewayconfig.NewGatewayConfigServer(r, "")
+		gatewayconfig.NewGatewayConfigServer(r, os.Getenv("DIST_CONFIG"))
 
 		fmt.Println("Starting configuration server on port 8099...")
 		configServer := &http.Server{

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 
-set -e
+set -eou pipefail
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+cd "${ROOT_DIR}"
+
+HOMEASSISTANT=homeassistant.local
+if [[ -f "${ROOT_DIR}/gen/ha.txt" ]]; then
+    HOMEASSISTANT=$(cat "${ROOT_DIR}/gen/ha.txt")
+fi
 
 if [[ "$(uname -s)" != "Darwin" ]] && [[ ! -d /addons ]]; then
     echo "This command has to be executed on home-assistant"
@@ -9,8 +16,8 @@ fi
 
 # prepare ./gen/addons/mqtt-bridge
 
-mkdir -p gen/addons/mqtt-bridge
-rm -rf gen/addons/mqtt-bridge/*
+mkdir -p "${ROOT_DIR}/gen/addons/mqtt-bridge"
+rm -rf "${ROOT_DIR}/gen/addons/mqtt-bridge/"*
 
 # Build binaries for all platforms (for platform selector)
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o gen/addons/mqtt-bridge/mqtt-bridge-amd64 go/tools/mqtt-bridge/mqtt-bridge.go
@@ -33,7 +40,7 @@ EOF
 
 (cd gen/addons/mqtt-bridge; tar czf - .) | (
 if [[ "$(uname -s)" == "Darwin" ]]; then
-    ssh hassio@homeassistant.local '
+    ssh "hassio@${HOMEASSISTANT}" '
         sudo rm -rf /addons/dueckminor_mqtt_bridge/
         sudo mkdir /addons/dueckminor_mqtt_bridge
         cd /addons/dueckminor_mqtt_bridge

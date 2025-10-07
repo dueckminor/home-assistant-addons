@@ -37,6 +37,9 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    outDir: '../../go/auth/dist',
+  },
   base: './', // Generate relative paths instead of absolute
   define: { 'process.env': {} },
   resolve: {
