@@ -124,6 +124,7 @@ export default {
       ipv6Loading: false,
       ipv4Timeout: null,
       ipv6Timeout: null,
+      initialLoadingComplete: false, // Track initial loading state
       
       // IP Detection Methods (expandable for future methods)
       ipDetectionMethods: [
@@ -153,18 +154,26 @@ export default {
       certificateConfig: {}
     }
   },
-  mounted() {
+  async mounted() {
     console.log('Gateway Configuration UI loaded')
     console.log('Active tab:', this.activeTab)
     
-    // Load initial configuration
-    this.loadConfiguration()
+    // Load initial configuration and external IPs
+    await Promise.all([
+      this.loadConfiguration(),
+      this.getInitialExternalIPv4(),
+      this.getInitialExternalIPv6()
+    ])
+    
+    // Mark initial loading as complete
+    this.initialLoadingComplete = true
+    console.log('Initial loading complete')
   },
 
   watch: {
-    // Auto-refresh IPv4 when source address changes (debounced)
+    // Validate and update IPv4 configuration when source address changes (debounced)
     'dnsConfig.ipv4.source'(newValue, oldValue) {
-      if (newValue !== oldValue && newValue.trim()) {
+      if (newValue !== oldValue && newValue.trim() && this.initialLoadingComplete) {
         console.log('IPv4 source changed:', newValue)
         
         // Clear existing timeout
@@ -172,17 +181,23 @@ export default {
           clearTimeout(this.ipv4Timeout)
         }
         
-        // Set new timeout for debounced refresh
-        this.ipv4Timeout = setTimeout(() => {
-          console.log('Auto-refreshing IPv4...')
-          this.refreshIPv4()
+        // Set new timeout for debounced validation and configuration update
+        this.ipv4Timeout = setTimeout(async () => {
+          console.log('Validating IPv4 source:', newValue)
+          
+          // First validate that the source can be resolved
+          const isValid = await this.validateAndUpdateIPv4Config(newValue)
+          if (isValid) {
+            // Refresh to get the updated resolved IP from the new configuration
+            this.refreshIPv4()
+          }
         }, 500) // 500ms debounce
       }
     },
 
-    // Auto-refresh IPv6 when source address changes (debounced)
+    // Validate and update IPv6 configuration when source address changes (debounced)
     'dnsConfig.ipv6.source'(newValue, oldValue) {
-      if (newValue !== oldValue && newValue.trim()) {
+      if (newValue !== oldValue && newValue.trim() && this.initialLoadingComplete) {
         console.log('IPv6 source changed:', newValue)
         
         // Clear existing timeout
@@ -190,34 +205,203 @@ export default {
           clearTimeout(this.ipv6Timeout)
         }
         
-        // Set new timeout for debounced refresh
-        this.ipv6Timeout = setTimeout(() => {
-          console.log('Auto-refreshing IPv6...')
-          this.refreshIPv6()
+        // Set new timeout for debounced validation and configuration update
+        this.ipv6Timeout = setTimeout(async () => {
+          console.log('Validating IPv6 source:', newValue)
+          
+          // First validate that the source can be resolved
+          const isValid = await this.validateAndUpdateIPv6Config(newValue)
+          if (isValid) {
+            // Refresh to get the updated resolved IP from the new configuration
+            this.refreshIPv6()
+          }
         }, 500) // 500ms debounce
       }
     }
   },
   methods: {
-    // IP Address refresh methods
-    async refreshIPv4() {
-      if (!this.dnsConfig.ipv4.source.trim()) {
-        console.warn('No IPv4 source address configured');
-        return;
-      }
-
-      this.ipv4Loading = true;
+    // Initial external IP detection methods
+    async getInitialExternalIPv4() {
       try {
-        const response = await fetch(`/api/dns/ipv4/${encodeURIComponent(this.dnsConfig.ipv4.source)}`);
+        const response = await fetch('/api/dns/external/ipv4');
         const data = await response.json();
         
         if (response.ok) {
-          this.dnsConfig.ipv4.current = data.ip;
-          this.dnsConfig.ipv4.lastUpdate = new Date(data.timestamp).toLocaleString();
+          this.dnsConfig.ipv4.source = data.source || '';
+          this.dnsConfig.ipv4.current = data.address || '';
+          this.dnsConfig.ipv4.method = data.method || 'dns';
+          this.dnsConfig.ipv4.lastUpdate = data.timestamp ? new Date(data.timestamp).toLocaleString() : null;
+          
+          if (data.error) {
+            this.dnsConfig.ipv4.current = `Error: ${data.error}`;
+          }
+          
+          console.log('Initial external IPv4 loaded:', {
+            source: data.source,
+            resolved: data.address,
+            method: data.method
+          });
+        } else {
+          console.error('Failed to get initial external IPv4:', data.error);
+        }
+      } catch (error) {
+        console.error('Error fetching initial external IPv4:', error);
+      }
+    },
+
+    async getInitialExternalIPv6() {
+      try {
+        const response = await fetch('/api/dns/external/ipv6');
+        const data = await response.json();
+        
+        if (response.ok) {
+          this.dnsConfig.ipv6.source = data.source || '';
+          this.dnsConfig.ipv6.current = data.address || '';
+          this.dnsConfig.ipv6.method = data.method || 'dns';
+          this.dnsConfig.ipv6.lastUpdate = data.timestamp ? new Date(data.timestamp).toLocaleString() : null;
+          
+          if (data.error) {
+            this.dnsConfig.ipv6.current = `Error: ${data.error}`;
+          }
+          
+          console.log('Initial external IPv6 loaded:', {
+            source: data.source,
+            resolved: data.address,
+            method: data.method
+          });
+        } else {
+          console.error('Failed to get initial external IPv6:', data.error);
+        }
+      } catch (error) {
+        console.error('Error fetching initial external IPv6:', error);
+      }
+    },
+
+    // Validation and configuration update methods
+    async validateAndUpdateIPv4Config(sourceAddress) {
+      try {
+        // First validate that the source address can be resolved
+        const response = await fetch(`/api/dns/ipv4?hostname=${encodeURIComponent(sourceAddress)}`);
+        const data = await response.json();
+        
+        if (response.ok && data.ip) {
+          console.log('IPv4 source validation successful:', data.ip);
+          
+          // DNS resolution succeeded, update the configuration
+          await this.updateExternalIPv4Config(sourceAddress);
+          return true;
+        } else {
+          console.warn('IPv4 source validation failed:', data.error);
+          
+          // Update current field to show the error
+          this.dnsConfig.ipv4.current = `Error: ${data.error || 'DNS resolution failed'}`;
+          this.dnsConfig.ipv4.lastUpdate = new Date().toLocaleString();
+          return false;
+        }
+      } catch (error) {
+        console.error('Error validating IPv4 source:', error);
+        this.dnsConfig.ipv4.current = 'Network Error';
+        this.dnsConfig.ipv4.lastUpdate = new Date().toLocaleString();
+        return false;
+      }
+    },
+
+    async validateAndUpdateIPv6Config(sourceAddress) {
+      try {
+        // First validate that the source address can be resolved
+        const response = await fetch(`/api/dns/ipv6?hostname=${encodeURIComponent(sourceAddress)}`);
+        const data = await response.json();
+        
+        if (response.ok && data.ip) {
+          console.log('IPv6 source validation successful:', data.ip);
+          
+          // DNS resolution succeeded, update the configuration
+          await this.updateExternalIPv6Config(sourceAddress);
+          return true;
+        } else {
+          console.warn('IPv6 source validation failed:', data.error);
+          
+          // Update current field to show the error
+          this.dnsConfig.ipv6.current = `Error: ${data.error || 'DNS resolution failed'}`;
+          this.dnsConfig.ipv6.lastUpdate = new Date().toLocaleString();
+          return false;
+        }
+      } catch (error) {
+        console.error('Error validating IPv6 source:', error);
+        this.dnsConfig.ipv6.current = 'Network Error';
+        this.dnsConfig.ipv6.lastUpdate = new Date().toLocaleString();
+        return false;
+      }
+    },
+
+    // Configuration update methods
+    async updateExternalIPv4Config(sourceAddress) {
+      try {
+        const response = await fetch('/api/dns/external/ipv4', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            method: 'dns',
+            source: sourceAddress
+          })
+        });
+
+        if (response.ok) {
+          console.log('External IPv4 configuration updated:', sourceAddress);
+        } else {
+          const data = await response.json();
+          console.error('Failed to update external IPv4 config:', data.error);
+        }
+      } catch (error) {
+        console.error('Error updating external IPv4 config:', error);
+      }
+    },
+
+    async updateExternalIPv6Config(sourceAddress) {
+      try {
+        const response = await fetch('/api/dns/external/ipv6', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            method: 'dns',
+            source: sourceAddress
+          })
+        });
+
+        if (response.ok) {
+          console.log('External IPv6 configuration updated:', sourceAddress);
+        } else {
+          const data = await response.json();
+          console.error('Failed to update external IPv6 config:', data.error);
+        }
+      } catch (error) {
+        console.error('Error updating external IPv6 config:', error);
+      }
+    },
+
+    // IP Address refresh methods
+    async refreshIPv4() {
+      this.ipv4Loading = true;
+      try {
+        const response = await fetch('/api/dns/external/ipv4');
+        const data = await response.json();
+        
+        if (response.ok) {
+          this.dnsConfig.ipv4.current = data.address || '';
+          this.dnsConfig.ipv4.lastUpdate = data.timestamp ? new Date(data.timestamp).toLocaleString() : new Date().toLocaleString();
+          
+          if (data.error) {
+            this.dnsConfig.ipv4.current = `Error: ${data.error}`;
+          }
+          
           console.log('IPv4 refreshed:', this.dnsConfig.ipv4.current);
         } else {
-          console.error('DNS lookup failed:', data.error);
-          this.dnsConfig.ipv4.current = `Error: ${data.error}`;
+          console.error('Failed to refresh IPv4:', data.error);
+          this.dnsConfig.ipv4.current = 'Network Error';
           this.dnsConfig.ipv4.lastUpdate = new Date().toLocaleString();
         }
       } catch (error) {
@@ -230,23 +414,23 @@ export default {
     },
 
     async refreshIPv6() {
-      if (!this.dnsConfig.ipv6.source.trim()) {
-        console.warn('No IPv6 source address configured');
-        return;
-      }
-
       this.ipv6Loading = true;
       try {
-        const response = await fetch(`/api/dns/ipv6/${encodeURIComponent(this.dnsConfig.ipv6.source)}`);
+        const response = await fetch('/api/dns/external/ipv6');
         const data = await response.json();
         
         if (response.ok) {
-          this.dnsConfig.ipv6.current = data.ip;
-          this.dnsConfig.ipv6.lastUpdate = new Date(data.timestamp).toLocaleString();
+          this.dnsConfig.ipv6.current = data.address || '';
+          this.dnsConfig.ipv6.lastUpdate = data.timestamp ? new Date(data.timestamp).toLocaleString() : new Date().toLocaleString();
+          
+          if (data.error) {
+            this.dnsConfig.ipv6.current = `Error: ${data.error}`;
+          }
+          
           console.log('IPv6 refreshed:', this.dnsConfig.ipv6.current);
         } else {
-          console.error('DNS lookup failed:', data.error);
-          this.dnsConfig.ipv6.current = `Error: ${data.error}`;
+          console.error('Failed to refresh IPv6:', data.error);
+          this.dnsConfig.ipv6.current = 'Network Error';
           this.dnsConfig.ipv6.lastUpdate = new Date().toLocaleString();
         }
       } catch (error) {

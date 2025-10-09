@@ -14,6 +14,7 @@ type Server interface {
 	SetExternalIPv6(externalIP ExternalIP) error
 	AddDomains(domains ...string) error
 	AddProxyDomain(domain string, target string) error
+	DelDomains(domains ...string) error
 	SetChallenge(domain string, challenge string) error
 }
 
@@ -133,6 +134,24 @@ func (s *server) getDomain(name string) *domain {
 			return domain
 		}
 	}
+	return nil
+}
+
+func (s *server) DelDomains(domains ...string) error {
+	newDomains := []*domain{}
+	for _, domain := range s.domains {
+		toBeDeleted := false
+		for _, name := range domains {
+			if domain.name == name {
+				toBeDeleted = true
+				break
+			}
+		}
+		if !toBeDeleted {
+			newDomains = append(newDomains, domain)
+		}
+	}
+	s.domains = newDomains
 	return nil
 }
 
@@ -287,6 +306,9 @@ func (s *server) dnsHandleFunc(w dns.ResponseWriter, r *dns.Msg) {
 				m.Answer = append(m.Answer, d.makeAAAA(addr))
 			}
 			m.Ns = append(m.Ns, d.makeNS())
+		case dns.TypeNS:
+			m.Answer = append(m.Answer, d.makeNS())
+			m.Ns = append(m.Ns, d.makeSOA())
 		default:
 			fmt.Println("?", r.Question[0].Name)
 		}

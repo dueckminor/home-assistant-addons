@@ -58,5 +58,6 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    allowedHosts: ['auth.rh94-dev.dueckminor.de']
   },
 })

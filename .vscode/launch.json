@@ -14,7 +14,7 @@
             "envFile": "${workspaceFolder}/gen/data/env.txt",
             "preLaunchTask": "build-web-fast",
             "args": [
-                "--data-dir=${workspaceFolder}/gen/data/gateway",
+                "--data=${workspaceFolder}/gen/data/gateway",
                 "--dns-port=10053",
                 "--http-port=10080",
                 "--https-port=10443",
@@ -29,15 +29,13 @@
             "envFile": "${workspaceFolder}/gen/data/env.txt",
             "preLaunchTask": "serve",
             "args": [
-                "--data-dir=${workspaceFolder}/gen/data/gateway",
+                "--data=${workspaceFolder}/gen/data/gateway",
+                "--dist-auth=http://localhost:3000",
+                "--dist-gateway=http://localhost:3001",
                 "--dns-port=10053",
                 "--http-port=10080",
                 "--https-port=10443",
             ],
-            "env": {
-                "DIST_AUTH": "http://localhost:3000",
-                "DIST_CONFIG": "http://localhost:3001"
-            }
         },
         {
             "name": "Launch MQTT-Bridge",
