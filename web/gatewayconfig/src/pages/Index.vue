@@ -23,6 +23,10 @@
                   <v-icon start>mdi-dns</v-icon>
                   DNS
                 </v-tab>
+                <v-tab value="domains">
+                  <v-icon start>mdi-domain</v-icon>
+                  Domains
+                </v-tab>
                 <v-tab value="routes">
                   <v-icon start>mdi-routes</v-icon>
                   Routes
@@ -52,6 +56,13 @@
                       @refresh-ipv6="refreshIPv6"
                       @revert-ipv4="revertIPv4Source"
                       @revert-ipv6="revertIPv6Source"
+                    />
+                  </v-tabs-window-item>
+
+                  <!-- Domains Tab -->
+                  <v-tabs-window-item value="domains">
+                    <DomainsTab 
+                      :domains="dnsConfig.domains"
                       @save-config="saveConfiguration"
                     />
                   </v-tabs-window-item>
@@ -109,6 +120,7 @@
 
 <script>
 import DnsTab from '../components/tabs/DnsTab.vue'
+import DomainsTab from '../components/tabs/DomainsTab.vue'
 import RoutesTab from '../components/tabs/RoutesTab.vue'
 import UsersTab from '../components/tabs/UsersTab.vue'
 import CertificatesTab from '../components/tabs/CertificatesTab.vue'
@@ -117,6 +129,7 @@ export default {
   name: 'Index',
   components: {
     DnsTab,
+    DomainsTab,
     RoutesTab,
     UsersTab,
     CertificatesTab
