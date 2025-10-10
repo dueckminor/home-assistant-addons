@@ -52,6 +52,16 @@
           >
             <template v-slot:append-inner>
               <v-btn
+                v-if="showIpv4Revert"
+                icon="mdi-undo"
+                variant="text"
+                size="small"
+                color="warning"
+                @click="revertIPv4"
+                title="Revert to last working configuration"
+                class="me-1"
+              ></v-btn>
+              <v-btn
                 icon="mdi-refresh"
                 variant="text"
                 size="small"
@@ -107,6 +117,16 @@
             class="mb-2"
           >
             <template v-slot:append-inner>
+              <v-btn
+                v-if="showIpv6Revert"
+                icon="mdi-undo"
+                variant="text"
+                size="small"
+                color="warning"
+                @click="revertIPv6"
+                title="Revert to last working configuration"
+                class="me-1"
+              ></v-btn>
               <v-btn
                 icon="mdi-refresh"
                 variant="text"
@@ -285,9 +305,17 @@ export default {
     ipv6Loading: {
       type: Boolean,
       default: false
+    },
+    showIpv4Revert: {
+      type: Boolean,
+      default: false
+    },
+    showIpv6Revert: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['refresh-ipv4', 'refresh-ipv6', 'save-config'],
+  emits: ['refresh-ipv4', 'refresh-ipv6', 'revert-ipv4', 'revert-ipv6', 'save-config'],
   data() {
     return {
       newDomain: ''
@@ -299,6 +327,12 @@ export default {
     },
     refreshIPv6() {
       this.$emit('refresh-ipv6');
+    },
+    revertIPv4() {
+      this.$emit('revert-ipv4');
+    },
+    revertIPv6() {
+      this.$emit('revert-ipv6');
     },
     addDomain() {
       const domain = this.newDomain.trim().toLowerCase();

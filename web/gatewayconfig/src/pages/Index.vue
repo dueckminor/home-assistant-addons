@@ -46,8 +46,12 @@
                       :ip-detection-methods="ipDetectionMethods"
                       :ipv4-loading="ipv4Loading"
                       :ipv6-loading="ipv6Loading"
+                      :show-ipv4-revert="showIPv4RevertButton"
+                      :show-ipv6-revert="showIPv6RevertButton"
                       @refresh-ipv4="refreshIPv4"
                       @refresh-ipv6="refreshIPv6"
+                      @revert-ipv4="revertIPv4Source"
+                      @revert-ipv6="revertIPv6Source"
                       @save-config="saveConfiguration"
                     />
                   </v-tabs-window-item>
@@ -126,6 +130,10 @@ export default {
       ipv6Timeout: null,
       initialLoadingComplete: false, // Track initial loading state
       
+      // Last valid configurations for revert functionality
+      lastValidIPv4Source: '',
+      lastValidIPv6Source: '',
+      
       // IP Detection Methods (expandable for future methods)
       ipDetectionMethods: [
         { title: 'DNS', value: 'dns' }
@@ -152,6 +160,20 @@ export default {
       routeConfig: {},
       userConfig: {},
       certificateConfig: {}
+    }
+  },
+  computed: {
+    // Show revert button if current address shows an error and we have a valid fallback
+    showIPv4RevertButton() {
+      return this.dnsConfig.ipv4.current?.startsWith('Error:') && 
+             this.lastValidIPv4Source && 
+             this.lastValidIPv4Source !== this.dnsConfig.ipv4.source;
+    },
+    
+    showIPv6RevertButton() {
+      return this.dnsConfig.ipv6.current?.startsWith('Error:') && 
+             this.lastValidIPv6Source && 
+             this.lastValidIPv6Source !== this.dnsConfig.ipv6.source;
     }
   },
   async mounted() {
@@ -234,6 +256,9 @@ export default {
           
           if (data.error) {
             this.dnsConfig.ipv4.current = `Error: ${data.error}`;
+          } else if (data.source && data.address) {
+            // Store as last valid configuration if no error
+            this.lastValidIPv4Source = data.source;
           }
           
           console.log('Initial external IPv4 loaded:', {
@@ -262,6 +287,9 @@ export default {
           
           if (data.error) {
             this.dnsConfig.ipv6.current = `Error: ${data.error}`;
+          } else if (data.source && data.address) {
+            // Store as last valid configuration if no error
+            this.lastValidIPv6Source = data.source;
           }
           
           console.log('Initial external IPv6 loaded:', {
@@ -289,6 +317,9 @@ export default {
           
           // DNS resolution succeeded, update the configuration
           await this.updateExternalIPv4Config(sourceAddress);
+          
+          // Store as last valid configuration
+          this.lastValidIPv4Source = sourceAddress;
           return true;
         } else {
           console.warn('IPv4 source validation failed:', data.error);
@@ -317,6 +348,9 @@ export default {
           
           // DNS resolution succeeded, update the configuration
           await this.updateExternalIPv6Config(sourceAddress);
+          
+          // Store as last valid configuration
+          this.lastValidIPv6Source = sourceAddress;
           return true;
         } else {
           console.warn('IPv6 source validation failed:', data.error);
@@ -380,6 +414,23 @@ export default {
         }
       } catch (error) {
         console.error('Error updating external IPv6 config:', error);
+      }
+    },
+
+    // Revert methods for invalid configurations
+    async revertIPv4Source() {
+      if (this.lastValidIPv4Source) {
+        console.log('Reverting IPv4 source to:', this.lastValidIPv4Source);
+        this.dnsConfig.ipv4.source = this.lastValidIPv4Source;
+        // The watcher will handle validation and refresh
+      }
+    },
+
+    async revertIPv6Source() {
+      if (this.lastValidIPv6Source) {
+        console.log('Reverting IPv6 source to:', this.lastValidIPv6Source);
+        this.dnsConfig.ipv6.source = this.lastValidIPv6Source;
+        // The watcher will handle validation and refresh
       }
     },
 
