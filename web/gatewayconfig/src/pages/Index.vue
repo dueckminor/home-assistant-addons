@@ -124,6 +124,7 @@ import DomainsTab from '../components/tabs/DomainsTab.vue'
 import RoutesTab from '../components/tabs/RoutesTab.vue'
 import UsersTab from '../components/tabs/UsersTab.vue'
 import CertificatesTab from '../components/tabs/CertificatesTab.vue'
+import { apiRequest, apiGet, apiPost } from '../utils/api.js'
 
 export default {
   name: 'Index',
@@ -282,10 +283,9 @@ export default {
     // Initial external IP detection methods
     async getInitialExternalIPv4() {
       try {
-        const response = await fetch('/api/dns/external/ipv4');
-        const data = await response.json();
+        const data = await apiGet('dns/external/ipv4');
         
-        if (response.ok) {
+        if (data) {
           this.dnsConfig.ipv4.source = data.source || '';
           this.dnsConfig.ipv4.current = data.address || '';
           this.dnsConfig.ipv4.method = data.method || 'dns';
@@ -303,8 +303,6 @@ export default {
             resolved: data.address,
             method: data.method
           });
-        } else {
-          console.error('Failed to get initial external IPv4:', data.error);
         }
       } catch (error) {
         console.error('Error fetching initial external IPv4:', error);
@@ -313,10 +311,9 @@ export default {
 
     async getInitialExternalIPv6() {
       try {
-        const response = await fetch('/api/dns/external/ipv6');
-        const data = await response.json();
+        const data = await apiGet('dns/external/ipv6');
         
-        if (response.ok) {
+        if (data) {
           this.dnsConfig.ipv6.source = data.source || '';
           this.dnsConfig.ipv6.current = data.address || '';
           this.dnsConfig.ipv6.method = data.method || 'dns';
@@ -334,8 +331,6 @@ export default {
             resolved: data.address,
             method: data.method
           });
-        } else {
-          console.error('Failed to get initial external IPv6:', data.error);
         }
       } catch (error) {
         console.error('Error fetching initial external IPv6:', error);
@@ -346,10 +341,9 @@ export default {
     async validateAndUpdateIPv4Config(sourceAddress) {
       try {
         // First validate that the source address can be resolved
-        const response = await fetch(`/api/dns/ipv4?hostname=${encodeURIComponent(sourceAddress)}`);
-        const data = await response.json();
+        const data = await apiGet(`dns/ipv4?hostname=${encodeURIComponent(sourceAddress)}`);
         
-        if (response.ok && data.ip) {
+        if (data && data.ip) {
           console.log('IPv4 source validation successful:', data.ip);
           
           // DNS resolution succeeded, update the configuration
@@ -377,10 +371,9 @@ export default {
     async validateAndUpdateIPv6Config(sourceAddress) {
       try {
         // First validate that the source address can be resolved
-        const response = await fetch(`/api/dns/ipv6?hostname=${encodeURIComponent(sourceAddress)}`);
-        const data = await response.json();
+        const data = await apiGet(`dns/ipv6?hostname=${encodeURIComponent(sourceAddress)}`);
         
-        if (response.ok && data.ip) {
+        if (data && data.ip) {
           console.log('IPv6 source validation successful:', data.ip);
           
           // DNS resolution succeeded, update the configuration
@@ -408,23 +401,12 @@ export default {
     // Configuration update methods
     async updateExternalIPv4Config(sourceAddress) {
       try {
-        const response = await fetch('/api/dns/external/ipv4', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            method: 'dns',
-            source: sourceAddress
-          })
+        await apiPost('dns/external/ipv4', {
+          method: 'dns',
+          source: sourceAddress
         });
 
-        if (response.ok) {
-          console.log('External IPv4 configuration updated:', sourceAddress);
-        } else {
-          const data = await response.json();
-          console.error('Failed to update external IPv4 config:', data.error);
-        }
+        console.log('External IPv4 configuration updated:', sourceAddress);
       } catch (error) {
         console.error('Error updating external IPv4 config:', error);
       }
@@ -432,23 +414,12 @@ export default {
 
     async updateExternalIPv6Config(sourceAddress) {
       try {
-        const response = await fetch('/api/dns/external/ipv6', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            method: 'dns',
-            source: sourceAddress
-          })
+        await apiPost('dns/external/ipv6', {
+          method: 'dns',
+          source: sourceAddress
         });
 
-        if (response.ok) {
-          console.log('External IPv6 configuration updated:', sourceAddress);
-        } else {
-          const data = await response.json();
-          console.error('Failed to update external IPv6 config:', data.error);
-        }
+        console.log('External IPv6 configuration updated:', sourceAddress);
       } catch (error) {
         console.error('Error updating external IPv6 config:', error);
       }
@@ -475,10 +446,9 @@ export default {
     async refreshIPv4() {
       this.ipv4Loading = true;
       try {
-        const response = await fetch('/api/dns/external/ipv4');
-        const data = await response.json();
+        const data = await apiGet('dns/external/ipv4');
         
-        if (response.ok) {
+        if (data) {
           this.dnsConfig.ipv4.current = data.address || '';
           this.dnsConfig.ipv4.lastUpdate = data.timestamp ? new Date(data.timestamp).toLocaleString() : new Date().toLocaleString();
           
@@ -487,10 +457,6 @@ export default {
           }
           
           console.log('IPv4 refreshed:', this.dnsConfig.ipv4.current);
-        } else {
-          console.error('Failed to refresh IPv4:', data.error);
-          this.dnsConfig.ipv4.current = 'Network Error';
-          this.dnsConfig.ipv4.lastUpdate = new Date().toLocaleString();
         }
       } catch (error) {
         console.error('Failed to refresh IPv4:', error);
@@ -504,10 +470,9 @@ export default {
     async refreshIPv6() {
       this.ipv6Loading = true;
       try {
-        const response = await fetch('/api/dns/external/ipv6');
-        const data = await response.json();
+        const data = await apiGet('dns/external/ipv6');
         
-        if (response.ok) {
+        if (data) {
           this.dnsConfig.ipv6.current = data.address || '';
           this.dnsConfig.ipv6.lastUpdate = data.timestamp ? new Date(data.timestamp).toLocaleString() : new Date().toLocaleString();
           
@@ -516,10 +481,6 @@ export default {
           }
           
           console.log('IPv6 refreshed:', this.dnsConfig.ipv6.current);
-        } else {
-          console.error('Failed to refresh IPv6:', data.error);
-          this.dnsConfig.ipv6.current = 'Network Error';
-          this.dnsConfig.ipv6.lastUpdate = new Date().toLocaleString();
         }
       } catch (error) {
         console.error('Failed to refresh IPv6:', error);
@@ -537,9 +498,8 @@ export default {
       try {
         console.log('Loading configuration...');
         
-        const response = await fetch('/api/config');
-        if (response.ok) {
-          const config = await response.json();
+        const config = await apiGet('config');
+        if (config) {
           
           // Load DNS configuration from API
           if (config.external_ip) {
@@ -597,22 +557,10 @@ export default {
           domains: [...this.dnsConfig.domains]
         };
         
-        const response = await fetch('/api/config', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(configData)
-        });
+        await apiPost('config', configData);
         
-        if (response.ok) {
-          console.log('Configuration saved successfully');
-          // TODO: Show success message to user
-        } else {
-          const error = await response.text();
-          console.error('Failed to save configuration:', error);
-          // TODO: Show error message to user
-        }
+        console.log('Configuration saved successfully');
+        // TODO: Show success message to user
       } catch (error) {
         console.error('Failed to save configuration:', error);
         // TODO: Show error message to user
