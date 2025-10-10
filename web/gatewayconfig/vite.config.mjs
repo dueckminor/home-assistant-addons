@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [vue()],
   base: './', // Generate relative paths instead of absolute
   build: {
-    outDir: '../../go/gatewayconfig/dist',
+    outDir: '../../go/gateway/dist',
     assetsDir: 'assets'
   },
   server: {

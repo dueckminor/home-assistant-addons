@@ -191,6 +191,11 @@ export default {
   },
   async mounted() {
     console.log('Gateway Configuration UI loaded')
+    
+    // Set initial tab from route
+    if (this.$route.meta?.tab) {
+      this.activeTab = this.$route.meta.tab
+    }
     console.log('Active tab:', this.activeTab)
     
     // Load initial configuration and external IPs
@@ -206,6 +211,25 @@ export default {
   },
 
   watch: {
+    // Update route when active tab changes
+    activeTab(newTab, oldTab) {
+      if (newTab !== oldTab && newTab) {
+        const targetRoute = `/${newTab}`
+        if (this.$route.path !== targetRoute) {
+          console.log('Navigating to tab:', newTab)
+          this.$router.push(targetRoute)
+        }
+      }
+    },
+
+    // Update active tab when route changes
+    '$route'(to, from) {
+      if (to.meta?.tab && to.meta.tab !== this.activeTab) {
+        console.log('Route changed, updating tab to:', to.meta.tab)
+        this.activeTab = to.meta.tab
+      }
+    },
+
     // Validate and update IPv4 configuration when source address changes (debounced)
     'dnsConfig.ipv4.source'(newValue, oldValue) {
       if (newValue !== oldValue && newValue.trim() && this.initialLoadingComplete) {

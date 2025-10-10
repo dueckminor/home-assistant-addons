@@ -10,9 +10,10 @@
     "serve": "vite serve"
   },
   "dependencies": {
+    "@mdi/font": "^7.4.47",
     "vue": "^3.4.23",
-    "vuetify": "^3.6.0",
-    "@mdi/font": "^7.4.47"
+    "vue-router": "^4.5.1",
+    "vuetify": "^3.6.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.4",
