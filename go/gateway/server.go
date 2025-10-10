@@ -5,7 +5,6 @@ import (
 	"embed"
 	"fmt"
 	"net/http"
-	"os"
 	"path"
 	"strings"
 	"sync"
@@ -17,7 +16,6 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/pki"
 	"github.com/gin-gonic/gin"
-	"github.com/goccy/go-yaml"
 )
 
 //go:embed dist/*
@@ -25,13 +23,7 @@ var distFS embed.FS
 
 func NewGateway(dataDir string, distGateway string, distAuth string) (g *Gateway, err error) {
 
-	configFile := path.Join(dataDir, "options.json")
-	configJson, err := os.ReadFile(configFile)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-	}
+	configFile := path.Join(dataDir, "config.yml")
 
 	g = &Gateway{
 		distGateway: distGateway,
@@ -39,7 +31,7 @@ func NewGateway(dataDir string, distGateway string, distAuth string) (g *Gateway
 		dataDir:     dataDir,
 	}
 
-	err = yaml.Unmarshal(configJson, &g.config)
+	g.config, err = loadConfig(configFile)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +41,7 @@ func NewGateway(dataDir string, distGateway string, distAuth string) (g *Gateway
 
 type Gateway struct {
 	cancel func()
-	config Config
+	config *Config
 
 	distGateway string
 	distAuth    string
@@ -297,7 +289,8 @@ func (g *Gateway) StartUI(ctx context.Context, port int) error {
 func (g *Gateway) setupEndpoints(r *gin.Engine) {
 	api := r.Group("/api")
 	g.dnsEndpoints.server = g.dnsServer
-	g.dnsEndpoints.externalIpv4 = &g.config.ExternalIp
-	g.dnsEndpoints.externalIpv6 = &g.config.ExternalIpv6
+	g.dnsEndpoints.config = g.config
 	g.dnsEndpoints.setupEndpoints(api)
+
+	(&Domains{config: g.config}).setupEndpoints(api)
 }

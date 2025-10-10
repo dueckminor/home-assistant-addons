@@ -41,7 +41,8 @@
                     variant="text"
                     size="small"
                     @click="addDomain"
-                    :disabled="!newDomain.trim()"
+                    :disabled="!newDomain.trim() || addingDomain"
+                    :loading="addingDomain"
                   ></v-btn>
                 </template>
               </v-text-field>
@@ -52,7 +53,8 @@
                 variant="outlined"
                 prepend-icon="mdi-plus"
                 @click="addDomain"
-                :disabled="!newDomain.trim()"
+                :disabled="!newDomain.trim() || addingDomain"
+                :loading="addingDomain"
                 block
               >
                 Add Domain
@@ -61,13 +63,23 @@
           </v-row>
 
           <!-- Domain List -->
-          <v-row v-if="domains && domains.length > 0" class="mt-2">
+          <v-row v-if="!loading && domains && domains.length > 0" class="mt-2">
             <v-col cols="12">
               <v-divider class="mb-4"></v-divider>
-              <h4 class="text-subtitle-1 mb-3">
-                <v-icon class="me-2" size="small">mdi-format-list-bulleted</v-icon>
-                Configured Domains ({{ domains.length }})
-              </h4>
+              <div class="d-flex justify-space-between align-center mb-3">
+                <h4 class="text-subtitle-1">
+                  <v-icon class="me-2" size="small">mdi-format-list-bulleted</v-icon>
+                  Configured Domains ({{ domains.length }})
+                </h4>
+                <v-btn
+                  icon="mdi-refresh"
+                  variant="text"
+                  size="small"
+                  @click="loadDomains"
+                  :loading="loading"
+                  title="Refresh domains"
+                ></v-btn>
+              </div>
               <v-row>
                 <v-col 
                   v-for="(domain, index) in domains" 
@@ -91,6 +103,24 @@
                   </v-card>
                 </v-col>
               </v-row>
+            </v-col>
+          </v-row>
+
+          <!-- Loading State -->
+          <v-row v-else-if="loading" class="mt-2">
+            <v-col cols="12">
+              <v-divider class="mb-4"></v-divider>
+              <div class="text-center pa-4">
+                <v-progress-circular
+                  indeterminate
+                  color="primary"
+                  size="48"
+                  class="mb-2"
+                ></v-progress-circular>
+                <p class="text-body-2 text-medium-emphasis">
+                  Loading domains...
+                </p>
+              </div>
             </v-col>
           </v-row>
 
@@ -153,22 +183,45 @@
 </template>
 
 <script>
+import { apiRequest, apiGet, apiPost } from '../../utils/api.js'
+
 export default {
   name: 'DomainsTab',
-  props: {
-    domains: {
-      type: Array,
-      required: true
-    }
-  },
-  emits: ['save-config'],
   data() {
     return {
-      newDomain: ''
+      domains: [],
+      newDomain: '',
+      loading: false,
+      addingDomain: false
     }
   },
+  async mounted() {
+    await this.loadDomains()
+  },
   methods: {
-    addDomain() {
+    async loadDomains() {
+      this.loading = true
+      try {
+        console.log('Loading domains...')
+        const response = await apiGet('domains')
+        
+        if (response && response.domains) {
+          this.domains = response.domains
+          console.log('Domains loaded:', this.domains)
+        } else {
+          this.domains = []
+          console.log('No domains found')
+        }
+      } catch (error) {
+        console.error('Error loading domains:', error)
+        this.domains = []
+        // TODO: Show error message to user
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async addDomain() {
       const domain = this.newDomain.trim().toLowerCase();
       if (!domain) return;
       
@@ -186,21 +239,49 @@ export default {
         return;
       }
       
-      // Add domain
-      this.domains.push(domain);
-      this.newDomain = '';
-      console.log('Domain added:', domain);
-      
-      // Emit save event
-      this.$emit('save-config');
+      this.addingDomain = true
+      try {
+        console.log('Adding domain via API:', domain)
+        
+        // Make API call to add domain
+        await apiRequest(`domains/${encodeURIComponent(domain)}`, {
+          method: 'POST'
+        })
+        
+        // Add domain to local list
+        this.domains.push(domain);
+        this.newDomain = '';
+        console.log('Domain added successfully:', domain);
+        
+        // TODO: Show success message to user
+      } catch (error) {
+        console.error('Error adding domain:', error)
+        // TODO: Show error message to user
+      } finally {
+        this.addingDomain = false
+      }
     },
-    removeDomain(index) {
+
+    async removeDomain(index) {
       const domain = this.domains[index];
-      this.domains.splice(index, 1);
-      console.log('Domain removed:', domain);
       
-      // Emit save event
-      this.$emit('save-config');
+      try {
+        console.log('Removing domain via API:', domain)
+        
+        // Make API call to remove domain
+        await apiRequest(`domains/${encodeURIComponent(domain)}`, {
+          method: 'DELETE'
+        })
+        
+        // Remove domain from local list
+        this.domains.splice(index, 1);
+        console.log('Domain removed successfully:', domain);
+        
+        // TODO: Show success message to user
+      } catch (error) {
+        console.error('Error removing domain:', error)
+        // TODO: Show error message to user
+      }
     }
   }
 }

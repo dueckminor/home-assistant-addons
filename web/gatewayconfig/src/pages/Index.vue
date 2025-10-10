@@ -61,17 +61,13 @@
 
                   <!-- Domains Tab -->
                   <v-tabs-window-item value="domains">
-                    <DomainsTab 
-                      :domains="dnsConfig.domains"
-                      @save-config="saveConfiguration"
-                    />
+                    <DomainsTab />
                   </v-tabs-window-item>
 
                   <!-- Routes Tab -->
                   <v-tabs-window-item value="routes">
                     <RoutesTab 
                       :route-config="routeConfig"
-                      @save-config="saveConfiguration"
                     />
                   </v-tabs-window-item>
 
@@ -79,7 +75,6 @@
                   <v-tabs-window-item value="users">
                     <UsersTab 
                       :user-config="userConfig"
-                      @save-config="saveConfiguration"
                     />
                   </v-tabs-window-item>
 
@@ -87,7 +82,6 @@
                   <v-tabs-window-item value="certificates">
                     <CertificatesTab 
                       :certificate-config="certificateConfig"
-                      @save-config="saveConfiguration"
                     />
                   </v-tabs-window-item>
                 </v-tabs-window>
@@ -166,8 +160,7 @@ export default {
           source: '',
           current: '',
           lastUpdate: null
-        },
-        domains: []
+        }
       },
       
       // Future configuration data
@@ -529,8 +522,7 @@ export default {
           external_ipv6: {
             source: this.dnsConfig.ipv6.method,
             options: this.dnsConfig.ipv6.source
-          },
-          domains: [...this.dnsConfig.domains]
+          }
         };
         
         await apiPost('config', configData);
