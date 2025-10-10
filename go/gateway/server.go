@@ -91,9 +91,15 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 	if err == nil {
 		err = g.StartUI(ctx, 8099)
 	}
+
 	if err == nil {
-		g.ConfigureServers(g.httpsServer, g.config.Servers)
+		g.ConfigureServers(g.config.Servers)
 	}
+
+	if len(g.config.Domains) > 0 {
+		g.AddDomains(g.config.Domains...)
+	}
+
 	return nil
 }
 
@@ -140,16 +146,25 @@ func (g *Gateway) configureAuthServer(proxy network.TLSProxy, server ConfigServe
 	proxy.AddHandler(server.Hostname, network.NewGinHandler(r))
 }
 
-func (g *Gateway) ConfigureServers(proxy network.TLSProxy, servers []ConfigServer) {
+func (g *Gateway) ConfigureServers(servers []ConfigServer) {
 	for _, server := range servers {
 		if server.Target == "@auth" {
-			g.configureAuthServer(proxy, server)
+			g.configureAuthServer(g.httpsServer, server)
 		}
 	}
 	for _, server := range servers {
 		if server.Target != "@auth" {
-			g.ConfigureServer(proxy, server)
+			g.ConfigureServer(g.httpsServer, server)
 		}
+	}
+}
+
+func (g *Gateway) AddDomains(domains ...string) {
+	g.dnsServer.AddDomains(domains...)
+
+	for _, domain := range domains {
+		serverCertificate := pki.NewServerCertificate(path.Join(g.dataDir, domain), g.acmeClient, "*."+domain)
+		serverCertificate.SetTLSServer(g.httpsServer)
 	}
 }
 
@@ -172,7 +187,6 @@ func (g *Gateway) StartDNS(ctx context.Context, port int) (err error) {
 	}
 	g.dnsServer.SetExternalIP(extIPv4)
 	g.dnsServer.SetExternalIPv6(extIPv6)
-	g.dnsServer.AddDomains(g.config.Domains...)
 
 	return nil
 }
@@ -182,12 +196,6 @@ func (g *Gateway) StartAcmeClient(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-
-	for _, domain := range g.config.Domains {
-		serverCertificate := pki.NewServerCertificate(path.Join(g.dataDir, domain), g.acmeClient, "*."+domain)
-		serverCertificate.SetTLSServer(g.httpsServer)
-	}
-
 	return nil
 }
 

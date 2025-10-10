@@ -9,7 +9,6 @@ import (
 
 	"github.com/dueckminor/home-assistant-addons/go/dns"
 	"github.com/gin-gonic/gin"
-	miekgdns "github.com/miekg/dns"
 )
 
 type DnsEndpoints struct {
@@ -136,244 +135,31 @@ func (d *DnsEndpoints) lookup(ctx context.Context, address string, ipv6 bool) (r
 	return "", fmt.Errorf("failed to resolve %s", address)
 }
 
-// getSystemDNSServers retrieves the system's configured DNS servers
-func (d *DnsEndpoints) getSystemDNSServers() []string {
-	var servers []string
-
-	// Read system DNS configuration
-	config, err := miekgdns.ClientConfigFromFile("/etc/resolv.conf")
-	if err == nil && len(config.Servers) > 0 {
-		for _, server := range config.Servers {
-			// Add port 53 if not specified
-			if !strings.Contains(server, ":") {
-				server += ":53"
-			}
-			servers = append(servers, server)
-		}
-	}
-
-	// Fallback: try to get system nameservers via net package
-	if len(servers) == 0 {
-		// On some systems, we can try looking at common locations
-		// This is a basic fallback - the miekg/dns method above should work on most systems
-		servers = append(servers, "127.0.0.53:53") // systemd-resolved common address
-	}
-
-	return servers
-}
-
-// findAuthoritativeServers dynamically discovers authoritative nameservers for a domain
-func (d *DnsEndpoints) findAuthoritativeServers(hostname string, client *miekgdns.Client) []string {
-	var servers []string
-
-	// Split domain into parts to find the zone
-	parts := strings.Split(strings.TrimSuffix(hostname, "."), ".")
-
-	// Try from most specific to least specific (e.g., sub.example.com -> example.com -> com)
-	for i := 0; i < len(parts); i++ {
-		zoneName := strings.Join(parts[i:], ".")
-
-		// Query for NS records of this zone
-		msg := new(miekgdns.Msg)
-		msg.SetQuestion(miekgdns.Fqdn(zoneName), miekgdns.TypeNS)
-
-		// Try system DNS servers first, then fallback to public DNS
-		systemServers := d.getSystemDNSServers()
-		allServers := append(systemServers, "8.8.8.8:53", "1.1.1.1:53")
-
-		for _, server := range allServers {
-			response, _, err := client.Exchange(msg, server)
-			if err != nil {
-				continue
-			}
-
-			// Look for NS records in both Answer and Authority sections
-			allRecords := append(response.Answer, response.Ns...)
-
-			for _, record := range allRecords {
-				if nsRecord, ok := record.(*miekgdns.NS); ok {
-					nsServer := strings.TrimSuffix(nsRecord.Ns, ".")
-
-					// Resolve the NS server to IP address
-					ips, err := net.LookupIP(nsServer)
-					if err == nil && len(ips) > 0 {
-						// Use the first IPv4 address
-						for _, ip := range ips {
-							if ip.To4() != nil {
-								servers = append(servers, ip.String()+":53")
-								break
-							}
-						}
-					}
-
-					// Also add the hostname:53 as fallback
-					servers = append(servers, nsServer+":53")
-				}
-			}
-
-			// If we found NS records, stop looking at higher levels
-			if len(servers) > 0 {
-				return servers
-			}
-		}
-	}
-
-	return servers
-}
-
 // GET_DnsLookup performs DNS lookups for various record types
 func (d *DnsEndpoints) GET_DnsLookup(c *gin.Context) {
 	hostname := c.Query("hostname")
-	recordType := strings.ToUpper(c.Query("type"))
+	recordType := c.Query("type")
 
-	if hostname == "" {
-		c.JSON(400, gin.H{"error": "hostname parameter is required"})
-		return
-	}
+	// Create DNS client with 5 second timeout
+	dnsClient := dns.NewDNSClient(5 * time.Second)
 
-	if recordType == "" {
-		recordType = "A" // Default to A records
-	}
+	// Perform the DNS lookup
+	result := dnsClient.LookupDNS(hostname, recordType)
 
-	// Create DNS client
-	client := new(miekgdns.Client)
-	client.Timeout = 5 * time.Second
-
-	// Create DNS message
-	msg := new(miekgdns.Msg)
-
-	var qtype uint16
-	switch recordType {
-	case "A":
-		qtype = miekgdns.TypeA
-	case "AAAA":
-		qtype = miekgdns.TypeAAAA
-	case "NS":
-		qtype = miekgdns.TypeNS
-	case "CNAME":
-		qtype = miekgdns.TypeCNAME
-	case "MX":
-		qtype = miekgdns.TypeMX
-	case "TXT":
-		qtype = miekgdns.TypeTXT
-	case "SOA":
-		qtype = miekgdns.TypeSOA
-	case "PTR":
-		qtype = miekgdns.TypePTR
-	case "SRV":
-		qtype = miekgdns.TypeSRV
-	case "CAA":
-		qtype = miekgdns.TypeCAA
-	default:
-		c.JSON(400, gin.H{"error": "Unsupported record type. Supported types: A, AAAA, NS, CNAME, MX, TXT, SOA, PTR, SRV, CAA"})
-		return
-	}
-
-	msg.SetQuestion(miekgdns.Fqdn(hostname), qtype)
-
-	// Build list of DNS servers to try
-	dnsServers := []string{}
-
-	// First, try to find authoritative nameservers for this domain
-	authServers := d.findAuthoritativeServers(hostname, client)
-	dnsServers = append(dnsServers, authServers...)
-
-	// Fallback to system DNS servers, then public DNS servers
-	systemServers := d.getSystemDNSServers()
-	dnsServers = append(dnsServers, systemServers...)
-	dnsServers = append(dnsServers, "8.8.8.8:53", "1.1.1.1:53")
-
-	var response *miekgdns.Msg
-	var err error
-	var lastError error
-
-	// Try multiple DNS servers
-	for _, server := range dnsServers {
-		response, _, err = client.Exchange(msg, server)
-		if err == nil && response != nil && (len(response.Answer) > 0 || len(response.Ns) > 0) {
-			break
+	// Handle errors
+	if result.Error != "" {
+		if hostname == "" {
+			c.JSON(400, gin.H{"error": result.Error})
+		} else if strings.Contains(result.Error, "Unsupported record type") {
+			c.JSON(400, gin.H{"error": result.Error})
+		} else if strings.Contains(result.Error, "No records found") || strings.Contains(result.Error, "No DNS response received") {
+			c.JSON(404, gin.H{"error": result.Error, "type": result.Type})
+		} else {
+			c.JSON(500, gin.H{"error": result.Error})
 		}
-		lastError = err
-	}
-
-	if err != nil {
-		errorMsg := "DNS lookup failed"
-		if lastError != nil {
-			errorMsg += ": " + lastError.Error()
-		}
-		c.JSON(500, gin.H{"error": errorMsg})
 		return
 	}
 
-	if response == nil {
-		c.JSON(404, gin.H{"error": "No DNS response received", "type": recordType})
-		return
-	}
-
-	// Parse responses based on record type
-	var records []map[string]interface{}
-
-	// Check both Answer and Authority sections
-	allRecords := append(response.Answer, response.Ns...)
-
-	if len(allRecords) == 0 {
-		c.JSON(404, gin.H{"error": "No records found", "type": recordType})
-		return
-	}
-
-	for _, ans := range allRecords {
-		record := map[string]interface{}{
-			"name": ans.Header().Name,
-			"type": miekgdns.TypeToString[ans.Header().Rrtype],
-			"ttl":  ans.Header().Ttl,
-		}
-
-		switch rr := ans.(type) {
-		case *miekgdns.A:
-			record["value"] = rr.A.String()
-		case *miekgdns.AAAA:
-			record["value"] = rr.AAAA.String()
-		case *miekgdns.NS:
-			record["value"] = rr.Ns
-		case *miekgdns.CNAME:
-			record["value"] = rr.Target
-		case *miekgdns.MX:
-			record["value"] = rr.Mx
-			record["priority"] = rr.Preference
-		case *miekgdns.TXT:
-			record["value"] = strings.Join(rr.Txt, " ")
-		case *miekgdns.SOA:
-			record["value"] = map[string]interface{}{
-				"ns":      rr.Ns,
-				"mbox":    rr.Mbox,
-				"serial":  rr.Serial,
-				"refresh": rr.Refresh,
-				"retry":   rr.Retry,
-				"expire":  rr.Expire,
-				"minttl":  rr.Minttl,
-			}
-		case *miekgdns.PTR:
-			record["value"] = rr.Ptr
-		case *miekgdns.SRV:
-			record["value"] = rr.Target
-			record["priority"] = rr.Priority
-			record["weight"] = rr.Weight
-			record["port"] = rr.Port
-		case *miekgdns.CAA:
-			record["value"] = rr.Value
-			record["flag"] = rr.Flag
-			record["tag"] = rr.Tag
-		default:
-			record["value"] = ans.String()
-		}
-
-		records = append(records, record)
-	}
-
-	c.JSON(200, gin.H{
-		"hostname":  hostname,
-		"type":      recordType,
-		"records":   records,
-		"timestamp": time.Now(),
-	})
+	// Return successful result
+	c.JSON(200, result)
 }

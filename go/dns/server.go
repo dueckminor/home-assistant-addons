@@ -293,7 +293,7 @@ func (s *server) dnsHandleFunc(w dns.ResponseWriter, r *dns.Msg) {
 				m.Ns = append(m.Ns, d.makeNS())
 			}
 		case dns.TypeA:
-			if d.host != "" {
+			if d.host != "" && s.ipv4 != nil {
 				addr := s.ipv4.ExternalIP()
 				if len(addr) == 4 {
 					m.Answer = append(m.Answer, d.makeA(addr))
@@ -301,9 +301,11 @@ func (s *server) dnsHandleFunc(w dns.ResponseWriter, r *dns.Msg) {
 				m.Ns = append(m.Ns, d.makeNS())
 			}
 		case dns.TypeAAAA:
-			addr := s.ipv6.ExternalIP()
-			if len(addr) == 16 {
-				m.Answer = append(m.Answer, d.makeAAAA(addr))
+			if s.ipv6 != nil {
+				addr := s.ipv6.ExternalIP()
+				if len(addr) == 16 {
+					m.Answer = append(m.Answer, d.makeAAAA(addr))
+				}
 			}
 			m.Ns = append(m.Ns, d.makeNS())
 		case dns.TypeNS:
