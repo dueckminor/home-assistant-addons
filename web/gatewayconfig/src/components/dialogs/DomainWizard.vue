@@ -77,8 +77,8 @@
                     label="Domain Name"
                     variant="outlined"
                     prepend-inner-icon="mdi-web"
-                    placeholder="example.com"
-                    hint="Enter a valid domain name (e.g., example.com, subdomain.example.org)"
+                    placeholder="subdomain.example.com"
+                    hint="Must have at least 3 parts (e.g., app.example.com, home.mydomain.org) - you need DNS control of the parent domain"
                     persistent-hint
                     :rules="domainRules"
                     @input="onDomainNameChange"
@@ -113,6 +113,40 @@
                           Checking DNS...
                         </v-chip>
                       </div>
+                    </v-card-text>
+                  </v-card>
+
+                  <!-- DNS Setup Instructions - Only show after failed validation -->
+                  <v-card v-if="shouldShowDnsSetupInstructions()" variant="outlined" color="info" class="mt-4">
+                    <v-card-title class="text-subtitle-1">
+                      <v-icon class="me-2" color="info">mdi-information</v-icon>
+                      DNS Setup Required
+                    </v-card-title>
+                    <v-card-text>
+                      <p class="text-body-2 mb-3">
+                        To delegate DNS control to this gateway, create the following NS record in your parent domain:
+                      </p>
+                      
+                      <v-card variant="outlined" color="primary" class="pa-3 mb-3" style="background-color: #f5f5f5; border: 1px solid #ddd;">
+                        <div class="d-flex align-center justify-space-between">
+                          <div class="font-mono text-body-1" style="color: #333;">
+                            <strong>{{ getDnsSetupInstructions().name }}</strong> IN NS <strong>{{ getDnsSetupInstructions().target }}</strong>
+                          </div>
+                          <v-btn 
+                            icon="mdi-content-copy" 
+                            variant="outlined" 
+                            size="small"
+                            color="primary"
+                            @click="copyDnsRecord"
+                            title="Copy DNS record"
+                          ></v-btn>
+                        </div>
+                      </v-card>
+
+                      <v-alert type="info" variant="tonal" density="compact">
+                        <v-icon start>mdi-lightbulb</v-icon>
+                        <strong>How to:</strong> Add this NS record in your DNS management interface for <strong>{{ getParentDomain() }}</strong>
+                      </v-alert>
                     </v-card-text>
                   </v-card>
 
@@ -272,7 +306,6 @@
                   variant="tonal"
                   class="mb-4"
                 >
-                  <v-icon start>mdi-information</v-icon>
                   <strong>Required:</strong> Every domain must have exactly one route that connects to the built-in OAuth authentication server. This route will be created first and handles user login for the domain.
                 </v-alert>
 
@@ -330,7 +363,6 @@
                   density="compact"
                   class="mt-4"
                 >
-                  <v-icon start>mdi-check-circle</v-icon>
                   This authentication route will be automatically created as the first route when the domain is created.
                 </v-alert>
               </v-card-text>
@@ -423,12 +455,17 @@ export default {
       dnsValidation: {
         nsRecords: { status: 'pending', message: 'Enter a domain name to check DNS', records: [] }
       },
+      gatewayNsTarget: null, // Will be populated from gateway config
       dnsValidationInProgress: false,
       dnsValidationTimeout: null,
       domainRules: [
         v => !!v || 'Domain name is required',
         v => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(v) || 'Invalid domain format',
-        v => v.length <= 253 || 'Domain name too long'
+        v => v.length <= 253 || 'Domain name too long',
+        v => {
+          const parts = v ? v.split('.') : []
+          return parts.length >= 3 || 'Domain must have at least 3 parts (e.g., subdomain.example.com) - you need DNS control of the parent domain'
+        }
       ],
       gatewayTargetRules: [
         v => !this.domainData.redirectToGateway || !!v || 'Gateway target is required when redirection is enabled',
@@ -439,6 +476,9 @@ export default {
         v => /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/i.test(v) || 'Invalid hostname format (letters, numbers, hyphens only)'
       ]
     }
+  },
+  mounted() {
+    this.fetchGatewayNsTarget()
   },
   computed: {
     localShow: {
@@ -527,8 +567,9 @@ export default {
 
       const domainName = this.domainData.name.trim()
       
-      // Only validate if domain name is long enough and valid format
-      if (domainName.length > 3 && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domainName)) {
+      // Only validate if domain name is long enough, valid format, and has at least 3 parts
+      const domainParts = domainName.split('.')
+      if (domainName.length > 3 && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domainName) && domainParts.length >= 3) {
         // Debounce DNS validation to avoid too many API calls
         this.dnsValidationTimeout = setTimeout(() => {
           this.validateDomainAndNsRecords()
@@ -659,18 +700,35 @@ export default {
           if (nsRecords.length > 0) {
             const nsNames = nsRecords.map(record => record.value)
             
-            // Check if the NS records point to your gateway
+            // Check if this is a gateway-managed domain (has SOA record) or externally delegated
+            const soaRecords = nsResponse.records.filter(record => record.type === 'SOA')
+            const isGatewayManaged = soaRecords.length > 0
+            
+            // Check if the NS records point to your gateway (for external delegation)
             const gatewayNsPatterns = [
               /\.myfritz\.net\.?$/,  // FRITZ!Box dynamic DNS
               new RegExp(`^${expectedIp.replace(/\./g, '\\.')}$`)  // Direct IP match
             ]
             
-            const isGatewayNs = nsNames.some(ns => 
+            const isExternalDelegation = nsNames.some(ns => 
               gatewayNsPatterns.some(pattern => pattern.test(ns))
             )
+            
+            // For gateway-managed domains, check if NS points to a subdomain of the domain itself
+            const isGatewayNsSubdomain = nsNames.some(ns => {
+              const cleanNs = ns.replace(/\.$/, '') // Remove trailing dot
+              const cleanDomain = this.domainData.name.trim()
+              return cleanNs.endsWith(`.${cleanDomain}`) || cleanNs === `ns1.${cleanDomain}`
+            })
 
-            if (isGatewayNs) {
-              // NS records point to gateway/FRITZ!Box, this is good
+            if (isGatewayManaged) {
+              // Domain is already managed by the gateway (has SOA record)
+              this.dnsValidation.nsRecords.status = 'success'
+              this.dnsValidation.nsRecords.message = `✓ Domain is managed by this gateway (authoritative with SOA record)`
+              this.dnsValidation.nsRecords.records = nsNames
+              
+            } else if (isExternalDelegation) {
+              // NS records point to gateway/FRITZ!Box via external delegation
               // Try to check A records but be lenient if they don't resolve yet
               try {
                 const aResponse = await apiGet(`dns/lookup?hostname=${encodeURIComponent(this.domainData.name)}&type=A`)
@@ -709,10 +767,18 @@ export default {
                 this.dnsValidation.nsRecords.message = `✓ NS records correctly delegated to gateway (${nsNames.join(', ')}) - Gateway will handle DNS resolution`
                 this.dnsValidation.nsRecords.records = nsNames
               }
+              
+            } else if (isGatewayNsSubdomain) {
+              // NS records point to a subdomain of the domain itself (like ns1.example.com for example.com)
+              // This suggests the domain might be managed by the gateway but SOA wasn't returned
+              this.dnsValidation.nsRecords.status = 'success'
+              this.dnsValidation.nsRecords.message = `✓ Domain appears to be managed by gateway (NS: ${nsNames.join(', ')})`
+              this.dnsValidation.nsRecords.records = nsNames
+              
             } else {
               // NS records don't point to gateway - this needs attention
               this.dnsValidation.nsRecords.status = 'warning'
-              this.dnsValidation.nsRecords.message = `NS records found but don't point to gateway: ${nsNames.join(', ')} (expected *.myfritz.net or ${expectedIp})`
+              this.dnsValidation.nsRecords.message = `NS records found but don't point to gateway: ${nsNames.join(', ')} (expected *.myfritz.net, gateway subdomain, or ${expectedIp})`
               this.dnsValidation.nsRecords.records = nsNames
             }
           } else {
@@ -761,6 +827,77 @@ export default {
       }
       
       return this.dnsValidation[checkType]?.message || 'Not checked yet'
+    },
+
+    shouldShowDnsSetupInstructions() {
+      // Only show DNS setup instructions if:
+      // 1. Domain name is valid (3+ parts)
+      // 2. DNS validation has completed (not pending or checking)
+      // 3. DNS validation failed or shows a warning (not success)
+      
+      if (!this.domainData.name || this.domainData.name.split('.').length < 3) {
+        return false
+      }
+
+      const status = this.dnsValidation.nsRecords.status
+      
+      // Show instructions only when validation completed with failure/warning
+      return status === 'warning' || status === 'error'
+    },
+
+    getDnsSetupInstructions() {
+      if (!this.domainData.name || this.domainData.name.split('.').length < 3) {
+        return null
+      }
+
+      const domainParts = this.domainData.name.split('.')
+      const subdomain = domainParts[0]
+      
+      // Use the fetched NS target or fall back to a generic pattern
+      let nsTarget = this.gatewayNsTarget || 'your-fritz-hostname.myfritz.net.'
+      
+      // Ensure it ends with a dot for proper DNS format
+      if (!nsTarget.endsWith('.')) {
+        nsTarget += '.'
+      }
+      
+      return {
+        name: subdomain,
+        target: nsTarget,
+        fullRecord: `${subdomain} IN NS ${nsTarget}`
+      }
+    },
+
+    getParentDomain() {
+      if (!this.domainData.name) return ''
+      const parts = this.domainData.name.split('.')
+      return parts.slice(1).join('.')
+    },
+
+    async copyDnsRecord() {
+      const instructions = this.getDnsSetupInstructions()
+      if (instructions) {
+        try {
+          await navigator.clipboard.writeText(instructions.fullRecord)
+          // You could add a toast notification here
+          console.log('DNS record copied to clipboard')
+        } catch (error) {
+          console.error('Failed to copy DNS record:', error)
+        }
+      }
+    },
+
+    async fetchGatewayNsTarget() {
+      try {
+        // Get the DNS configuration to extract the IPv4 Source Address
+        const response = await apiGet('dns/external/ipv4')
+        if (response.source) {
+          // Use the IPv4 Source Address as the NS target
+          this.gatewayNsTarget = response.source
+        }
+      } catch (error) {
+        console.warn('Could not fetch gateway NS target:', error)
+      }
     }
   }
 }
