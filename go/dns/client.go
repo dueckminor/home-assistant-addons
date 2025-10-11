@@ -10,15 +10,15 @@ import (
 
 // DNSRecord represents a DNS record with all relevant information
 type DNSRecord struct {
-	Name     string      `json:"name"`
-	Type     string      `json:"type"`
-	TTL      uint32      `json:"ttl"`
-	Value    interface{} `json:"value"`
-	Priority *uint16     `json:"priority,omitempty"`
-	Weight   *uint16     `json:"weight,omitempty"`
-	Port     *uint16     `json:"port,omitempty"`
-	Flag     *uint8      `json:"flag,omitempty"`
-	Tag      *string     `json:"tag,omitempty"`
+	Name     string  `json:"name"`
+	Type     string  `json:"type"`
+	TTL      uint32  `json:"ttl"`
+	Value    any     `json:"value"`
+	Priority *uint16 `json:"priority,omitempty"`
+	Weight   *uint16 `json:"weight,omitempty"`
+	Port     *uint16 `json:"port,omitempty"`
+	Flag     *uint8  `json:"flag,omitempty"`
+	Tag      *string `json:"tag,omitempty"`
 }
 
 // DNSLookupResult represents the result of a DNS lookup
@@ -151,7 +151,7 @@ func (dc *DNSClient) parseDNSRecord(rr miekgdns.RR) DNSRecord {
 	case *miekgdns.TXT:
 		record.Value = strings.Join(r.Txt, " ")
 	case *miekgdns.SOA:
-		record.Value = map[string]interface{}{
+		record.Value = map[string]any{
 			"ns":      r.Ns,
 			"mbox":    r.Mbox,
 			"serial":  r.Serial,

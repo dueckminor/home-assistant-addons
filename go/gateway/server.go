@@ -16,6 +16,7 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/pki"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 //go:embed dist/*
@@ -47,7 +48,7 @@ type Gateway struct {
 	distAuth    string
 	dataDir     string
 
-	dnsEndpoints DnsEndpoints
+	endpoints Endpoints
 
 	wg sync.WaitGroup
 
@@ -92,12 +93,9 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 		err = g.StartUI(ctx, 8099)
 	}
 
-	if err == nil {
-		g.ConfigureServers(g.config.Servers)
-	}
-
-	if len(g.config.Domains) > 0 {
-		g.AddDomains(g.config.Domains...)
+	for _, domain := range g.config.Domains {
+		g.startDomain(domain)
+		g.ConfigureServers(domain.Routes)
 	}
 
 	return nil
@@ -159,26 +157,47 @@ func (g *Gateway) ConfigureServers(servers []ConfigServer) {
 	}
 }
 
-func (g *Gateway) AddDomains(domains ...string) {
-	g.dnsServer.AddDomains(domains...)
-
-	for _, domain := range domains {
-		serverCertificate := pki.NewServerCertificate(path.Join(g.dataDir, domain), g.acmeClient, "*."+domain)
-		serverCertificate.SetTLSServer(g.httpsServer)
+func (g *Gateway) AddDomain(domain ConfigDomain) (ConfigDomain, error) {
+	for _, existingDomain := range g.config.Domains {
+		if existingDomain.Name == domain.Name {
+			return ConfigDomain{}, fmt.Errorf("domain %q already exists", domain.Name)
+		}
 	}
+	domain.Guid = uuid.New().String()
+	g.config.Domains = append(g.config.Domains, domain)
+	g.config.save()
+	return domain, nil
+}
+
+func (g *Gateway) DelDomain(guid string) error {
+	for i, existingDomain := range g.config.Domains {
+		if existingDomain.Guid == guid {
+			g.config.Domains = append(g.config.Domains[:i], g.config.Domains[i+1:]...)
+			g.config.save()
+			return nil
+		}
+	}
+	return fmt.Errorf("domain with guid %q not found", guid)
+}
+
+func (g *Gateway) startDomain(domain ConfigDomain) {
+	g.dnsServer.AddDomains(domain.Name)
+
+	serverCertificate := pki.NewServerCertificate(path.Join(g.dataDir, domain.Name), g.acmeClient, "*."+domain.Name)
+	serverCertificate.SetTLSServer(g.httpsServer)
 }
 
 func (g *Gateway) StartDNS(ctx context.Context, port int) (err error) {
 	var extIPv4 dns.ExternalIP
 	var extIPv6 dns.ExternalIP
 
-	switch g.config.ExternalIp.Source {
+	switch g.config.Dns.ExternalIpv4.Source {
 	case "dns":
-		extIPv4 = dns.NewExternalIP("ip4", g.config.ExternalIp.Options)
+		extIPv4 = dns.NewExternalIP("ip4", g.config.Dns.ExternalIpv4.Options)
 	}
-	switch g.config.ExternalIpv6.Source {
+	switch g.config.Dns.ExternalIpv6.Source {
 	case "dns":
-		extIPv6 = dns.NewExternalIP("ip6", g.config.ExternalIpv6.Options)
+		extIPv6 = dns.NewExternalIP("ip6", g.config.Dns.ExternalIpv6.Options)
 	}
 
 	g.dnsServer, err = dns.NewServer(fmt.Sprintf(":%d", port))
@@ -276,7 +295,9 @@ func (g *Gateway) StartUI(ctx context.Context, port int) error {
 		ginutil.ServeEmbedFS(r, distFS, "dist")
 	}
 
-	g.setupEndpoints(r)
+	ep := Endpoints{Gateway: g}
+	api := r.Group("/api")
+	ep.setupEndpoints(api)
 
 	g.wg.Add(1)
 
@@ -292,13 +313,4 @@ func (g *Gateway) StartUI(ctx context.Context, port int) error {
 	}()
 
 	return nil
-}
-
-func (g *Gateway) setupEndpoints(r *gin.Engine) {
-	api := r.Group("/api")
-	g.dnsEndpoints.server = g.dnsServer
-	g.dnsEndpoints.config = g.config
-	g.dnsEndpoints.setupEndpoints(api)
-
-	(&Domains{config: g.config}).setupEndpoints(api)
 }

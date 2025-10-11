@@ -7,30 +7,40 @@ import (
 )
 
 type ConfigExternalIp struct {
-	Source  string `yaml:"source"`
-	Options string `yaml:"options"`
+	Source  string `yaml:"source" json:"source"`
+	Options string `yaml:"options" json:"options"`
 }
 
 type ConfigServer struct {
-	Hostname string `yaml:"hostname"`
-	Target   string `yaml:"target"`
-	Mode     string `yaml:"mode"`
+	Guid     string `yaml:"guid" json:"guid"`
+	Hostname string `yaml:"hostname" json:"hostname"`
+	Target   string `yaml:"target" json:"target"`
+	Mode     string `yaml:"mode" json:"mode"`
 }
 
 type ConfigDev struct {
-	Domain      string `yaml:"domain"`
-	HttpTarget  string `yaml:"http_target"`
-	HttpsTarget string `yaml:"https_target"`
-	DnsTarget   string `yaml:"dns_target"`
+	Domain      string `yaml:"domain" json:"domain"`
+	HttpTarget  string `yaml:"http_target" json:"http_target"`
+	HttpsTarget string `yaml:"https_target" json:"https_target"`
+	DnsTarget   string `yaml:"dns_target" json:"dns_target"`
+}
+
+type ConfigDomain struct {
+	Guid   string         `yaml:"guid" json:"guid"`
+	Name   string         `yaml:"name" json:"name"`
+	Routes []ConfigServer `yaml:"routes" json:"routes"`
+}
+
+type ConfigDns struct {
+	ExternalIpv4 ConfigExternalIp `yaml:"external_ipv4" json:"external_ipv4"`
+	ExternalIpv6 ConfigExternalIp `yaml:"external_ipv6" json:"external_ipv6"`
 }
 
 type Config struct {
-	file         string
-	Domains      []string         `yaml:"domains"`
-	ExternalIp   ConfigExternalIp `yaml:"external_ip"`
-	ExternalIpv6 ConfigExternalIp `yaml:"external_ipv6"`
-	Servers      []ConfigServer   `yaml:"servers"`
-	Dev          ConfigDev        `yaml:"dev"`
+	file    string
+	Domains []ConfigDomain `yaml:"domains" json:"domains"`
+	Dns     ConfigDns      `yaml:"dns" json:"dns"`
+	Dev     ConfigDev      `yaml:"dev" json:"dev"`
 }
 
 func loadConfig(file string) (*Config, error) {

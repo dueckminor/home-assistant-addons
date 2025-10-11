@@ -1,0 +1,191 @@
+package gateway
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"strings"
+	"time"
+
+	"github.com/dueckminor/home-assistant-addons/go/dns"
+	"github.com/gin-gonic/gin"
+)
+
+type Endpoints struct {
+	Gateway *Gateway
+}
+
+func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
+	r.GET("/domains", ep.GET_Domains)
+	r.POST("/domains", ep.POST_Domains)
+	r.DELETE("/domains/:guid", ep.DELETE_Domains)
+
+	r.GET("/dns/external/ipv4", ep.GET_ExternalIpv4)
+	r.POST("/dns/external/ipv4", ep.POST_ExternalIpv4)
+	r.GET("/dns/external/ipv6", ep.GET_ExternalIpv6)
+	r.POST("/dns/external/ipv6", ep.POST_ExternalIpv6)
+	r.GET("/dns/ipv4", ep.GET_Ipv4)
+	r.GET("/dns/ipv6", ep.GET_Ipv6)
+	r.GET("/dns/lookup", ep.GET_DnsLookup)
+}
+
+func (ep *Endpoints) GET_Domains(c *gin.Context) {
+	c.JSON(200, gin.H{"domains": ep.Gateway.config.Domains})
+}
+
+func (ep *Endpoints) POST_Domains(c *gin.Context) {
+	var domain ConfigDomain
+	c.BindJSON(&domain)
+
+	domain, err := ep.Gateway.AddDomain(domain)
+
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, domain)
+}
+
+func (ep *Endpoints) DELETE_Domains(c *gin.Context) {
+	guid := c.Param("guid")
+
+	err := ep.Gateway.DelDomain(guid)
+
+	if err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"domains": ep.Gateway.config.Domains})
+}
+
+func (ep *Endpoints) GET_ExternalIpv4(c *gin.Context) {
+	addr, err := ep.lookup(c.Request.Context(), ep.Gateway.config.Dns.ExternalIpv4.Options, false)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv4.Source, "source": ep.Gateway.config.Dns.ExternalIpv4.Options, "address": addr, "timestamp": time.Now()})
+}
+
+func (ep *Endpoints) POST_ExternalIpv4(c *gin.Context) {
+	var h gin.H
+	c.BindJSON(&h)
+	ep.Gateway.config.Dns.ExternalIpv4.Source = "dns"
+	ep.Gateway.config.Dns.ExternalIpv4.Options = h["source"].(string)
+
+	extIPv4 := dns.NewExternalIP("ip4", ep.Gateway.config.Dns.ExternalIpv4.Options)
+	ip := extIPv4.ExternalIP()
+	ep.Gateway.dnsServer.SetExternalIP(extIPv4)
+	ep.Gateway.config.save()
+
+	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv4.Source, "source": ep.Gateway.config.Dns.ExternalIpv4.Options, "address": ip.String(), "timestamp": time.Now()})
+}
+func (ep *Endpoints) GET_ExternalIpv6(c *gin.Context) {
+	addr, err := ep.lookup(c.Request.Context(), ep.Gateway.config.Dns.ExternalIpv6.Options, true)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv6.Source, "source": ep.Gateway.config.Dns.ExternalIpv6.Options, "address": addr, "timestamp": time.Now()})
+}
+func (ep *Endpoints) POST_ExternalIpv6(c *gin.Context) {
+	var h gin.H
+	c.BindJSON(&h)
+	ep.Gateway.config.Dns.ExternalIpv6.Source = "dns"
+	ep.Gateway.config.Dns.ExternalIpv6.Options = h["source"].(string)
+	extIPv6 := dns.NewExternalIP("ip6", ep.Gateway.config.Dns.ExternalIpv6.Options)
+	ip := extIPv6.ExternalIP()
+	ep.Gateway.dnsServer.SetExternalIPv6(extIPv6)
+	ep.Gateway.config.save()
+
+	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv6.Source, "source": ep.Gateway.config.Dns.ExternalIpv6.Options, "address": ip.String(), "timestamp": time.Now()})
+}
+
+func (ep *Endpoints) GET_Ipv4(c *gin.Context) {
+	hostname := c.Query("hostname")
+	if hostname == "" {
+		c.JSON(400, gin.H{"error": "hostname parameter is required"})
+		return
+	}
+
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, ip := range ips {
+		if ip.To4() != nil { // IPv4
+			c.JSON(200, gin.H{"ip": ip.String(), "timestamp": time.Now()})
+			return
+		}
+	}
+	c.JSON(404, gin.H{"error": "No IPv4 found"})
+}
+
+func (ep *Endpoints) GET_Ipv6(c *gin.Context) {
+	hostname := c.Query("hostname")
+	if hostname == "" {
+		c.JSON(400, gin.H{"error": "hostname parameter is required"})
+		return
+	}
+
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, ip := range ips {
+		if ip.To4() == nil { // IPv6
+			c.JSON(200, gin.H{"ip": ip.String(), "timestamp": time.Now()})
+			return
+		}
+	}
+	c.JSON(404, gin.H{"error": "No IPv6 found"})
+}
+
+func (ep *Endpoints) lookup(ctx context.Context, address string, ipv6 bool) (resolved string, err error) {
+	ips, err := net.LookupIP(address)
+	if err != nil {
+		return "", err
+	}
+
+	for _, ip := range ips {
+		if (ip.To4() == nil) == ipv6 { // IPv6
+			return ip.String(), nil
+		}
+	}
+	return "", fmt.Errorf("failed to resolve %s", address)
+}
+
+// GET_DnsLookup performs DNS lookups for various record types
+func (ep *Endpoints) GET_DnsLookup(c *gin.Context) {
+	hostname := c.Query("hostname")
+	recordType := c.Query("type")
+
+	// Create DNS client with 5 second timeout
+	dnsClient := dns.NewDNSClient(5 * time.Second)
+
+	// Perform the DNS lookup
+	result := dnsClient.LookupDNS(hostname, recordType)
+
+	// Handle errors
+	if result.Error != "" {
+		if hostname == "" {
+			c.JSON(400, gin.H{"error": result.Error})
+		} else if strings.Contains(result.Error, "Unsupported record type") {
+			c.JSON(400, gin.H{"error": result.Error})
+		} else if strings.Contains(result.Error, "No records found") || strings.Contains(result.Error, "No DNS response received") {
+			c.JSON(404, gin.H{"error": result.Error, "type": result.Type})
+		} else {
+			c.JSON(500, gin.H{"error": result.Error})
+		}
+		return
+	}
+
+	// Return successful result
+	c.JSON(200, result)
+}

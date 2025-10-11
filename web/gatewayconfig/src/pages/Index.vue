@@ -24,20 +24,12 @@
                   DNS
                 </v-tab>
                 <v-tab value="domains">
-                  <v-icon start>mdi-domain</v-icon>
-                  Domains
-                </v-tab>
-                <v-tab value="routes">
-                  <v-icon start>mdi-routes</v-icon>
-                  Routes
+                  <v-icon start>mdi-sitemap</v-icon>
+                  Domains & Routes
                 </v-tab>
                 <v-tab value="users">
                   <v-icon start>mdi-account-group</v-icon>
                   Users
-                </v-tab>
-                <v-tab value="certificates">
-                  <v-icon start>mdi-certificate</v-icon>
-                  Certificates
                 </v-tab>
               </v-tabs>
 
@@ -59,29 +51,15 @@
                     />
                   </v-tabs-window-item>
 
-                  <!-- Domains Tab -->
+                  <!-- Domains & Routes Tab -->
                   <v-tabs-window-item value="domains">
                     <DomainsTab />
-                  </v-tabs-window-item>
-
-                  <!-- Routes Tab -->
-                  <v-tabs-window-item value="routes">
-                    <RoutesTab 
-                      :route-config="routeConfig"
-                    />
                   </v-tabs-window-item>
 
                   <!-- Users Tab -->
                   <v-tabs-window-item value="users">
                     <UsersTab 
                       :user-config="userConfig"
-                    />
-                  </v-tabs-window-item>
-
-                  <!-- Certificates Tab -->
-                  <v-tabs-window-item value="certificates">
-                    <CertificatesTab 
-                      :certificate-config="certificateConfig"
                     />
                   </v-tabs-window-item>
                 </v-tabs-window>
@@ -115,9 +93,7 @@
 <script>
 import DnsTab from '../components/tabs/DnsTab.vue'
 import DomainsTab from '../components/tabs/DomainsTab.vue'
-import RoutesTab from '../components/tabs/RoutesTab.vue'
 import UsersTab from '../components/tabs/UsersTab.vue'
-import CertificatesTab from '../components/tabs/CertificatesTab.vue'
 import { apiRequest, apiGet, apiPost } from '../utils/api.js'
 
 export default {
@@ -125,9 +101,7 @@ export default {
   components: {
     DnsTab,
     DomainsTab,
-    RoutesTab,
-    UsersTab,
-    CertificatesTab
+    UsersTab
   },
   data() {
     return {
@@ -164,9 +138,7 @@ export default {
       },
       
       // Future configuration data
-      routeConfig: {},
-      userConfig: {},
-      certificateConfig: {}
+      userConfig: {}
     }
   },
   computed: {
