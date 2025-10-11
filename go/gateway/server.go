@@ -101,7 +101,7 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 	return nil
 }
 
-func (g *Gateway) ConfigureServer(proxy network.TLSProxy, server ConfigServer) {
+func (g *Gateway) ConfigureServer(proxy network.TLSProxy, server ConfigRoute) {
 	if strings.HasPrefix(server.Target, "http://") || strings.HasPrefix(server.Target, "https://") {
 		options := network.ParseReverseProxyOptions(server.Mode)
 		if options.Auth {
@@ -117,7 +117,7 @@ func (g *Gateway) ConfigureServer(proxy network.TLSProxy, server ConfigServer) {
 	}
 }
 
-func (g *Gateway) configureAuthServer(proxy network.TLSProxy, server ConfigServer) {
+func (g *Gateway) configureAuthServer(proxy network.TLSProxy, server ConfigRoute) {
 	if g.authServer != nil {
 		panic("only one auth-server allowed")
 	}
@@ -144,7 +144,7 @@ func (g *Gateway) configureAuthServer(proxy network.TLSProxy, server ConfigServe
 	proxy.AddHandler(server.Hostname, network.NewGinHandler(r))
 }
 
-func (g *Gateway) ConfigureServers(servers []ConfigServer) {
+func (g *Gateway) ConfigureServers(servers []ConfigRoute) {
 	for _, server := range servers {
 		if server.Target == "@auth" {
 			g.configureAuthServer(g.httpsServer, server)
@@ -178,6 +178,37 @@ func (g *Gateway) DelDomain(guid string) error {
 		}
 	}
 	return fmt.Errorf("domain with guid %q not found", guid)
+}
+
+func (g *Gateway) AddRoute(domainGuid string, route ConfigRoute) (ConfigRoute, error) {
+	route.Guid = uuid.New().String()
+
+	for i, domain := range g.config.Domains {
+		if domain.Guid == domainGuid {
+			domain.Routes = append(domain.Routes, route)
+			g.config.Domains[i] = domain
+			g.config.save()
+			return route, nil
+		}
+	}
+	return ConfigRoute{}, fmt.Errorf("domain with guid %q not found", domainGuid)
+}
+
+func (g *Gateway) DelRoute(domainGuid string, routeGuid string) error {
+	for i, domain := range g.config.Domains {
+		if domain.Guid == domainGuid {
+			for j, route := range domain.Routes {
+				if route.Guid == routeGuid {
+					domain.Routes = append(domain.Routes[:j], domain.Routes[j+1:]...)
+					g.config.Domains[i] = domain
+					g.config.save()
+					return nil
+				}
+			}
+			return fmt.Errorf("route with guid %q not found", routeGuid)
+		}
+	}
+	return fmt.Errorf("domain with guid %q not found", domainGuid)
 }
 
 func (g *Gateway) startDomain(domain ConfigDomain) {
@@ -263,7 +294,7 @@ func (g *Gateway) StartDevSupport(ctx context.Context) (err error) {
 	if g.config.Dev.Domain != "" {
 		if g.config.Dev.HttpsTarget != "" {
 			g.httpsServer.InternalOnly("*." + g.config.Dev.Domain)
-			g.ConfigureServer(g.httpsServer, ConfigServer{
+			g.ConfigureServer(g.httpsServer, ConfigRoute{
 				Hostname: "*." + g.config.Dev.Domain,
 				Target:   g.config.Dev.HttpsTarget,
 				Mode:     "raw",

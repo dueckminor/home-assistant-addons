@@ -437,48 +437,23 @@ export default {
     // Configuration management
     async loadConfiguration() {
       try {
-        console.log('Loading configuration...');
+        console.log('Loading DNS configuration from existing endpoints...');
         
-        const config = await apiGet('config');
-        if (config) {
-          
-          // Load DNS configuration from API
-          if (config.external_ip) {
-            this.dnsConfig.ipv4.method = config.external_ip.source || 'dns';
-            this.dnsConfig.ipv4.source = config.external_ip.options || '';
-          }
-          
-          if (config.external_ipv6) {
-            this.dnsConfig.ipv6.method = config.external_ipv6.source || 'dns';
-            this.dnsConfig.ipv6.source = config.external_ipv6.options || '';
-          }
-          
-          if (config.domains && Array.isArray(config.domains)) {
-            this.dnsConfig.domains = [...config.domains];
-          }
-          
-          console.log('Configuration loaded:', config);
-        } else {
-          console.warn('Failed to load configuration, using defaults');
-          // Set reasonable defaults
-          this.dnsConfig.ipv4.source = '';
-          this.dnsConfig.ipv6.source = '';
-        }
+        // Load current IP detection settings from existing DNS endpoints
+        // Since we don't have a config endpoint, we'll use the current IP detection results
+        // and let users configure via the DNS tab
         
-        // Auto-refresh IPs after loading configuration
+        // Auto-refresh current IPs 
         const refreshPromises = [];
-        if (this.dnsConfig.ipv4.source) {
-          refreshPromises.push(this.refreshIPv4());
-        }
-        if (this.dnsConfig.ipv6.source) {
-          refreshPromises.push(this.refreshIPv6());
-        }
+        refreshPromises.push(this.refreshIPv4());
+        refreshPromises.push(this.refreshIPv6());
         
-        if (refreshPromises.length > 0) {
-          await Promise.all(refreshPromises);
-        }
+        await Promise.all(refreshPromises);
+        
+        console.log('DNS configuration initialized with current IP detection');
       } catch (error) {
-        console.error('Failed to load configuration:', error);
+        console.error('Failed to initialize DNS configuration:', error);
+        console.log('Using default DNS configuration');
       }
     },
 

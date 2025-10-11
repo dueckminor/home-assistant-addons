@@ -11,7 +11,7 @@ type ConfigExternalIp struct {
 	Options string `yaml:"options" json:"options"`
 }
 
-type ConfigServer struct {
+type ConfigRoute struct {
 	Guid     string `yaml:"guid" json:"guid"`
 	Hostname string `yaml:"hostname" json:"hostname"`
 	Target   string `yaml:"target" json:"target"`
@@ -26,9 +26,9 @@ type ConfigDev struct {
 }
 
 type ConfigDomain struct {
-	Guid   string         `yaml:"guid" json:"guid"`
-	Name   string         `yaml:"name" json:"name"`
-	Routes []ConfigServer `yaml:"routes" json:"routes"`
+	Guid   string        `yaml:"guid" json:"guid"`
+	Name   string        `yaml:"name" json:"name"`
+	Routes []ConfigRoute `yaml:"routes" json:"routes"`
 }
 
 type ConfigDns struct {

@@ -214,7 +214,7 @@
                           size="small"
                           color="primary"
                           prepend-icon="mdi-plus"
-                          @click="addRoute(domain.guid)"
+                          @click="openAddRouteWizard(domain.guid)"
                         >
                           Add Route
                         </v-btn>
@@ -224,38 +224,33 @@
                       <div v-if="domain.routes && domain.routes.length > 0">
                         <v-card
                           v-for="route in domain.routes"
-                          :key="route.guid || route.path"
+                          :key="route.guid"
                           variant="outlined"
                           class="mb-2 route-card"
                         >
                           <v-card-text class="pa-3">
                             <div class="d-flex align-center">
-                              <v-icon class="me-3" size="small" color="primary">mdi-arrow-right</v-icon>
+                              <v-icon class="me-3" size="small" color="primary">mdi-dns</v-icon>
                               <div class="flex-grow-1">
-                                <div class="text-body-2 font-weight-medium">{{ route.path || '/' }}</div>
+                                <div class="text-body-2 font-weight-medium">{{ route.hostname }}</div>
                                 <div class="text-caption text-medium-emphasis">
                                   → {{ route.target || 'No target configured' }}
                                 </div>
                               </div>
-                              <v-chip
-                                :color="route.enabled ? 'success' : 'warning'"
-                                size="x-small"
-                                class="me-2"
-                              >
-                                {{ route.enabled ? 'Active' : 'Inactive' }}
-                              </v-chip>
                               <v-btn
                                 icon="mdi-pencil"
                                 variant="text"
                                 size="small"
-                                @click="editRoute(domain.guid, route.guid || route.path)"
+                                @click="openEditRouteWizard(domain.guid, route)"
+                                title="Edit route"
                               ></v-btn>
                               <v-btn
                                 icon="mdi-delete"
                                 variant="text"
                                 size="small"
                                 color="error"
-                                @click="removeRoute(domain.guid, route.guid || route.path)"
+                                @click="removeRoute(domain.guid, route.guid)"
+                                title="Delete route"
                               ></v-btn>
                             </div>
                           </v-card-text>
@@ -273,7 +268,7 @@
                             size="small"
                             color="primary"
                             prepend-icon="mdi-plus"
-                            @click="addRoute(domain.guid)"
+                            @click="openAddRouteWizard(domain.guid)"
                           >
                             Add First Route
                           </v-btn>
@@ -360,20 +355,35 @@
       </v-card>
     </v-col>
   </v-row>
+
+  <!-- Route Wizard -->
+  <RouteWizard
+    v-model="showRouteWizard"
+    :domain-guid="selectedDomainGuid"
+    :edit-route="editingRoute"
+    @route-saved="onRouteSaved"
+  />
 </template>
 
 <script>
-import { apiRequest, apiGet, apiPost } from '../../utils/api.js'
+import { apiGet, apiRequest } from '../../utils/api.js'
+import RouteWizard from '../dialogs/RouteWizard.vue'
 
 export default {
   name: 'DomainsTab',
+  components: {
+    RouteWizard
+  },
   data() {
     return {
       domains: [],
       newDomain: '',
       loading: false,
       addingDomain: false,
-      error: null
+      error: null,
+      showRouteWizard: false,
+      selectedDomainGuid: null,
+      editingRoute: null
     }
   },
   async mounted() {
@@ -534,20 +544,59 @@ export default {
       return `Certificate expires on ${expiresAt.toLocaleDateString()}`
     },
 
-    // Route Management Methods (placeholders for future implementation)
-    addRoute(domainGuid) {
-      console.log('Add route to domain:', domainGuid)
-      // TODO: Implement route addition dialog/form
+    // Route Management Methods
+    openAddRouteWizard(domainGuid) {
+      this.selectedDomainGuid = domainGuid
+      this.editingRoute = null
+      this.showRouteWizard = true
     },
 
-    editRoute(domainGuid, routeGuid) {
-      console.log('Edit route:', routeGuid, 'for domain:', domainGuid)
-      // TODO: Implement route editing dialog/form
+    openEditRouteWizard(domainGuid, route) {
+      this.selectedDomainGuid = domainGuid
+      this.editingRoute = route
+      this.showRouteWizard = true
     },
 
-    removeRoute(domainGuid, routeGuid) {
-      console.log('Remove route:', routeGuid, 'from domain:', domainGuid)
-      // TODO: Implement route removal API call
+    onRouteSaved(savedRoute) {
+      // Update local state with the saved route
+      const domain = this.domains.find(d => d.guid === this.selectedDomainGuid)
+      if (domain) {
+        if (this.editingRoute) {
+          // Update existing route
+          const routeIndex = domain.routes.findIndex(r => r.guid === this.editingRoute.guid)
+          if (routeIndex !== -1) {
+            domain.routes[routeIndex] = savedRoute
+          }
+        } else {
+          // Add new route
+          if (!domain.routes) domain.routes = []
+          domain.routes.push(savedRoute)
+        }
+      }
+      
+      // Clear wizard state
+      this.selectedDomainGuid = null
+      this.editingRoute = null
+    },
+
+    async removeRoute(domainGuid, routeGuid) {
+      try {
+        console.log('Remove route:', routeGuid, 'from domain:', domainGuid)
+        
+        // Call the route deletion API
+        await apiRequest(`domains/${domainGuid}/routes/${routeGuid}`, 'DELETE')
+        
+        // Update local state - remove the route from the domain
+        const domain = this.domains.find(d => d.guid === domainGuid)
+        if (domain && domain.routes) {
+          domain.routes = domain.routes.filter(r => r.guid !== routeGuid)
+        }
+        
+        console.log('Route removed successfully')
+      } catch (error) {
+        this.error = `Failed to remove route: ${error.message}`
+        console.error('Error removing route:', error)
+      }
     },
 
     // Utility Methods

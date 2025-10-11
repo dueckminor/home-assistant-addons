@@ -16,10 +16,6 @@ type Endpoints struct {
 }
 
 func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
-	r.GET("/domains", ep.GET_Domains)
-	r.POST("/domains", ep.POST_Domains)
-	r.DELETE("/domains/:guid", ep.DELETE_Domains)
-
 	r.GET("/dns/external/ipv4", ep.GET_ExternalIpv4)
 	r.POST("/dns/external/ipv4", ep.POST_ExternalIpv4)
 	r.GET("/dns/external/ipv6", ep.GET_ExternalIpv6)
@@ -27,6 +23,14 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.GET("/dns/ipv4", ep.GET_Ipv4)
 	r.GET("/dns/ipv6", ep.GET_Ipv6)
 	r.GET("/dns/lookup", ep.GET_DnsLookup)
+
+	r.GET("/domains", ep.GET_Domains)
+	r.POST("/domains", ep.POST_Domains)
+	r.DELETE("/domains/:guid", ep.DELETE_Domains)
+
+	r.GET("/domains/:guid/routes", ep.GET_DomainsGuidRoutes)
+	r.POST("/domains/:guid/routes", ep.POST_DomainsGuidRoutes)
+	r.DELETE("/domains/:guid/routes/:rguid", ep.DELETE_DomainsGuidRoutesGuid)
 }
 
 func (ep *Endpoints) GET_Domains(c *gin.Context) {
@@ -188,4 +192,40 @@ func (ep *Endpoints) GET_DnsLookup(c *gin.Context) {
 
 	// Return successful result
 	c.JSON(200, result)
+}
+
+func (ep *Endpoints) GET_DomainsGuidRoutes(c *gin.Context) {
+	guid := c.Param("guid")
+	for _, domain := range ep.Gateway.config.Domains {
+		if domain.Guid == guid {
+			c.JSON(200, gin.H{"routes": domain.Routes})
+			return
+		}
+	}
+}
+
+func (ep *Endpoints) POST_DomainsGuidRoutes(c *gin.Context) {
+	guid := c.Param("guid")
+
+	var route ConfigRoute
+	c.BindJSON(&route)
+
+	route, err := ep.Gateway.AddRoute(guid, route)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, route)
+}
+
+func (ep *Endpoints) DELETE_DomainsGuidRoutesGuid(c *gin.Context) {
+	guid := c.Param("guid")
+	rguid := c.Param("rguid")
+
+	err := ep.Gateway.DelRoute(guid, rguid)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"status": "deleted"})
 }

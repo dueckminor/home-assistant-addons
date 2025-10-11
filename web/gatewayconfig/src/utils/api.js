@@ -31,7 +31,15 @@ export async function apiGet(endpoint) {
     throw new Error(`API request failed: ${response.status} ${response.statusText}`)
   }
   
-  return await response.json()
+  // Check if response is actually JSON
+  const contentType = response.headers.get('content-type')
+  if (contentType && contentType.includes('application/json')) {
+    return await response.json()
+  } else {
+    // If not JSON, throw an error with more context
+    const text = await response.text()
+    throw new Error(`Expected JSON response but got ${contentType}: ${text.substring(0, 100)}...`)
+  }
 }
 
 /**
