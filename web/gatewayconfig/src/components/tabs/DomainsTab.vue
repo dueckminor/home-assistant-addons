@@ -34,7 +34,7 @@
           >
             {{ error }}
           </v-alert>
-          <div class="text-center mb-4">
+          <div class="d-flex justify-center align-center gap-3 mb-4">
             <v-btn
               color="purple"
               variant="elevated"
@@ -44,6 +44,14 @@
             >
               Add New Domain
             </v-btn>
+            <v-btn
+              icon="mdi-refresh"
+              variant="outlined"
+              size="large"
+              @click="loadDomains"
+              :loading="loading"
+              title="Refresh domains"
+            ></v-btn>
           </div>
 
           <!-- Domain Tree List -->
@@ -55,14 +63,6 @@
                   <v-icon class="me-2" size="small">mdi-sitemap</v-icon>
                   Configured Domains & Routes ({{ domains.length }} domains)
                 </h4>
-                <v-btn
-                  icon="mdi-refresh"
-                  variant="text"
-                  size="small"
-                  @click="loadDomains"
-                  :loading="loading"
-                  title="Refresh domains"
-                ></v-btn>
               </div>
               
               <!-- Domain Tree -->
@@ -362,7 +362,13 @@ export default {
         console.log('Removing domain via API:', domainGuid)
         
         // Make API call to remove domain using GUID
-        await apiRequest(`domains/${domainGuid}`, 'DELETE')
+        const response = await apiRequest(`domains/${domainGuid}`, {
+          method: 'DELETE'
+        })
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+        }
         
         // Remove domain from local list
         this.domains = this.domains.filter(d => d.guid !== domainGuid);

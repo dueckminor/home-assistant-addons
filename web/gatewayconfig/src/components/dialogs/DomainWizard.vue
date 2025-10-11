@@ -43,6 +43,20 @@
                 <v-icon v-else>mdi-cog</v-icon>
               </template>
             </v-stepper-item>
+
+            <v-divider></v-divider>
+
+            <v-stepper-item
+              :complete="currentStep > 3"
+              :value="3"
+              title="Auth Route"
+              subtitle="Authentication server"
+            >
+              <template v-slot:icon="{ complete }">
+                <v-icon v-if="complete" color="success">mdi-check</v-icon>
+                <v-icon v-else>mdi-shield-account</v-icon>
+              </template>
+            </v-stepper-item>
           </v-stepper-header>
 
           <v-stepper-window>
@@ -67,9 +81,40 @@
                     hint="Enter a valid domain name (e.g., example.com, subdomain.example.org)"
                     persistent-hint
                     :rules="domainRules"
-                    @input="validateStep1"
+                    @input="onDomainNameChange"
                     required
                   ></v-text-field>
+
+                  <!-- Real-time DNS Validation -->
+                  <v-card variant="outlined" class="mt-4">
+                    <v-card-title class="text-subtitle-1">
+                      <v-icon class="me-2" color="info">mdi-dns</v-icon>
+                      DNS Validation
+                    </v-card-title>
+                    <v-card-text>
+                      <v-list density="compact">
+                        <!-- NS Records -->
+                        <v-list-item>
+                          <template v-slot:prepend>
+                            <v-icon 
+                              :color="getDnsCheckColor('nsRecords')" 
+                              :icon="getDnsCheckIcon('nsRecords')"
+                              size="small"
+                            ></v-icon>
+                          </template>
+                          <v-list-item-title class="text-body-2">NS Records & Resolution</v-list-item-title>
+                          <v-list-item-subtitle class="text-caption">{{ getDnsCheckMessage('nsRecords') }}</v-list-item-subtitle>
+                        </v-list-item>
+                      </v-list>
+
+                      <div v-if="dnsValidationInProgress" class="text-center mt-2">
+                        <v-chip size="small" color="info" variant="tonal">
+                          <v-icon start size="small">mdi-loading mdi-spin</v-icon>
+                          Checking DNS...
+                        </v-chip>
+                      </div>
+                    </v-card-text>
+                  </v-card>
 
                   <v-textarea
                     v-model="domainData.description"
@@ -81,6 +126,7 @@
                     persistent-hint
                     rows="3"
                     auto-grow
+                    class="mt-4"
                   ></v-textarea>
                 </v-form>
               </v-card-text>
@@ -209,6 +255,86 @@
                 </v-card>
               </v-card-text>
             </v-stepper-window-item>
+
+            <!-- Step 3: Authentication Route -->
+            <v-stepper-window-item :value="3">
+              <v-card-text class="pt-4">
+                <div class="text-center mb-4">
+                  <v-icon size="48" color="purple" class="mb-3">mdi-shield-account</v-icon>
+                  <h3 class="text-h6 mb-2">Authentication Route</h3>
+                  <p class="text-body-2 text-medium-emphasis">
+                    Configure the mandatory authentication server route for this domain
+                  </p>
+                </div>
+
+                <v-alert
+                  type="info"
+                  variant="tonal"
+                  class="mb-4"
+                >
+                  <v-icon start>mdi-information</v-icon>
+                  <strong>Required:</strong> Every domain must have exactly one route that connects to the built-in OAuth authentication server. This route will be created first and handles user login for the domain.
+                </v-alert>
+
+                <v-form ref="step3Form" v-model="step3Valid">
+                  <v-text-field
+                    v-model="domainData.authHostname"
+                    label="Authentication Route Hostname"
+                    variant="outlined"
+                    prepend-inner-icon="mdi-shield-account"
+                    placeholder="auth, login, oauth"
+                    hint="Subdomain for the authentication server (e.g., 'auth' creates auth.example.com)"
+                    persistent-hint
+                    :rules="authHostnameRules"
+                    @input="validateStep3"
+                    required
+                  >
+                    <template v-slot:append-inner>
+                      <span class="text-caption text-medium-emphasis">.{{ domainData.name }}</span>
+                    </template>
+                  </v-text-field>
+                </v-form>
+
+                <v-card variant="outlined" class="mt-4">
+                  <v-card-title class="text-subtitle-1">
+                    <v-icon class="me-2" color="purple">mdi-arrow-right</v-icon>
+                    Route Configuration
+                  </v-card-title>
+                  <v-card-text>
+                    <v-list density="compact">
+                      <v-list-item>
+                        <v-list-item-title>Full URL</v-list-item-title>
+                        <v-list-item-subtitle>
+                          <code>{{ domainData.authHostname || 'auth' }}.{{ domainData.name || 'example.com' }}</code>
+                        </v-list-item-subtitle>
+                      </v-list-item>
+                      <v-list-item>
+                        <v-list-item-title>Target</v-list-item-title>
+                        <v-list-item-subtitle>
+                          <code>@auth</code> (Built-in OAuth server)
+                        </v-list-item-subtitle>
+                      </v-list-item>
+                      <v-list-item>
+                        <v-list-item-title>Purpose</v-list-item-title>
+                        <v-list-item-subtitle>
+                          Handles user authentication and login for this domain
+                        </v-list-item-subtitle>
+                      </v-list-item>
+                    </v-list>
+                  </v-card-text>
+                </v-card>
+
+                <v-alert
+                  type="success"
+                  variant="tonal"
+                  density="compact"
+                  class="mt-4"
+                >
+                  <v-icon start>mdi-check-circle</v-icon>
+                  This authentication route will be automatically created as the first route when the domain is created.
+                </v-alert>
+              </v-card-text>
+            </v-stepper-window-item>
           </v-stepper-window>
         </v-stepper>
       </v-card-text>
@@ -235,7 +361,7 @@
           </v-btn>
 
           <v-btn
-            v-if="currentStep < 2"
+            v-if="currentStep === 1"
             color="purple"
             variant="outlined"
             @click="nextStep"
@@ -245,11 +371,20 @@
           </v-btn>
 
           <v-btn
-            v-else
+            v-if="currentStep === 2"
+            color="purple"
+            variant="outlined"
+            @click="nextStep"
+          >
+            Next
+          </v-btn>
+
+          <v-btn
+            v-if="currentStep === 3"
             color="purple"
             @click="saveDomain"
             :loading="saving"
-            :disabled="!step1Valid"
+            :disabled="!step1Valid || !step3Valid"
           >
             Create Domain
           </v-btn>
@@ -260,7 +395,7 @@
 </template>
 
 <script>
-import { apiRequest } from '../../utils/api.js'
+import { apiRequest, apiGet } from '../../utils/api.js'
 
 export default {
   name: 'DomainWizard',
@@ -275,14 +410,21 @@ export default {
     return {
       currentStep: 1,
       step1Valid: false,
+      step3Valid: false,
       saving: false,
       domainData: {
         name: '',
         description: '',
         localNetworkOnly: false,
         redirectToGateway: false,
-        gatewayTarget: ''
+        gatewayTarget: '',
+        authHostname: 'auth'
       },
+      dnsValidation: {
+        nsRecords: { status: 'pending', message: 'Enter a domain name to check DNS', records: [] }
+      },
+      dnsValidationInProgress: false,
+      dnsValidationTimeout: null,
       domainRules: [
         v => !!v || 'Domain name is required',
         v => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(v) || 'Invalid domain format',
@@ -291,6 +433,10 @@ export default {
       gatewayTargetRules: [
         v => !this.domainData.redirectToGateway || !!v || 'Gateway target is required when redirection is enabled',
         v => !v || /^https?:\/\/[a-zA-Z0-9.-]+(\:[0-9]+)?(\/.*)?$/.test(v) || 'Invalid gateway URI format (must start with http:// or https://)'
+      ],
+      authHostnameRules: [
+        v => !!v || 'Authentication hostname is required',
+        v => /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/i.test(v) || 'Invalid hostname format (letters, numbers, hyphens only)'
       ]
     }
   },
@@ -315,13 +461,25 @@ export default {
     resetWizard() {
       this.currentStep = 1
       this.step1Valid = false
+      this.step3Valid = true // Auth hostname defaults to 'auth' which is valid
       this.saving = false
+      this.dnsValidationInProgress = false
+      if (this.dnsValidationTimeout) {
+        clearTimeout(this.dnsValidationTimeout)
+        this.dnsValidationTimeout = null
+      }
       this.domainData = {
         name: '',
         description: '',
         localNetworkOnly: false,
         redirectToGateway: false,
-        gatewayTarget: ''
+        gatewayTarget: '',
+        authHostname: 'auth'
+      }
+      this.dnsValidation = {
+        domain: { status: 'pending', message: 'Enter a domain name to check DNS', records: [] },
+        authRoute: { status: 'pending', message: 'Not checked yet', records: [] },
+        nsRecords: { status: 'pending', message: 'Enter a domain name to check DNS', records: [] }
       }
     },
 
@@ -336,9 +494,62 @@ export default {
       }
     },
 
+    validateStep3() {
+      try {
+        const hostname = this.domainData.authHostname || ''
+        this.step3Valid = hostname.length > 0 && this.authHostnameRules.every(rule => rule(hostname) === true)
+        console.log('validateStep3 - hostname:', hostname, 'step3Valid:', this.step3Valid)
+      } catch (error) {
+        console.error('Validation error:', error)
+        this.step3Valid = false
+      }
+    },
+
     nextStep() {
       if (this.currentStep === 1 && this.step1Valid) {
         this.currentStep = 2
+      } else if (this.currentStep === 2) {
+        this.currentStep = 3
+      }
+    },
+
+    onDomainNameChange() {
+      this.validateStep1()
+      
+      // Clear existing timeout
+      if (this.dnsValidationTimeout) {
+        clearTimeout(this.dnsValidationTimeout)
+      }
+
+      // Reset DNS validation status
+      this.dnsValidation.nsRecords.status = 'pending'
+      this.dnsValidation.nsRecords.message = 'Waiting for input...'
+
+      const domainName = this.domainData.name.trim()
+      
+      // Only validate if domain name is long enough and valid format
+      if (domainName.length > 3 && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domainName)) {
+        // Debounce DNS validation to avoid too many API calls
+        this.dnsValidationTimeout = setTimeout(() => {
+          this.validateDomainAndNsRecords()
+        }, 1500) // Wait 1.5 seconds after user stops typing
+      } else if (domainName.length > 0) {
+        this.dnsValidation.nsRecords.message = 'Enter a valid domain name'
+      } else {
+        this.dnsValidation.nsRecords.message = 'Enter a domain name to check NS records and resolution'
+      }
+    },
+
+    async validateDomainAndNsRecords() {
+      if (!this.domainData.name.trim()) return
+
+      this.dnsValidationInProgress = true
+      
+      try {
+        // Only validate NS records now
+        await this.validateNsRecords()
+      } finally {
+        this.dnsValidationInProgress = false
       }
     },
 
@@ -365,7 +576,13 @@ export default {
         
         // Prepare domain data for API
         const domainPayload = {
-          name: this.domainData.name.trim().toLowerCase()
+          name: this.domainData.name.trim().toLowerCase(),
+          routes: [
+            {
+              hostname: this.domainData.authHostname,
+              target: '@auth'
+            }
+          ]
         }
 
         // Add optional fields if they have values
@@ -382,7 +599,7 @@ export default {
           }
         }
 
-        // Make API call to create domain
+        // Make API call to create domain with auth route
         console.log('About to make API call with payload:', domainPayload)
         const response = await apiRequest('domains', {
           method: 'POST',
@@ -395,7 +612,7 @@ export default {
         
         const newDomain = await response.json()
         
-        console.log('Domain created successfully:', newDomain)
+        console.log('Domain and auth route created successfully:', newDomain)
         
         // Emit event to parent component
         this.$emit('domain-saved', newDomain)
@@ -410,6 +627,140 @@ export default {
       } finally {
         this.saving = false
       }
+    },
+
+    // DNS Validation Methods
+
+
+
+    async validateNsRecords() {
+      this.dnsValidation.nsRecords.status = 'checking'
+      this.dnsValidation.nsRecords.message = 'Checking NS records and resolution...'
+
+      try {
+        // First get the gateway's current IPv4 address for comparison
+        const gatewayIpResponse = await apiGet('dns/external/ipv4')
+        const expectedIp = gatewayIpResponse.address
+
+        if (!expectedIp || gatewayIpResponse.error) {
+          this.dnsValidation.nsRecords.status = 'error'
+          this.dnsValidation.nsRecords.message = `Cannot determine gateway IP: ${gatewayIpResponse.error || 'No address available'}`
+          this.dnsValidation.nsRecords.records = []
+          return
+        }
+
+        // Check NS records
+        const nsResponse = await apiGet(`dns/lookup?hostname=${encodeURIComponent(this.domainData.name)}&type=NS`)
+        
+        if (nsResponse.records && nsResponse.records.length > 0) {
+          // Filter for NS records and extract names from the value field
+          const nsRecords = nsResponse.records.filter(record => record.type === 'NS')
+          
+          if (nsRecords.length > 0) {
+            const nsNames = nsRecords.map(record => record.value)
+            
+            // Check if the NS records point to your gateway
+            const gatewayNsPatterns = [
+              /\.myfritz\.net\.?$/,  // FRITZ!Box dynamic DNS
+              new RegExp(`^${expectedIp.replace(/\./g, '\\.')}$`)  // Direct IP match
+            ]
+            
+            const isGatewayNs = nsNames.some(ns => 
+              gatewayNsPatterns.some(pattern => pattern.test(ns))
+            )
+
+            if (isGatewayNs) {
+              // NS records point to gateway/FRITZ!Box, this is good
+              // Try to check A records but be lenient if they don't resolve yet
+              try {
+                const aResponse = await apiGet(`dns/lookup?hostname=${encodeURIComponent(this.domainData.name)}&type=A`)
+                
+                if (aResponse.records && aResponse.records.length > 0) {
+                  const aRecords = aResponse.records.filter(record => record.type === 'A')
+                  
+                  if (aRecords.length > 0) {
+                    const ipAddresses = aRecords.map(record => record.value)
+                    const matchingRecords = ipAddresses.filter(ip => ip === expectedIp)
+                    
+                    if (matchingRecords.length > 0) {
+                      this.dnsValidation.nsRecords.status = 'success'
+                      this.dnsValidation.nsRecords.message = `✓ NS records correctly delegated to gateway → Domain resolves to ${expectedIp}`
+                      this.dnsValidation.nsRecords.records = nsNames
+                    } else {
+                      this.dnsValidation.nsRecords.status = 'warning'
+                      this.dnsValidation.nsRecords.message = `✓ NS delegation correct, but A records point to: ${ipAddresses.join(', ')} (expected ${expectedIp})`
+                      this.dnsValidation.nsRecords.records = nsNames
+                    }
+                  } else {
+                    // NS delegation looks good, but no A records yet - this is often fine
+                    this.dnsValidation.nsRecords.status = 'success'
+                    this.dnsValidation.nsRecords.message = `✓ NS records correctly delegated to gateway (${nsNames.join(', ')}) - A records will be served by your gateway`
+                    this.dnsValidation.nsRecords.records = nsNames
+                  }
+                } else {
+                  // NS delegation looks good, no A records yet - this is often fine for new domains
+                  this.dnsValidation.nsRecords.status = 'success'
+                  this.dnsValidation.nsRecords.message = `✓ NS records correctly delegated to gateway (${nsNames.join(', ')}) - DNS propagation may still be in progress`
+                  this.dnsValidation.nsRecords.records = nsNames
+                }
+              } catch (aError) {
+                // NS delegation is correct, A record query failed but that's ok
+                this.dnsValidation.nsRecords.status = 'success'
+                this.dnsValidation.nsRecords.message = `✓ NS records correctly delegated to gateway (${nsNames.join(', ')}) - Gateway will handle DNS resolution`
+                this.dnsValidation.nsRecords.records = nsNames
+              }
+            } else {
+              // NS records don't point to gateway - this needs attention
+              this.dnsValidation.nsRecords.status = 'warning'
+              this.dnsValidation.nsRecords.message = `NS records found but don't point to gateway: ${nsNames.join(', ')} (expected *.myfritz.net or ${expectedIp})`
+              this.dnsValidation.nsRecords.records = nsNames
+            }
+          } else {
+            this.dnsValidation.nsRecords.status = 'warning'
+            this.dnsValidation.nsRecords.message = 'No NS records found'
+            this.dnsValidation.nsRecords.records = []
+          }
+        } else {
+          this.dnsValidation.nsRecords.status = 'warning'
+          this.dnsValidation.nsRecords.message = 'No DNS records found'
+          this.dnsValidation.nsRecords.records = []
+        }
+      } catch (error) {
+        this.dnsValidation.nsRecords.status = 'error'
+        this.dnsValidation.nsRecords.message = `DNS lookup failed: ${error.message}`
+        this.dnsValidation.nsRecords.records = []
+      }
+    },
+
+    getDnsCheckColor(checkType) {
+      const status = this.dnsValidation[checkType]?.status
+      switch (status) {
+        case 'success': return 'success'
+        case 'warning': return 'warning'
+        case 'error': return 'error'
+        case 'checking': return 'info'
+        default: return 'grey'
+      }
+    },
+
+    getDnsCheckIcon(checkType) {
+      const status = this.dnsValidation[checkType]?.status
+      switch (status) {
+        case 'success': return 'mdi-check-circle'
+        case 'warning': return 'mdi-alert'
+        case 'error': return 'mdi-close-circle'
+        case 'checking': return 'mdi-loading mdi-spin'
+        default: return 'mdi-help-circle'
+      }
+    },
+
+    getDnsCheckMessage(checkType) {
+      // If no domain name is entered yet, show helpful placeholder
+      if (!this.domainData.name || this.domainData.name.length <= 3) {
+        return 'Enter a domain name to check NS records and resolution'
+      }
+      
+      return this.dnsValidation[checkType]?.message || 'Not checked yet'
     }
   }
 }

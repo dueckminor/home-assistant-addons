@@ -164,6 +164,11 @@ func (g *Gateway) AddDomain(domain ConfigDomain) (ConfigDomain, error) {
 		}
 	}
 	domain.Guid = uuid.New().String()
+
+	for i := range domain.Routes {
+		domain.Routes[i].Guid = uuid.New().String()
+	}
+
 	g.config.Domains = append(g.config.Domains, domain)
 	g.config.save()
 	return domain, nil
