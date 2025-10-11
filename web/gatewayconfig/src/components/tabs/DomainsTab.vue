@@ -34,44 +34,17 @@
           >
             {{ error }}
           </v-alert>
-          <v-row>
-            <v-col cols="12" md="8">
-              <v-text-field
-                v-model="newDomain"
-                label="Add Domain"
-                variant="outlined"
-                prepend-inner-icon="mdi-web"
-                placeholder="example.com"
-                hint="Enter a domain that should be handled by this DNS server"
-                persistent-hint
-                @keyup.enter="addDomain"
-              >
-                <template v-slot:append-inner>
-                  <v-btn
-                    icon="mdi-plus"
-                    variant="text"
-                    size="small"
-                    @click="addDomain"
-                    :disabled="!newDomain.trim() || addingDomain"
-                    :loading="addingDomain"
-                  ></v-btn>
-                </template>
-              </v-text-field>
-            </v-col>
-            <v-col cols="12" md="4">
-              <v-btn
-                color="primary"
-                variant="outlined"
-                prepend-icon="mdi-plus"
-                @click="addDomain"
-                :disabled="!newDomain.trim() || addingDomain"
-                :loading="addingDomain"
-                block
-              >
-                Add Domain
-              </v-btn>
-            </v-col>
-          </v-row>
+          <div class="text-center mb-4">
+            <v-btn
+              color="purple"
+              variant="elevated"
+              prepend-icon="mdi-web-plus"
+              @click="openAddDomainWizard"
+              size="large"
+            >
+              Add New Domain
+            </v-btn>
+          </div>
 
           <!-- Domain Tree List -->
           <v-row v-if="!loading && domains && domains.length > 0" class="mt-2">
@@ -316,73 +289,42 @@
     </v-col>
   </v-row>
 
-  <!-- DNS Server Status -->
-  <v-row class="mt-4">
-    <v-col cols="12">
-      <v-card color="grey-lighten-5">
-        <v-card-title class="text-h6 d-flex align-center">
-          <v-icon class="me-2" color="success">mdi-server</v-icon>
-          DNS Server Status
-        </v-card-title>
-        <v-card-text>
-          <v-row>
-            <v-col cols="12" md="3">
-              <v-chip color="success" class="ma-1">
-                <v-icon start>mdi-port</v-icon>
-                Port: 53 (UDP/TCP)
-              </v-chip>
-            </v-col>
-            <v-col cols="12" md="3">
-              <v-chip color="info" class="ma-1">
-                <v-icon start>mdi-earth</v-icon>
-                External IP Detection
-              </v-chip>
-            </v-col>
-            <v-col cols="12" md="3">
-              <v-chip color="purple" class="ma-1">
-                <v-icon start>mdi-domain</v-icon>
-                {{ (domains && domains.length) || 0 }} Domains
-              </v-chip>
-            </v-col>
-            <v-col cols="12" md="3">
-              <v-chip color="primary" class="ma-1">
-                <v-icon start>mdi-check-circle</v-icon>
-                Running
-              </v-chip>
-            </v-col>
-          </v-row>
-        </v-card-text>
-      </v-card>
-    </v-col>
-  </v-row>
-
   <!-- Route Wizard -->
   <RouteWizard
     v-model="showRouteWizard"
     :domain-guid="selectedDomainGuid"
+    :domain-name="selectedDomainName"
     :edit-route="editingRoute"
     @route-saved="onRouteSaved"
+  />
+
+  <!-- Domain Wizard -->
+  <DomainWizard
+    v-model="showDomainWizard"
+    @domain-saved="onDomainSaved"
   />
 </template>
 
 <script>
 import { apiGet, apiRequest } from '../../utils/api.js'
 import RouteWizard from '../dialogs/RouteWizard.vue'
+import DomainWizard from '../dialogs/DomainWizard.vue'
 
 export default {
   name: 'DomainsTab',
   components: {
-    RouteWizard
+    RouteWizard,
+    DomainWizard
   },
   data() {
     return {
       domains: [],
-      newDomain: '',
       loading: false,
-      addingDomain: false,
       error: null,
       showRouteWizard: false,
+      showDomainWizard: false,
       selectedDomainGuid: null,
+      selectedDomainName: null,
       editingRoute: null
     }
   },
@@ -404,41 +346,15 @@ export default {
       }
     },
 
-    async addDomain() {
-      const domainName = this.newDomain.trim().toLowerCase();
-      if (!domainName) return;
-      
-      // Basic domain validation
-      if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i.test(domainName)) {
-        this.error = 'Invalid domain format';
-        return;
-      }
-      
-      // Check for duplicates
-      if (this.domains.some(d => d.name === domainName)) {
-        this.error = 'Domain already exists';
-        return;
-      }
-      
-      this.addingDomain = true
-      try {
-        console.log('Adding domain via API:', domainName)
-        
-        // Make API call to add domain using new REST API
-        const newDomain = await apiRequest('domains', 'POST', { name: domainName })
-        
-        // Add domain to local list
-        this.domains.push(newDomain);
-        this.newDomain = '';
-        this.error = null;
-        console.log('Domain added successfully:', newDomain);
-        
-      } catch (error) {
-        this.error = `Failed to add domain: ${error.message}`;
-        console.error('Error adding domain:', error)
-      } finally {
-        this.addingDomain = false
-      }
+    openAddDomainWizard() {
+      this.showDomainWizard = true
+    },
+
+    onDomainSaved(newDomain) {
+      // Add domain to local list
+      this.domains.push(newDomain)
+      this.error = null
+      console.log('Domain added successfully:', newDomain)
     },
 
     async removeDomain(domainGuid) {
@@ -546,13 +462,17 @@ export default {
 
     // Route Management Methods
     openAddRouteWizard(domainGuid) {
+      const domain = this.domains.find(d => d.guid === domainGuid)
       this.selectedDomainGuid = domainGuid
+      this.selectedDomainName = domain ? domain.name : ''
       this.editingRoute = null
       this.showRouteWizard = true
     },
 
     openEditRouteWizard(domainGuid, route) {
+      const domain = this.domains.find(d => d.guid === domainGuid)
       this.selectedDomainGuid = domainGuid
+      this.selectedDomainName = domain ? domain.name : ''
       this.editingRoute = route
       this.showRouteWizard = true
     },
