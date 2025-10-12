@@ -298,14 +298,20 @@ func (ep *Endpoints) DELETE_UsersGuid(c *gin.Context) {
 }
 
 func (ep *Endpoints) POST_UsersGuidPasswordReset(c *gin.Context) {
-	//guid := c.Param("guid")
+	guid := c.Param("guid")
 
-	client, err := smtp.CreateClientForDomain("rh94-dev.dueckminor.de", ep.Gateway.dataDir, smtp.Config{UseTLS: false})
+	user, err := ep.Gateway.authServer.Users().GetUser(guid)
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	client.SendWelcomeEmail("jochen@dueckminor.de", "Jochen")
+
+	client := ep.Gateway.GetSMTPClient()
+	if client == nil {
+		c.JSON(400, gin.H{"error": "Mail service is not enabled"})
+		return
+	}
+	client.SendWelcomeEmail(user.Mail, user.Name)
 }
 
 func (ep *Endpoints) GET_Groups(c *gin.Context) {
@@ -376,6 +382,7 @@ func (ep *Endpoints) PUT_MailConfig(c *gin.Context) {
 	if responseConfig.Password != "" {
 		responseConfig.Password = "-"
 	}
+
 	c.JSON(200, responseConfig)
 }
 
@@ -393,21 +400,13 @@ func (ep *Endpoints) POST_MailTest(c *gin.Context) {
 		return
 	}
 
-	// Create custom SMTP client with user configuration
-	client, err := smtp.NewCustomClient(
-		ep.Gateway.config.Domains[0].Name, // Use first domain as sender domain
-		ep.Gateway.config.Mail.SmtpHost,
-		ep.Gateway.config.Mail.SmtpPort,
-		ep.Gateway.config.Mail.Email,
-		ep.Gateway.config.Mail.Password,
-		ep.Gateway.dataDir,
-		ep.Gateway.config.Mail.UseTLS,
-	)
-
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to create SMTP client: " + err.Error()})
-		return
-	}
+	smtpClient := smtp.NewClient(smtp.Config{
+		Host:     ep.Gateway.config.Mail.SmtpHost,
+		Port:     ep.Gateway.config.Mail.SmtpPort,
+		Username: ep.Gateway.config.Mail.Email,
+		Password: ep.Gateway.config.Mail.Password,
+		UseTLS:   ep.Gateway.config.Mail.UseTLS,
+	})
 
 	// Send test email
 	message := &smtp.Message{
@@ -424,7 +423,7 @@ func (ep *Endpoints) POST_MailTest(c *gin.Context) {
 		`,
 	}
 
-	if err := client.SendMail(message); err != nil {
+	if err := smtpClient.SendMail(message); err != nil {
 		c.JSON(500, gin.H{"error": "Failed to send test email: " + err.Error()})
 		return
 	}

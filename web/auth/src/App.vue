@@ -230,6 +230,104 @@
               </v-card>
             </v-dialog>
 
+            <!-- Password Reset Dialog -->
+            <v-dialog v-model="showPasswordResetDialog" max-width="500px" persistent>
+              <v-card>
+                <v-card-title class="d-flex align-center">
+                  <v-icon class="me-2">mdi-lock-reset</v-icon>
+                  Set New Password
+                </v-card-title>
+                
+                <v-card-text>
+                  <p class="text-body-1 mb-4">
+                    Please enter your new password below.
+                  </p>
+                  
+                  <v-form ref="passwordResetForm" v-model="passwordResetFormValid" @submit.prevent="submitNewPassword">
+                    <v-text-field
+                      v-model="newPassword"
+                      label="New Password"
+                      variant="outlined"
+                      prepend-inner-icon="mdi-lock"
+                      :type="showNewPassword ? 'text' : 'password'"
+                      :append-inner-icon="showNewPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                      @click:append-inner="showNewPassword = !showNewPassword"
+                      :rules="newPasswordRules"
+                      :disabled="submittingNewPassword"
+                      required
+                      autofocus
+                      autocomplete="new-password"
+                    ></v-text-field>
+                    
+                    <v-text-field
+                      v-model="confirmPassword"
+                      label="Confirm New Password"
+                      variant="outlined"
+                      prepend-inner-icon="mdi-lock-check"
+                      :type="showConfirmPassword ? 'text' : 'password'"
+                      :append-inner-icon="showConfirmPassword ? 'mdi-eye' : 'mdi-eye-off'"
+                      @click:append-inner="showConfirmPassword = !showConfirmPassword"
+                      :rules="confirmPasswordRules"
+                      :disabled="submittingNewPassword"
+                      required
+                      autocomplete="new-password"
+                    ></v-text-field>
+                    
+                    <!-- Success Message -->
+                    <v-alert
+                      v-if="passwordResetSuccess"
+                      type="success"
+                      variant="tonal"
+                      class="mt-4"
+                    >
+                      <v-icon start>mdi-check-circle</v-icon>
+                      Password has been successfully updated. You can now sign in with your new password.
+                    </v-alert>
+                    
+                    <!-- Error Message -->
+                    <v-alert
+                      v-if="passwordResetError"
+                      type="error"
+                      variant="tonal"
+                      class="mt-4"
+                      closable
+                      @click:close="passwordResetError = ''"
+                    >
+                      <v-icon start>mdi-alert-circle</v-icon>
+                      {{ passwordResetError }}
+                    </v-alert>
+                  </v-form>
+                </v-card-text>
+                
+                <v-card-actions class="justify-end">
+                  <v-btn
+                    v-if="!passwordResetSuccess"
+                    variant="text"
+                    @click="closePasswordResetDialog"
+                    :disabled="submittingNewPassword"
+                  >
+                    Cancel
+                  </v-btn>
+                  <v-btn
+                    v-if="passwordResetSuccess"
+                    color="primary"
+                    @click="closePasswordResetDialog"
+                  >
+                    Continue to Sign In
+                  </v-btn>
+                  <v-btn
+                    v-else
+                    color="primary"
+                    @click="submitNewPassword"
+                    :loading="submittingNewPassword"
+                    :disabled="!passwordResetFormValid"
+                  >
+                    Update Password
+                  </v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-dialog>
+
             <!-- Theme Toggle (bottom right) -->
             <v-fab
               location="bottom end"
@@ -304,6 +402,18 @@ export default {
     const resetEmailSent = ref(false)
     const resetEmailError = ref('')
     
+    // Password reset state
+    const showPasswordResetDialog = ref(false)
+    const passwordResetFormValid = ref(false)
+    const newPassword = ref('')
+    const confirmPassword = ref('')
+    const showNewPassword = ref(false)
+    const showConfirmPassword = ref(false)
+    const submittingNewPassword = ref(false)
+    const passwordResetSuccess = ref(false)
+    const passwordResetError = ref('')
+    const passwordResetToken = ref('')
+    
     const credentials = reactive({
       username: '',
       password: ''
@@ -336,6 +446,19 @@ export default {
     const emailRules = [
       v => !!v || 'Email is required',
       v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Email must be valid'
+    ]
+    
+    const newPasswordRules = [
+      v => !!v || 'Password is required',
+      v => v.length >= 8 || 'Password must be at least 8 characters',
+      v => /(?=.*[a-z])/.test(v) || 'Password must contain at least one lowercase letter',
+      v => /(?=.*[A-Z])/.test(v) || 'Password must contain at least one uppercase letter',
+      v => /(?=.*\d)/.test(v) || 'Password must contain at least one number'
+    ]
+    
+    const confirmPasswordRules = [
+      v => !!v || 'Please confirm your password',
+      v => v === newPassword.value || 'Passwords do not match'
     ]
     
     // Computed properties
@@ -546,6 +669,82 @@ export default {
       forgotPasswordFormValid.value = false
     }
     
+    const submitNewPassword = async () => {
+      if (!passwordResetFormValid.value || !passwordResetToken.value) return
+      
+      submittingNewPassword.value = true
+      passwordResetError.value = ''
+      passwordResetSuccess.value = false
+      
+      try {
+        const response = await fetch('/reset_password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            token: passwordResetToken.value,
+            password: newPassword.value
+          })
+        })
+        
+        if (response.ok) {
+          // Password reset successful
+          passwordResetSuccess.value = true
+          showNotification('Password updated successfully!', 'success', 'mdi-check-circle')
+          
+          // Clear password fields for security
+          newPassword.value = ''
+          confirmPassword.value = ''
+        } else {
+          // Handle different error responses
+          let errorMsg = 'Failed to update password'
+          
+          if (response.status === 400) {
+            errorMsg = 'Invalid or expired reset token'
+          } else if (response.status === 422) {
+            errorMsg = 'Password does not meet requirements'
+          } else if (response.status >= 500) {
+            errorMsg = 'Server error. Please try again later.'
+          }
+          
+          passwordResetError.value = errorMsg
+        }
+      } catch (error) {
+        console.error('Password reset error:', error)
+        passwordResetError.value = 'Connection failed. Please check your network and try again.'
+      } finally {
+        submittingNewPassword.value = false
+      }
+    }
+    
+    const closePasswordResetDialog = () => {
+      showPasswordResetDialog.value = false
+      newPassword.value = ''
+      confirmPassword.value = ''
+      passwordResetSuccess.value = false
+      passwordResetError.value = ''
+      passwordResetFormValid.value = false
+      showNewPassword.value = false
+      showConfirmPassword.value = false
+      passwordResetToken.value = ''
+      
+      // Remove the token from URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete('password_reset')
+      window.history.replaceState({}, '', url.toString())
+    }
+    
+    const checkForPasswordReset = () => {
+      const url = new URL(window.location.href)
+      const token = url.searchParams.get('password_reset')
+      
+      if (token) {
+        passwordResetToken.value = token
+        showPasswordResetDialog.value = true
+      }
+    }
+    
     const parseUrlParameters = () => {
       const url = new URL(window.location.href)
       oauth.redirectURI = url.searchParams.get('redirect_uri') || ''
@@ -570,6 +769,7 @@ export default {
     onMounted(async () => {
       initializeTheme()
       parseUrlParameters()
+      checkForPasswordReset()
       await checkAuthStatus()
       
       // Set up periodic autofill detection
@@ -622,6 +822,17 @@ export default {
       resetEmailSent,
       resetEmailError,
       
+      // Password reset state
+      showPasswordResetDialog,
+      passwordResetFormValid,
+      newPassword,
+      confirmPassword,
+      showNewPassword,
+      showConfirmPassword,
+      submittingNewPassword,
+      passwordResetSuccess,
+      passwordResetError,
+      
       // Computed
       username: computed(() => credentials.username),
       password: computed({
@@ -633,6 +844,8 @@ export default {
       usernameRules,
       passwordRules,
       emailRules,
+      newPasswordRules,
+      confirmPasswordRules,
       
       // Methods
       login,
@@ -643,7 +856,9 @@ export default {
       handleUsernameInput,
       handlePasswordInput,
       sendResetEmail,
-      closeForgotPasswordDialog
+      closeForgotPasswordDialog,
+      submitNewPassword,
+      closePasswordResetDialog
     }
   }
 }

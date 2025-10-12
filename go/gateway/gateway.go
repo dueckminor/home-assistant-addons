@@ -15,6 +15,7 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/pki"
+	"github.com/dueckminor/home-assistant-addons/go/smtp"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -95,6 +96,12 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 	authRoute := g.config.GetAuthRoute()
 	if authRoute != nil {
 		g.startAuthServer(authRoute)
+
+		smtpClient := g.GetSMTPClient()
+		if smtpClient != nil {
+			g.authServer.EnableSMTP(authRoute.GetHostname(), authRoute.domain.Name, smtpClient)
+		}
+
 	}
 
 	for _, domain := range g.config.Domains {
@@ -119,6 +126,9 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 			AuthSecret:        route.Options.AuthSecret,
 		}
 		if options.Auth {
+			if g.authClient == nil {
+				return
+			}
 			options.AuthClient = new(auth.AuthClient)
 			*options.AuthClient = *g.authClient
 			options.AuthClient.Secret = options.AuthSecret
@@ -356,6 +366,20 @@ func (g *Gateway) stopDomain(domain *ConfigDomain) {
 
 func (g *Gateway) stopRedirectDomain(domain *ConfigDomain) {
 
+}
+
+func (g *Gateway) GetSMTPClient() *smtp.Client {
+	if !g.config.Mail.Enabled {
+		return nil
+	}
+	return smtp.NewClient(smtp.Config{
+		From:     g.config.Mail.FromEmail,
+		Host:     g.config.Mail.SmtpHost,
+		Port:     g.config.Mail.SmtpPort,
+		Username: g.config.Mail.Email,
+		Password: g.config.Mail.Password,
+		UseTLS:   g.config.Mail.UseTLS,
+	})
 }
 
 func (g *Gateway) StartUI(ctx context.Context, port int) error {

@@ -2,27 +2,11 @@ package smtp
 
 import (
 	"fmt"
-	"path/filepath"
-
-	gocrypto "github.com/dueckminor/home-assistant-addons/go/crypto"
 )
-
-// CreateClientForDomain creates an SMTP client for a specific domain with DKIM support
-func CreateClientForDomain(domain string, dataDir string, smtpConfig Config) (*Client, error) {
-	// Load or create DKIM private key for the domain
-	dkimKeyFile := filepath.Join(dataDir, fmt.Sprintf("dkim-%s.key", domain))
-	dkimPrivateKey, err := gocrypto.GetOrCreatePrivateKeyFile(dkimKeyFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load DKIM key for domain %s: %w", domain, err)
-	}
-
-	// Create SMTP client with DKIM support
-	client := NewClient(smtpConfig, domain, dkimPrivateKey)
-	return client, nil
-}
 
 // SendPasswordResetEmail sends a password reset email
 func (c *Client) SendPasswordResetEmail(userEmail, resetToken, resetURL string) error {
+	senderEmail := c.config.From
 	subject := "Password Reset Request"
 
 	// Plain text version
@@ -76,13 +60,13 @@ Gateway Team`, resetURL)
 </html>`, resetURL, resetURL)
 
 	message := &Message{
-		From:     fmt.Sprintf("noreply@%s", c.domain),
+		From:     senderEmail,
 		To:       []string{userEmail},
 		Subject:  subject,
 		Body:     plainBody,
 		BodyHTML: htmlBody,
 		Headers: map[string]string{
-			"Reply-To":      fmt.Sprintf("noreply@%s", c.domain),
+			"Reply-To":      senderEmail,
 			"X-Mailer":      "Gateway SMTP Client",
 			"X-Reset-Token": resetToken, // For tracking purposes
 		},
@@ -93,6 +77,8 @@ Gateway Team`, resetURL)
 
 // SendWelcomeEmail sends a welcome email to new users
 func (c *Client) SendWelcomeEmail(userEmail, username string) error {
+	senderEmail := c.config.From
+
 	subject := "Welcome to Gateway"
 
 	plainBody := fmt.Sprintf(`Hello %s,
@@ -145,13 +131,13 @@ Gateway Team`, username)
 </html>`, username)
 
 	message := &Message{
-		From:     fmt.Sprintf("welcome@%s", c.domain),
+		From:     senderEmail,
 		To:       []string{userEmail},
 		Subject:  subject,
 		Body:     plainBody,
 		BodyHTML: htmlBody,
 		Headers: map[string]string{
-			"Reply-To": fmt.Sprintf("support@%s", c.domain),
+			"Reply-To": senderEmail,
 			"X-Mailer": "Gateway SMTP Client",
 		},
 	}

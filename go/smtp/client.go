@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/smtp"
-	"sort"
 	"strings"
 	"time"
-
-	gocrypto "github.com/dueckminor/home-assistant-addons/go/crypto"
 )
 
 // Config holds SMTP client configuration
@@ -20,12 +17,7 @@ type Config struct {
 	Password string // SMTP password (optional)
 	UseTLS   bool   // Whether to use TLS
 	Timeout  time.Duration
-
-	// Relay configuration - use authenticated SMTP relay instead of direct delivery
-	UseRelay    bool   // If true, use relay instead of direct MX delivery
-	RelayHost   string // SMTP relay server (e.g., smtp.gmail.com, smtp.sendgrid.net)
-	RelayPort   int    // SMTP relay port (usually 587)
-	RelayUseTLS bool   // Whether to use TLS for relay connection
+	From     string // Default for the sender address
 }
 
 // Message represents an email message
@@ -50,104 +42,18 @@ type Attachment struct {
 
 // Client represents an SMTP client with DKIM support
 type Client struct {
-	config   Config
-	dkimKey  gocrypto.PrivateKey
-	domain   string
-	selector string
+	config Config
 }
 
 // NewClient creates a new SMTP client
-func NewClient(config Config, domain string, dkimKey gocrypto.PrivateKey) *Client {
+func NewClient(config Config) *Client {
 	if config.Timeout == 0 {
 		config.Timeout = 30 * time.Second
 	}
 
 	return &Client{
-		config:   config,
-		dkimKey:  dkimKey,
-		domain:   domain,
-		selector: "default", // Using "default" as the DKIM selector
+		config: config,
 	}
-}
-
-// MXRecord represents an MX record
-type MXRecord struct {
-	Host     string
-	Priority uint16
-}
-
-// discoverSMTPServer discovers SMTP server from recipient email addresses
-func (c *Client) discoverSMTPServer(recipients []string) (string, int, error) {
-	// If relay is configured, use relay server instead of direct delivery
-	if c.config.UseRelay && c.config.RelayHost != "" {
-		port := c.config.RelayPort
-		if port == 0 {
-			port = 587 // Default SMTP submission port for relays
-		}
-		return c.config.RelayHost, port, nil
-	}
-
-	// If host is explicitly configured, use it
-	if c.config.Host != "" {
-		port := c.config.Port
-		if port == 0 {
-			if c.config.UseTLS {
-				port = 587 // SMTP submission port with STARTTLS
-			} else {
-				port = 25 // Standard SMTP port
-			}
-		}
-		return c.config.Host, port, nil
-	}
-
-	// Extract domains from recipient email addresses
-	domains := make(map[string]bool)
-	for _, recipient := range recipients {
-		if parts := strings.Split(recipient, "@"); len(parts) == 2 {
-			domain := strings.ToLower(parts[1])
-			domains[domain] = true
-		}
-	}
-
-	// Try to find MX records for each domain
-	for domain := range domains {
-		host, port, err := c.lookupMXRecord(domain)
-		if err == nil {
-			return host, port, nil
-		}
-	}
-
-	return "", 0, fmt.Errorf("could not discover SMTP server for any recipient domain")
-}
-
-// lookupMXRecord looks up MX records for a domain and returns the best SMTP server
-func (c *Client) lookupMXRecord(domain string) (string, int, error) {
-	mxRecords, err := net.LookupMX(domain)
-	if err != nil {
-		return "", 0, fmt.Errorf("MX lookup failed for domain %s: %w", domain, err)
-	}
-
-	if len(mxRecords) == 0 {
-		return "", 0, fmt.Errorf("no MX records found for domain %s", domain)
-	}
-
-	// Sort by priority (lower number = higher priority)
-	sort.Slice(mxRecords, func(i, j int) bool {
-		return mxRecords[i].Pref < mxRecords[j].Pref
-	})
-
-	// Use the highest priority MX record
-	bestMX := mxRecords[0]
-	host := strings.TrimSuffix(bestMX.Host, ".")
-
-	// For MX-based delivery, always use port 25 (server-to-server SMTP)
-	// Port 587 is for authenticated client submission, not MX delivery
-	port := c.config.Port
-	if port == 0 {
-		port = 25 // Standard SMTP port for server-to-server delivery
-	}
-
-	return host, port, nil
 }
 
 // SendMail sends an email message
@@ -163,9 +69,6 @@ func (c *Client) SendMail(msg *Message) error {
 
 	var conn net.Conn
 	useTLS := c.config.UseTLS
-	if c.config.UseRelay {
-		useTLS = c.config.RelayUseTLS // Use relay TLS setting when in relay mode
-	}
 
 	if useTLS {
 		tlsConfig := &tls.Config{ServerName: c.config.Host}
@@ -193,8 +96,13 @@ func (c *Client) SendMail(msg *Message) error {
 		}
 	}
 
+	from := msg.From
+	if from == "" {
+		from = c.config.From
+	}
+
 	// Set sender
-	if err = smtpClient.Mail(msg.From); err != nil {
+	if err = smtpClient.Mail(from); err != nil {
 		return fmt.Errorf("failed to set sender: %w", err)
 	}
 
