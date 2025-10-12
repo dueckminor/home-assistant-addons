@@ -6,6 +6,7 @@ import (
 
 	"github.com/dueckminor/home-assistant-addons/go/pki"
 	"github.com/goccy/go-yaml"
+	"github.com/google/uuid"
 )
 
 type ConfigExternalIp struct {
@@ -154,13 +155,28 @@ func loadConfig(file string) (*Config, error) {
 		return nil, err
 	}
 
+	mustSave := false
+
 	for _, domain := range config.Domains {
+		if domain.Guid == "" {
+			domain.Guid = uuid.New().String()
+			mustSave = true
+		}
 		for _, route := range domain.Routes {
 			route.domain = domain
+			if route.Guid == "" {
+				route.Guid = uuid.New().String()
+				mustSave = true
+			}
 		}
 	}
 
 	config.file = file
+
+	if mustSave {
+		config.save()
+	}
+
 	return &config, nil
 }
 
