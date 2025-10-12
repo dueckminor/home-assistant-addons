@@ -7,4 +7,10 @@ This repository
 
 This repository contains the following add-ons
 
-### [Home-Assistant-Gateway](./gateway)
+### Home-Assistant-Gateway
+
+A comprehensive reverse proxy and DNS server for Home Assistant that enables secure external access to your smart home services. The gateway provides automatic SSL certificate management, built-in OAuth authentication, and flexible routing to internal services or external targets. It includes real-time DNS validation to ensure proper domain configuration and delegation. The addon features a modern Vue.js management interface for easy configuration of domains, routes, DNS settings, and user management.
+
+### Mqtt-Bridge
+
+

@@ -74,18 +74,20 @@
                 >
                   <v-expansion-panel-title class="domain-header">
                     <div class="d-flex align-center w-100">
+                      <v-icon class="me-3" size="small">mdi-web</v-icon>
                       <!-- Domain Name -->
                       <div class="flex-grow-1">
-                        <div class="d-flex align-center">
-                          <v-icon class="me-2" size="small">mdi-web</v-icon>
-                          <span class="text-subtitle-2">{{ domain.name }}</span>
+                        <div class="text-subtitle-2">{{ domain.name }}</div>
+                        <!-- Target Gateway (for redirect domains) -->
+                        <div v-if="domain.redirect" class="text-caption text-medium-emphasis">
+                          → {{ domain.redirect.target }}
                         </div>
                       </div>
                       
                       <!-- Status Indicators -->
-                      <div class="d-flex align-center me-4">
-                        <!-- DNS Status -->
-                        <v-tooltip text="DNS Configuration Status">
+                      <div class="d-flex align-center">
+                        <!-- DNS Status (only for regular domains) -->
+                        <v-tooltip v-if="!domain.redirect" text="DNS Configuration Status">
                           <template v-slot:activator="{ props }">
                             <v-chip
                               v-bind="props"
@@ -99,8 +101,8 @@
                           </template>
                         </v-tooltip>
                         
-                        <!-- Certificate Status -->
-                        <v-tooltip :text="getCertificateTooltip(domain)">
+                        <!-- Certificate Status (only for regular domains) -->
+                        <v-tooltip v-if="!domain.redirect" :text="getCertificateTooltip(domain)">
                           <template v-slot:activator="{ props }">
                             <v-chip
                               v-bind="props"
@@ -114,8 +116,20 @@
                           </template>
                         </v-tooltip>
                         
-                        <!-- Routes Count -->
+                        <!-- Domain Type Chip -->
                         <v-chip
+                          v-if="domain.redirect"
+                          color="orange"
+                          size="x-small"
+                          class="me-2"
+                        >
+                          <v-icon start size="x-small">mdi-redirect</v-icon>
+                          Redirect
+                        </v-chip>
+                        
+                        <!-- Routes Count (only for non-redirect domains) -->
+                        <v-chip
+                          v-else
                           color="info"
                           size="x-small"
                           class="me-2"
@@ -138,8 +152,39 @@
                   </v-expansion-panel-title>
                   
                   <v-expansion-panel-text>
-                    <!-- Domain Status Details -->
-                    <div class="mb-4">
+                    <!-- Redirect Configuration (for redirect domains) -->
+                    <div v-if="domain.redirect" class="mb-4">
+                      <v-card variant="tonal" color="orange">
+                        <v-card-text class="pa-3">
+                          <div class="d-flex align-center mb-3">
+                            <v-icon class="me-2" size="small">mdi-redirect</v-icon>
+                            <span class="text-subtitle-2">Gateway Redirect Configuration</span>
+                          </div>
+                          
+                          <v-row>
+                            <v-col cols="12" sm="6" md="3">
+                              <div class="text-caption text-medium-emphasis mb-1">Target Gateway</div>
+                              <div class="text-body-2 font-weight-medium">{{ domain.redirect.target }}</div>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="3">
+                              <div class="text-caption text-medium-emphasis mb-1">HTTP Port</div>
+                              <div class="text-body-2 font-weight-medium">{{ domain.redirect.http_port }}</div>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="3">
+                              <div class="text-caption text-medium-emphasis mb-1">HTTPS Port</div>
+                              <div class="text-body-2 font-weight-medium">{{ domain.redirect.https_port }}</div>
+                            </v-col>
+                            <v-col cols="12" sm="6" md="3">
+                              <div class="text-caption text-medium-emphasis mb-1">DNS Port</div>
+                              <div class="text-body-2 font-weight-medium">{{ domain.redirect.dns_port }}</div>
+                            </v-col>
+                          </v-row>
+                        </v-card-text>
+                      </v-card>
+                    </div>
+
+                    <!-- Domain Status Details (for regular domains only) -->
+                    <div v-else class="mb-4">
                       <v-row>
                         <v-col cols="12" md="6">
                           <v-card variant="tonal" color="info">
@@ -176,8 +221,8 @@
                       </v-row>
                     </div>
                     
-                    <!-- Routes Section -->
-                    <div>
+                    <!-- Routes Section (only for regular domains, not redirects) -->
+                    <div v-if="!domain.redirect">
                       <div class="d-flex justify-space-between align-center mb-3">
                         <h5 class="text-subtitle-2">
                           <v-icon class="me-2" size="small">mdi-routes</v-icon>
