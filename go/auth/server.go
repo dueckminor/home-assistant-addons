@@ -70,6 +70,10 @@ func (a *AuthServer) Register(r *gin.Engine) {
 	rg.POST("/oauth/token", a.handleOauthToken)
 }
 
+func (a *AuthServer) Users() Users {
+	return a.users
+}
+
 func (a *AuthServer) GetPublicKey() (p crypto.PublicKey) {
 	return a.config.JWTKey.Public()
 }

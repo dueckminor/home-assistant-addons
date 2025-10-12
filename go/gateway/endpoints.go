@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dueckminor/home-assistant-addons/go/auth"
 	"github.com/dueckminor/home-assistant-addons/go/dns"
 	"github.com/gin-gonic/gin"
 )
@@ -32,6 +33,14 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.POST("/domains/:guid/routes", ep.POST_DomainsGuidRoutes)
 	r.DELETE("/domains/:guid/routes/:rguid", ep.DELETE_DomainsGuidRoutesGuid)
 	r.PUT("/domains/:guid/routes/:rguid", ep.PUT_DomainsGuidRoutesGuid)
+
+	r.GET("/users", ep.Check_Users, ep.GET_Users)
+	r.POST("/users", ep.Check_Users, ep.POST_Users)
+	r.DELETE("/users/:guid", ep.Check_Users, ep.DELETE_UsersGuid)
+
+	r.GET("/groups", ep.Check_Users, ep.GET_Groups)
+	r.POST("/groups", ep.Check_Users, ep.POST_Groups)
+	r.DELETE("/groups/:guid", ep.Check_Users, ep.DELETE_GroupsGuid)
 }
 
 func (ep *Endpoints) GET_Domains(c *gin.Context) {
@@ -244,4 +253,96 @@ func (ep *Endpoints) PUT_DomainsGuidRoutesGuid(c *gin.Context) {
 		return
 	}
 	c.JSON(200, route)
+}
+
+func (ep *Endpoints) Check_Users(c *gin.Context) {
+	if ep.Gateway.authServer == nil {
+		c.AbortWithStatusJSON(503, gin.H{"error": "Authentication server not available"})
+	}
+}
+
+func (ep *Endpoints) GET_Users(c *gin.Context) {
+	if ep.Gateway.authServer == nil {
+		c.JSON(503, gin.H{"error": "Authentication server not available"})
+		return
+	}
+	users := ep.Gateway.authServer.Users()
+	c.JSON(200, gin.H{"users": users.Users()})
+}
+
+func (ep *Endpoints) POST_Users(c *gin.Context) {
+	if ep.Gateway.authServer == nil {
+		c.JSON(503, gin.H{"error": "Authentication server not available"})
+		return
+	}
+
+	var user auth.User
+	c.BindJSON(&user)
+
+	var err error
+	user, err = ep.Gateway.authServer.Users().AddUser(user)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, user)
+}
+
+func (ep *Endpoints) DELETE_UsersGuid(c *gin.Context) {
+	if ep.Gateway.authServer == nil {
+		c.JSON(503, gin.H{"error": "Authentication server not available"})
+		return
+	}
+	guid := c.Param("guid")
+
+	err := ep.Gateway.authServer.Users().DeleteUser(guid)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"status": "deleted"})
+}
+
+func (ep *Endpoints) GET_Groups(c *gin.Context) {
+	if ep.Gateway.authServer == nil {
+		c.JSON(503, gin.H{"error": "Authentication server not available"})
+		return
+	}
+	users := ep.Gateway.authServer.Users()
+	c.JSON(200, gin.H{"groups": users.Groups()})
+}
+
+func (ep *Endpoints) POST_Groups(c *gin.Context) {
+	if ep.Gateway.authServer == nil {
+		c.JSON(503, gin.H{"error": "Authentication server not available"})
+		return
+	}
+
+	var group auth.Group
+	c.BindJSON(&group)
+
+	var err error
+	group, err = ep.Gateway.authServer.Users().AddGroup(group.Name)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, group)
+}
+
+func (ep *Endpoints) DELETE_GroupsGuid(c *gin.Context) {
+	if ep.Gateway.authServer == nil {
+		c.JSON(503, gin.H{"error": "Authentication server not available"})
+		return
+	}
+	guid := c.Param("guid")
+
+	err := ep.Gateway.authServer.Users().DeleteGroup(guid)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"status": "deleted"})
 }
