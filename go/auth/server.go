@@ -68,6 +68,7 @@ func (a *AuthServer) Register(r *gin.Engine) {
 	rg.GET("/status", a.handleStatus)
 	rg.GET("/oauth/authorize", a.handleOauthAuthorize)
 	rg.POST("/oauth/token", a.handleOauthToken)
+	rg.POST("/send_reset_password_mail", a.sendResetPasswordMail)
 }
 
 func (a *AuthServer) Users() Users {
@@ -263,6 +264,21 @@ func (a *AuthServer) handleLogout(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	c.AbortWithStatus(http.StatusAccepted)
+}
+
+func (a *AuthServer) sendResetPasswordMail(c *gin.Context) {
+	payload := struct {
+		Mail string
+	}{}
+
+	c.BindJSON(&payload)
+
+	if payload.Mail == "" {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
 	c.AbortWithStatus(http.StatusAccepted)
 }
 

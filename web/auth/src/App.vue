@@ -85,12 +85,15 @@
                     variant="outlined"
                     prepend-inner-icon="mdi-account"
                     :rules="usernameRules"
-                    :disabled="loading"
+                    :disabled="loading || showForgotPasswordDialog"
                     autofocus
                     required
-                    name="username"
-                    id="username"
-                    autocomplete="username"
+                    :name="showForgotPasswordDialog ? 'login-username-hidden' : 'username'"
+                    :id="showForgotPasswordDialog ? 'login-username-hidden' : 'username'"
+                    :autocomplete="showForgotPasswordDialog ? 'off' : 'username'"
+                    :data-lpignore="showForgotPasswordDialog"
+                    :data-bwignore="showForgotPasswordDialog"
+                    :data-1p-ignore="showForgotPasswordDialog"
                     @keyup.enter="focusPassword"
                     @input="handleUsernameInput"
                     @change="handleUsernameInput"
@@ -105,11 +108,14 @@
                     :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
                     :type="showPassword ? 'text' : 'password'"
                     :rules="passwordRules"
-                    :disabled="loading"
+                    :disabled="loading || showForgotPasswordDialog"
                     required
-                    name="password"
-                    id="password"
-                    autocomplete="current-password"
+                    :name="showForgotPasswordDialog ? 'login-password-hidden' : 'password'"
+                    :id="showForgotPasswordDialog ? 'login-password-hidden' : 'password'"
+                    :autocomplete="showForgotPasswordDialog ? 'off' : 'current-password'"
+                    :data-lpignore="showForgotPasswordDialog"
+                    :data-bwignore="showForgotPasswordDialog"
+                    :data-1p-ignore="showForgotPasswordDialog"
                     @click:append-inner="showPassword = !showPassword"
                     @keyup.enter="login"
                     @input="handlePasswordInput"
@@ -136,9 +142,93 @@
                   >
                     Sign In
                   </v-btn>
+
+                  <div class="text-center mt-4">
+                    <v-btn
+                      variant="text"
+                      color="primary"
+                      size="small"
+                      @click="showForgotPasswordDialog = true"
+                      :disabled="loading"
+                    >
+                      Forgot Password?
+                    </v-btn>
+                  </div>
                 </v-form>
               </v-card-text>
             </v-card>
+
+            <!-- Forgot Password Dialog -->
+            <v-dialog v-model="showForgotPasswordDialog" max-width="500px">
+              <v-card>
+                <v-card-title class="d-flex align-center">
+                  <v-icon class="me-2">mdi-key-variant</v-icon>
+                  Reset Password
+                </v-card-title>
+                
+                <v-card-text>
+                  <p class="text-body-1 mb-4">
+                    Enter your email address. If an account with that email exists, we'll send you instructions to reset your password.
+                  </p>
+                  
+                  <v-form ref="forgotPasswordForm" v-model="forgotPasswordFormValid" @submit.prevent="sendResetEmail">
+                    <v-text-field
+                      v-model="resetEmail"
+                      label="Email Address"
+                      variant="outlined"
+                      prepend-inner-icon="mdi-email"
+                      type="email"
+                      :rules="emailRules"
+                      :disabled="sendingResetEmail"
+                      required
+                      autofocus
+                    ></v-text-field>
+                    
+                    <!-- Success Message -->
+                    <v-alert
+                      v-if="resetEmailSent"
+                      type="success"
+                      variant="tonal"
+                      class="mt-4"
+                    >
+                      <v-icon start>mdi-check-circle</v-icon>
+                      If an account with that email exists, we've sent password reset instructions.
+                    </v-alert>
+                    
+                    <!-- Error Message -->
+                    <v-alert
+                      v-if="resetEmailError"
+                      type="error"
+                      variant="tonal"
+                      class="mt-4"
+                      closable
+                      @click:close="resetEmailError = ''"
+                    >
+                      <v-icon start>mdi-alert-circle</v-icon>
+                      {{ resetEmailError }}
+                    </v-alert>
+                  </v-form>
+                </v-card-text>
+                
+                <v-card-actions class="justify-end">
+                  <v-btn
+                    variant="text"
+                    @click="closeForgotPasswordDialog"
+                    :disabled="sendingResetEmail"
+                  >
+                    Cancel
+                  </v-btn>
+                  <v-btn
+                    color="primary"
+                    @click="sendResetEmail"
+                    :loading="sendingResetEmail"
+                    :disabled="!forgotPasswordFormValid"
+                  >
+                    Send Reset Email
+                  </v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-dialog>
 
             <!-- Theme Toggle (bottom right) -->
             <v-fab
@@ -206,6 +296,14 @@ export default {
     const rememberMe = ref(false)
     const isDark = ref(true)
     
+    // Forgot password state
+    const showForgotPasswordDialog = ref(false)
+    const forgotPasswordFormValid = ref(false)
+    const resetEmail = ref('')
+    const sendingResetEmail = ref(false)
+    const resetEmailSent = ref(false)
+    const resetEmailError = ref('')
+    
     const credentials = reactive({
       username: '',
       password: ''
@@ -233,6 +331,11 @@ export default {
     const passwordRules = [
       v => !!v || 'Password is required',
       v => v.length >= 4 || 'Password must be at least 4 characters'
+    ]
+    
+    const emailRules = [
+      v => !!v || 'Email is required',
+      v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || 'Email must be valid'
     ]
     
     // Computed properties
@@ -386,6 +489,63 @@ export default {
       }
     }
     
+    const sendResetEmail = async () => {
+      if (!forgotPasswordFormValid.value) return
+      
+      sendingResetEmail.value = true
+      resetEmailError.value = ''
+      resetEmailSent.value = false
+      
+      try {
+        const response = await fetch('/send_reset_password_mail', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            mail: resetEmail.value
+          })
+        })
+        
+        if (response.ok || response.status === 202) {
+          // Success - show confirmation message
+          resetEmailSent.value = true
+          showNotification('Password reset email sent successfully', 'success', 'mdi-email-check')
+          
+          // Auto-close dialog after a delay
+          setTimeout(() => {
+            closeForgotPasswordDialog()
+          }, 3000)
+        } else {
+          // Handle different error responses
+          let errorMsg = 'Failed to send reset email'
+          
+          if (response.status === 400) {
+            errorMsg = 'Please enter a valid email address'
+          } else if (response.status === 429) {
+            errorMsg = 'Too many requests. Please try again later.'
+          } else if (response.status >= 500) {
+            errorMsg = 'Server error. Please try again later.'
+          }
+          
+          resetEmailError.value = errorMsg
+        }
+      } catch (error) {
+        console.error('Reset email error:', error)
+        resetEmailError.value = 'Connection failed. Please check your network and try again.'
+      } finally {
+        sendingResetEmail.value = false
+      }
+    }
+    
+    const closeForgotPasswordDialog = () => {
+      showForgotPasswordDialog.value = false
+      resetEmail.value = ''
+      resetEmailSent.value = false
+      resetEmailError.value = ''
+      forgotPasswordFormValid.value = false
+    }
+    
     const parseUrlParameters = () => {
       const url = new URL(window.location.href)
       oauth.redirectURI = url.searchParams.get('redirect_uri') || ''
@@ -454,6 +614,14 @@ export default {
       messageIcon,
       errorMessage,
       
+      // Forgot password state
+      showForgotPasswordDialog,
+      forgotPasswordFormValid,
+      resetEmail,
+      sendingResetEmail,
+      resetEmailSent,
+      resetEmailError,
+      
       // Computed
       username: computed(() => credentials.username),
       password: computed({
@@ -464,6 +632,7 @@ export default {
       // Validation
       usernameRules,
       passwordRules,
+      emailRules,
       
       // Methods
       login,
@@ -472,7 +641,9 @@ export default {
       toggleTheme,
       showNotification,
       handleUsernameInput,
-      handlePasswordInput
+      handlePasswordInput,
+      sendResetEmail,
+      closeForgotPasswordDialog
     }
   }
 }
