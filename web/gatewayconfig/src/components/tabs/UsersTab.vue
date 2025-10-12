@@ -23,82 +23,6 @@
     </v-alert>
 
     <v-row>
-      <!-- Groups Section -->
-      <v-col cols="12" lg="6">
-        <v-card>
-          <v-card-title class="d-flex justify-space-between align-center">
-            <span>
-              <v-icon class="me-2">mdi-account-group</v-icon>
-              Groups
-            </span>
-            <v-btn
-              color="primary"
-              size="small"
-              prepend-icon="mdi-plus"
-              @click="openAddGroupDialog"
-            >
-              Add Group
-            </v-btn>
-          </v-card-title>
-          
-          <v-card-text class="pa-0">
-            <!-- Groups List -->
-            <div v-if="groups.length > 0">
-              <v-list>
-                <v-list-item
-                  v-for="group in groups"
-                  :key="group.guid"
-                  class="group-item"
-                >
-                  <template v-slot:prepend>
-                    <v-icon color="primary">mdi-account-group</v-icon>
-                  </template>
-                  
-                  <v-list-item-title>{{ group.name }}</v-list-item-title>
-                  <v-list-item-subtitle>
-                    {{ getUserCountInGroup(group.name) }} member(s)
-                  </v-list-item-subtitle>
-                  
-                  <template v-slot:append>
-                    <v-btn
-                      icon="mdi-pencil"
-                      variant="text"
-                      size="small"
-                      @click="openEditGroupDialog(group)"
-                      title="Edit group"
-                    ></v-btn>
-                    <v-btn
-                      icon="mdi-delete"
-                      variant="text"
-                      size="small"
-                      color="error"
-                      @click="deleteGroup(group.guid)"
-                      title="Delete group"
-                      :disabled="group.name === 'admin'"
-                    ></v-btn>
-                  </template>
-                </v-list-item>
-              </v-list>
-            </div>
-            
-            <!-- Empty Groups State -->
-            <div v-else class="text-center pa-8">
-              <v-icon size="48" color="grey" class="mb-2">mdi-account-group-outline</v-icon>
-              <p class="text-body-2 text-medium-emphasis mb-4">
-                No groups configured
-              </p>
-              <v-btn
-                color="primary"
-                prepend-icon="mdi-plus"
-                @click="openAddGroupDialog"
-              >
-                Add First Group
-              </v-btn>
-            </div>
-          </v-card-text>
-        </v-card>
-      </v-col>
-
       <!-- Users Section -->
       <v-col cols="12" lg="6">
         <v-card>
@@ -183,6 +107,82 @@
                 @click="openAddUserDialog"
               >
                 Add First User
+              </v-btn>
+            </div>
+          </v-card-text>
+        </v-card>
+      </v-col>
+
+      <!-- Groups Section -->
+      <v-col cols="12" lg="6">
+        <v-card>
+          <v-card-title class="d-flex justify-space-between align-center">
+            <span>
+              <v-icon class="me-2">mdi-account-group</v-icon>
+              Groups
+            </span>
+            <v-btn
+              color="primary"
+              size="small"
+              prepend-icon="mdi-plus"
+              @click="openAddGroupDialog"
+            >
+              Add Group
+            </v-btn>
+          </v-card-title>
+          
+          <v-card-text class="pa-0">
+            <!-- Groups List -->
+            <div v-if="groups.length > 0">
+              <v-list>
+                <v-list-item
+                  v-for="group in groups"
+                  :key="group.guid"
+                  class="group-item"
+                >
+                  <template v-slot:prepend>
+                    <v-icon color="primary">mdi-account-group</v-icon>
+                  </template>
+                  
+                  <v-list-item-title>{{ group.name }}</v-list-item-title>
+                  <v-list-item-subtitle>
+                    {{ getUserCountInGroup(group.name) }} member(s)
+                  </v-list-item-subtitle>
+                  
+                  <template v-slot:append>
+                    <v-btn
+                      icon="mdi-pencil"
+                      variant="text"
+                      size="small"
+                      @click="openEditGroupDialog(group)"
+                      title="Edit group"
+                    ></v-btn>
+                    <v-btn
+                      icon="mdi-delete"
+                      variant="text"
+                      size="small"
+                      color="error"
+                      @click="deleteGroup(group.guid)"
+                      title="Delete group"
+                      :disabled="group.name === 'admin'"
+                    ></v-btn>
+                  </template>
+                </v-list-item>
+              </v-list>
+            </div>
+            
+            <!-- Empty Groups State -->
+            <div v-else class="text-center pa-8">
+              <v-icon size="48" color="grey" class="mb-2">mdi-account-group-outline</v-icon>
+              <p class="text-body-2 text-medium-emphasis mb-4">
+                No groups configured
+              </p>
+              <v-btn
+                color="primary"
+                prepend-icon="mdi-plus"
+                @click="openAddGroupDialog"
+              >
+                Add First Group
               </v-btn>
             </div>
           </v-card-text>
@@ -290,6 +290,17 @@
             Cancel
           </v-btn>
           <v-btn
+            v-if="editingUser"
+            color="warning"
+            variant="tonal"
+            prepend-icon="mdi-key-change"
+            @click="resetPassword"
+            :loading="resettingPassword"
+            class="me-2"
+          >
+            Reset Password
+          </v-btn>
+          <v-btn
             color="primary"
             @click="saveUser"
             :disabled="!userFormValid"
@@ -313,6 +324,7 @@ export default {
       loading: false,
       error: null,
       saving: false,
+      resettingPassword: false,
       users: [],
       groups: [],
       
@@ -589,6 +601,38 @@ export default {
       } catch (error) {
         this.error = `Failed to delete user: ${error.message}`
         console.error('Error deleting user:', error)
+      }
+    },
+    
+    async resetPassword() {
+      if (!this.editingUser) {
+        return
+      }
+      
+      if (!confirm(`Are you sure you want to reset the password for ${this.editingUser.name}? A password reset email will be sent.`)) {
+        return
+      }
+      
+      this.resettingPassword = true
+      try {
+        const response = await apiRequest(`users/${this.editingUser.guid}/password_reset`, {
+          method: 'POST'
+        })
+        
+        if (!response.ok) {
+          throw new Error(`Failed to reset password: ${response.status} ${response.statusText}`)
+        }
+        
+        // Show success message
+        this.error = null
+        // You might want to show a success snackbar here instead
+        alert(`Password reset email has been sent to ${this.editingUser.mail}`)
+        
+      } catch (error) {
+        this.error = `Failed to reset password: ${error.message}`
+        console.error('Error resetting password:', error)
+      } finally {
+        this.resettingPassword = false
       }
     },
     

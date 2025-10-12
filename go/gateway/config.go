@@ -95,10 +95,22 @@ type ConfigDns struct {
 	ExternalIpv6 ConfigExternalIp `yaml:"external_ipv6" json:"external_ipv6"`
 }
 
+type ConfigMail struct {
+	Enabled   bool   `yaml:"enabled" json:"enabled"`
+	Email     string `yaml:"email" json:"email"`
+	Password  string `yaml:"password" json:"password"`
+	SmtpHost  string `yaml:"smtp_host" json:"smtp_host"`
+	SmtpPort  int    `yaml:"smtp_port" json:"smtp_port"`
+	UseTLS    bool   `yaml:"use_tls" json:"use_tls"`
+	FromEmail string `yaml:"from_email" json:"from_email"`
+	FromName  string `yaml:"from_name" json:"from_name"`
+}
+
 type Config struct {
 	file    string
 	Domains []*ConfigDomain `yaml:"domains" json:"domains"`
 	Dns     ConfigDns       `yaml:"dns" json:"dns"`
+	Mail    ConfigMail      `yaml:"mail" json:"mail"`
 }
 
 func (config *Config) GetDomain(guid string) *ConfigDomain {

@@ -66,3 +66,28 @@ export async function apiPost(endpoint, data) {
   
   return response
 }
+
+/**
+ * Makes a PUT request to an API endpoint
+ * @param {string} endpoint - The API endpoint
+ * @param {any} data - Data to send in the request body
+ * @returns {Promise<any>} - Parsed JSON response or response object
+ */
+export async function apiPut(endpoint, data) {
+  const response = await apiRequest(endpoint, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  })
+  
+  if (!response.ok) {
+    throw new Error(`API request failed: ${response.status} ${response.statusText}`)
+  }
+  
+  // Some endpoints might not return JSON
+  const contentType = response.headers.get('content-type')
+  if (contentType && contentType.includes('application/json')) {
+    return await response.json()
+  }
+  
+  return response
+}

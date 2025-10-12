@@ -43,6 +43,10 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.GET("/groups", ep.Check_Users, ep.GET_Groups)
 	r.POST("/groups", ep.Check_Users, ep.POST_Groups)
 	r.DELETE("/groups/:guid", ep.Check_Users, ep.DELETE_GroupsGuid)
+
+	r.GET("/mail/config", ep.GET_MailConfig)
+	r.PUT("/mail/config", ep.PUT_MailConfig)
+	r.POST("/mail/test", ep.POST_MailTest)
 }
 
 func (ep *Endpoints) GET_Domains(c *gin.Context) {
@@ -332,4 +336,98 @@ func (ep *Endpoints) DELETE_GroupsGuid(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"status": "deleted"})
+}
+
+func (ep *Endpoints) GET_MailConfig(c *gin.Context) {
+	config := ep.Gateway.config.Mail
+	// For security reasons, mask the password if it's set
+	if config.Password != "" {
+		config.Password = "-"
+	}
+	c.JSON(200, config)
+}
+
+func (ep *Endpoints) PUT_MailConfig(c *gin.Context) {
+	var mailConfig ConfigMail
+	if err := c.ShouldBindJSON(&mailConfig); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Handle password security logic
+	if mailConfig.Password == "-" {
+		// If Email or SmtpHost have been changed, reset the password
+		if ep.Gateway.config.Mail.Email != mailConfig.Email || ep.Gateway.config.Mail.SmtpHost != mailConfig.SmtpHost {
+			mailConfig.Password = ""
+		} else {
+			// Keep the existing password unchanged
+			mailConfig.Password = ep.Gateway.config.Mail.Password
+		}
+	}
+
+	ep.Gateway.config.Mail = mailConfig
+	if err := ep.Gateway.config.save(); err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Return the config with masked password for security
+	responseConfig := ep.Gateway.config.Mail
+	if responseConfig.Password != "" {
+		responseConfig.Password = "-"
+	}
+	c.JSON(200, responseConfig)
+}
+
+func (ep *Endpoints) POST_MailTest(c *gin.Context) {
+	var testRequest struct {
+		Email string `json:"email"`
+	}
+	if err := c.ShouldBindJSON(&testRequest); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !ep.Gateway.config.Mail.Enabled {
+		c.JSON(400, gin.H{"error": "Mail service is not enabled"})
+		return
+	}
+
+	// Create custom SMTP client with user configuration
+	client, err := smtp.NewCustomClient(
+		ep.Gateway.config.Domains[0].Name, // Use first domain as sender domain
+		ep.Gateway.config.Mail.SmtpHost,
+		ep.Gateway.config.Mail.SmtpPort,
+		ep.Gateway.config.Mail.Email,
+		ep.Gateway.config.Mail.Password,
+		ep.Gateway.dataDir,
+		ep.Gateway.config.Mail.UseTLS,
+	)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to create SMTP client: " + err.Error()})
+		return
+	}
+
+	// Send test email
+	message := &smtp.Message{
+		From:    ep.Gateway.config.Mail.FromEmail,
+		To:      []string{testRequest.Email},
+		Subject: "Gateway Mail Configuration Test",
+		Body:    "This is a test email from your Gateway mail configuration. If you receive this, your mail settings are working correctly!",
+		BodyHTML: `
+			<h2>Gateway Mail Configuration Test</h2>
+			<p>This is a test email from your Gateway mail configuration.</p>
+			<p><strong>If you receive this, your mail settings are working correctly!</strong></p>
+			<hr>
+			<p><small>Sent by Gateway Mail Service</small></p>
+		`,
+	}
+
+	if err := client.SendMail(message); err != nil {
+		c.JSON(500, gin.H{"error": "Failed to send test email: " + err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"status": "Test email sent successfully"})
 }

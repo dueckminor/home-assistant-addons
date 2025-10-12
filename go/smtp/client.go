@@ -158,25 +158,8 @@ func (c *Client) SendMail(msg *Message) error {
 		return fmt.Errorf("failed to build message: %w", err)
 	}
 
-	// Sign with DKIM if key is available
-	if c.dkimKey != nil {
-		emailContent, err = c.signDKIM(emailContent, msg)
-		if err != nil {
-			return fmt.Errorf("failed to sign with DKIM: %w", err)
-		}
-	}
-
-	// Discover SMTP server from recipients
-	recipients := append(msg.To, msg.Cc...)
-	recipients = append(recipients, msg.Bcc...)
-
-	host, port, err := c.discoverSMTPServer(recipients)
-	if err != nil {
-		return fmt.Errorf("failed to discover SMTP server: %w", err)
-	}
-
 	// Connect to SMTP server
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
 
 	var conn net.Conn
 	useTLS := c.config.UseTLS
@@ -185,7 +168,7 @@ func (c *Client) SendMail(msg *Message) error {
 	}
 
 	if useTLS {
-		tlsConfig := &tls.Config{ServerName: host}
+		tlsConfig := &tls.Config{ServerName: c.config.Host}
 		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: c.config.Timeout}, "tcp", addr, tlsConfig)
 	} else {
 		conn, err = net.DialTimeout("tcp", addr, c.config.Timeout)
@@ -196,7 +179,7 @@ func (c *Client) SendMail(msg *Message) error {
 	defer conn.Close()
 
 	// Create SMTP client
-	smtpClient, err := smtp.NewClient(conn, host)
+	smtpClient, err := smtp.NewClient(conn, c.config.Host)
 	if err != nil {
 		return fmt.Errorf("failed to create SMTP client: %w", err)
 	}
@@ -204,9 +187,9 @@ func (c *Client) SendMail(msg *Message) error {
 
 	// Authenticate if credentials are provided
 	if c.config.Username != "" && c.config.Password != "" {
-		auth := smtp.PlainAuth("", c.config.Username, c.config.Password, host)
+		auth := smtp.PlainAuth("", c.config.Username, c.config.Password, c.config.Host)
 		if err = smtpClient.Auth(auth); err != nil {
-			return fmt.Errorf("SMTP authentication failed for %s: %w", host, err)
+			return fmt.Errorf("SMTP authentication failed for %s: %w", c.config.Host, err)
 		}
 	}
 

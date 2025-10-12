@@ -31,6 +31,10 @@
                   <v-icon start>mdi-account-group</v-icon>
                   Users
                 </v-tab>
+                <v-tab value="mail">
+                  <v-icon start>mdi-email</v-icon>
+                  Mail
+                </v-tab>
               </v-tabs>
 
               <v-card-text class="pa-6">
@@ -61,6 +65,11 @@
                     <UsersTab 
                       :user-config="userConfig"
                     />
+                  </v-tabs-window-item>
+
+                  <!-- Mail Configuration Tab -->
+                  <v-tabs-window-item value="mail">
+                    <MailTab />
                   </v-tabs-window-item>
                 </v-tabs-window>
               </v-card-text>
@@ -94,6 +103,7 @@
 import DnsTab from '../components/tabs/DnsTab.vue'
 import DomainsTab from '../components/tabs/DomainsTab.vue'
 import UsersTab from '../components/tabs/UsersTab.vue'
+import MailTab from '../components/tabs/MailTab.vue'
 import { apiRequest, apiGet, apiPost } from '../utils/api.js'
 
 export default {
@@ -101,7 +111,8 @@ export default {
   components: {
     DnsTab,
     DomainsTab,
-    UsersTab
+    UsersTab,
+    MailTab
   },
   data() {
     return {
