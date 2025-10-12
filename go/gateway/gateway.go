@@ -48,8 +48,6 @@ type Gateway struct {
 	distAuth    string
 	dataDir     string
 
-	endpoints Endpoints
-
 	wg sync.WaitGroup
 
 	authServer *auth.AuthServer
@@ -87,37 +85,58 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 		err = g.StartAcmeClient(ctx)
 	}
 	if err == nil {
-		err = g.StartDevSupport(ctx)
-	}
-	if err == nil {
 		err = g.StartUI(ctx, 8099)
 	}
 
 	for _, domain := range g.config.Domains {
 		g.startDomain(domain)
-		g.ConfigureServers(domain.Routes)
+	}
+
+	authRoute := g.config.GetAuthRoute()
+	if authRoute != nil {
+		g.startAuthServer(authRoute)
+	}
+
+	for _, domain := range g.config.Domains {
+		for _, route := range domain.Routes {
+			if route.Target != "@auth" {
+				g.startRoute(route)
+			}
+		}
 	}
 
 	return nil
 }
 
-func (g *Gateway) ConfigureServer(proxy network.TLSProxy, server ConfigRoute) {
-	if strings.HasPrefix(server.Target, "http://") || strings.HasPrefix(server.Target, "https://") {
-		options := network.ParseReverseProxyOptions(server.Mode)
+func (g *Gateway) startRoute(route *ConfigRoute) {
+	hostname := route.GetHostname()
+
+	if strings.HasPrefix(route.Target, "http://") || strings.HasPrefix(route.Target, "https://") {
+		options := network.ReverseProxyOptions{
+			UseTargetHostname: route.Options.UseTargetHostname,
+			InsecureTLS:       route.Options.Insecure,
+			Auth:              route.Options.Auth,
+			AuthSecret:        route.Options.AuthSecret,
+		}
 		if options.Auth {
 			options.AuthClient = new(auth.AuthClient)
 			*options.AuthClient = *g.authClient
 			options.AuthClient.Secret = options.AuthSecret
 			options.SessionStore = g.authServer.GetSessionStore()
 		}
-		proxy.AddHandler(server.Hostname, network.NewHostImplReverseProxy(server.Target, options))
+		g.httpsServer.AddHandler(hostname, network.NewHostImplReverseProxy(route.Target, options))
 	}
-	if strings.HasPrefix(server.Target, "tcp://") {
-		proxy.AddHandler(server.Hostname, network.NewDialTCPRaw("tcp", server.Target[6:]))
+	if strings.HasPrefix(route.Target, "tcp://") {
+		g.httpsServer.AddHandler(hostname, network.NewDialTCPRaw("tcp", route.Target[6:]))
 	}
 }
 
-func (g *Gateway) configureAuthServer(proxy network.TLSProxy, server ConfigRoute) {
+func (g *Gateway) stopRoute(route *ConfigRoute) {
+	hostname := route.GetHostname()
+	g.httpsServer.DeleteHandler(hostname)
+}
+
+func (g *Gateway) startAuthServer(route *ConfigRoute) {
 	if g.authServer != nil {
 		panic("only one auth-server allowed")
 	}
@@ -133,94 +152,103 @@ func (g *Gateway) configureAuthServer(proxy network.TLSProxy, server ConfigRoute
 		panic(err)
 	}
 
+	hostname := route.GetHostname()
+
 	g.authClient = &auth.AuthClient{
-		AuthURI:      "https://" + server.Hostname,
+		AuthURI:      "https://" + hostname,
 		ClientID:     acc.ClientId,
 		ClientSecret: acc.ClientSecret,
 		ServerKey:    g.authServer.GetPublicKey(),
 		Secret:       "",
 	}
 
-	proxy.AddHandler(server.Hostname, network.NewGinHandler(r))
-}
-
-func (g *Gateway) ConfigureServers(servers []ConfigRoute) {
-	for _, server := range servers {
-		if server.Target == "@auth" {
-			g.configureAuthServer(g.httpsServer, server)
-		}
-	}
-	for _, server := range servers {
-		if server.Target != "@auth" {
-			g.ConfigureServer(g.httpsServer, server)
-		}
-	}
+	g.httpsServer.AddHandler(hostname, network.NewGinHandler(r))
 }
 
 func (g *Gateway) AddDomain(domain ConfigDomain) (ConfigDomain, error) {
-	for _, existingDomain := range g.config.Domains {
-		if existingDomain.Name == domain.Name {
-			return ConfigDomain{}, fmt.Errorf("domain %q already exists", domain.Name)
-		}
+	existingDomain := g.config.GetDomainByName(domain.Name)
+	if existingDomain != nil {
+		return ConfigDomain{}, fmt.Errorf("domain %q already exists", domain.Name)
 	}
 	domain.Guid = uuid.New().String()
 
-	for i := range domain.Routes {
-		domain.Routes[i].Guid = uuid.New().String()
+	g.startDomain(&domain)
+
+	for _, route := range domain.Routes {
+		route.Guid = uuid.New().String()
+		route.domain = &domain
+		if route.Target == "@auth" {
+			g.startAuthServer(route)
+		}
+		g.startRoute(route)
 	}
 
-	g.config.Domains = append(g.config.Domains, domain)
+	g.config.Domains = append(g.config.Domains, &domain)
 	g.config.save()
 	return domain, nil
 }
 
 func (g *Gateway) DelDomain(guid string) error {
-	for i, existingDomain := range g.config.Domains {
-		if existingDomain.Guid == guid {
-			g.config.Domains = append(g.config.Domains[:i], g.config.Domains[i+1:]...)
-			g.config.save()
-			return nil
-		}
+	existingDomain := g.config.DeleteDomain(guid)
+	if existingDomain == nil {
+		return fmt.Errorf("domain with guid %q not found", guid)
 	}
-	return fmt.Errorf("domain with guid %q not found", guid)
+
+	for _, route := range existingDomain.Routes {
+		g.stopRoute(route)
+	}
+	g.stopDomain(existingDomain)
+
+	g.config.save()
+	return nil
 }
 
 func (g *Gateway) AddRoute(domainGuid string, route ConfigRoute) (ConfigRoute, error) {
 	route.Guid = uuid.New().String()
-
-	for i, domain := range g.config.Domains {
-		if domain.Guid == domainGuid {
-			domain.Routes = append(domain.Routes, route)
-			g.config.Domains[i] = domain
-			g.config.save()
-			return route, nil
-		}
+	domain := g.config.GetDomain(domainGuid)
+	if domain == nil {
+		return ConfigRoute{}, fmt.Errorf("domain with guid %q not found", domainGuid)
 	}
-	return ConfigRoute{}, fmt.Errorf("domain with guid %q not found", domainGuid)
+	domain.AddRoute(&route)
+	g.startRoute(&route)
+	g.config.save()
+	return route, nil
 }
 
 func (g *Gateway) DelRoute(domainGuid string, routeGuid string) error {
-	for i, domain := range g.config.Domains {
-		if domain.Guid == domainGuid {
-			for j, route := range domain.Routes {
-				if route.Guid == routeGuid {
-					domain.Routes = append(domain.Routes[:j], domain.Routes[j+1:]...)
-					g.config.Domains[i] = domain
-					g.config.save()
-					return nil
-				}
-			}
-			return fmt.Errorf("route with guid %q not found", routeGuid)
-		}
+	domain := g.config.GetDomain(domainGuid)
+	if domain == nil {
+		return fmt.Errorf("domain with guid %q not found", domainGuid)
 	}
-	return fmt.Errorf("domain with guid %q not found", domainGuid)
+	route := domain.DeleteRoute(routeGuid)
+	if route == nil {
+		return fmt.Errorf("route with guid %q not found", routeGuid)
+	}
+	g.stopRoute(route)
+	g.config.save()
+	return nil
 }
 
-func (g *Gateway) startDomain(domain ConfigDomain) {
-	g.dnsServer.AddDomains(domain.Name)
+func (g *Gateway) UpdateRoute(domainGuid string, routeGuid string, route ConfigRoute) (ConfigRoute, error) {
+	domain := g.config.GetDomain(domainGuid)
+	if domain == nil {
+		return ConfigRoute{}, fmt.Errorf("domain with guid %q not found", domainGuid)
+	}
+	existingRoute := domain.GetRoute(routeGuid)
+	if existingRoute == nil {
+		return ConfigRoute{}, fmt.Errorf("route with guid %q not found", routeGuid)
+	}
 
-	serverCertificate := pki.NewServerCertificate(path.Join(g.dataDir, domain.Name), g.acmeClient, "*."+domain.Name)
-	serverCertificate.SetTLSServer(g.httpsServer)
+	existingRoute.Options = route.Options
+	if existingRoute.Hostname != route.Hostname {
+		g.stopRoute(existingRoute)
+		existingRoute.Hostname = route.Hostname
+	}
+	existingRoute.Target = route.Target
+	g.startRoute(existingRoute)
+	g.config.save()
+
+	return *existingRoute, nil
 }
 
 func (g *Gateway) StartDNS(ctx context.Context, port int) (err error) {
@@ -295,21 +323,39 @@ func (g *Gateway) StartHttpsServer(ctx context.Context, port int) (err error) {
 	return nil
 }
 
-func (g *Gateway) StartDevSupport(ctx context.Context) (err error) {
-	if g.config.Dev.Domain != "" {
-		if g.config.Dev.HttpsTarget != "" {
-			g.httpsServer.InternalOnly("*." + g.config.Dev.Domain)
-			g.ConfigureServer(g.httpsServer, ConfigRoute{
-				Hostname: "*." + g.config.Dev.Domain,
-				Target:   g.config.Dev.HttpsTarget,
-				Mode:     "raw",
-			})
-		}
-		if g.config.Dev.DnsTarget != "" {
-			g.dnsServer.AddProxyDomain(g.config.Dev.Domain, g.config.Dev.DnsTarget)
-		}
+func (g *Gateway) startDomain(domain *ConfigDomain) {
+	if domain.Redirect != nil && domain.Redirect.Target != "" {
+		g.startRedirectDomain(domain)
+		return
 	}
-	return nil
+
+	g.dnsServer.AddDomains(domain.Name)
+	domain.serverCertificate = pki.NewServerCertificate(path.Join(g.dataDir, domain.Name), g.acmeClient, "*."+domain.Name)
+	domain.serverCertificate.SetTLSServer(g.httpsServer)
+}
+
+func (g *Gateway) startRedirectDomain(domain *ConfigDomain) {
+	g.httpsServer.InternalOnly("*." + domain.Name)
+	g.startRoute(&ConfigRoute{
+		Hostname: "*",
+		Target:   domain.Redirect.GetHTTPSTarget(),
+		domain:   domain,
+	})
+	g.dnsServer.AddProxyDomain(domain.Name, domain.Redirect.GetDNSTarget())
+}
+
+func (g *Gateway) stopDomain(domain *ConfigDomain) {
+	if domain.Redirect != nil && domain.Redirect.Target != "" {
+		g.stopRedirectDomain(domain)
+		return
+	}
+
+	g.dnsServer.DelDomains(domain.Name)
+	domain.serverCertificate.Close()
+}
+
+func (g *Gateway) stopRedirectDomain(domain *ConfigDomain) {
+
 }
 
 func (g *Gateway) StartUI(ctx context.Context, port int) error {

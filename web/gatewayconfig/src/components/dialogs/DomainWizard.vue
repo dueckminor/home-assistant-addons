@@ -35,26 +35,12 @@
             <v-stepper-item
               :complete="currentStep > 2"
               :value="2"
-              title="Options"
-              subtitle="Access & routing settings"
+              title="Configuration"
+              subtitle="Access, routing & authentication"
             >
               <template v-slot:icon="{ complete }">
                 <v-icon v-if="complete" color="success">mdi-check</v-icon>
                 <v-icon v-else>mdi-cog</v-icon>
-              </template>
-            </v-stepper-item>
-
-            <v-divider></v-divider>
-
-            <v-stepper-item
-              :complete="currentStep > 3"
-              :value="3"
-              title="Auth Route"
-              subtitle="Authentication server"
-            >
-              <template v-slot:icon="{ complete }">
-                <v-icon v-if="complete" color="success">mdi-check</v-icon>
-                <v-icon v-else>mdi-shield-account</v-icon>
               </template>
             </v-stepper-item>
           </v-stepper-header>
@@ -220,96 +206,82 @@
                         persistent-hint
                       ></v-switch>
                       
-                      <v-text-field
-                        v-if="domainData.redirectToGateway"
-                        v-model="domainData.gatewayTarget"
-                        label="Gateway Target"
-                        variant="outlined"
-                        prepend-inner-icon="mdi-server-network"
-                        class="mt-4"
-                        placeholder="https://other-gateway.example.com"
-                        hint="The target gateway server to redirect traffic to"
-                        persistent-hint
-                        :rules="gatewayTargetRules"
-                      ></v-text-field>
-                      
-                      <div v-if="domainData.redirectToGateway" class="mt-3">
+                      <div v-if="domainData.redirectToGateway" class="mt-4">
+                        <v-text-field
+                          v-model="domainData.redirect.target"
+                          label="Gateway Target"
+                          variant="outlined"
+                          prepend-inner-icon="mdi-server-network"
+                          placeholder="other-gateway.example.com"
+                          hint="The target gateway server to redirect traffic to"
+                          persistent-hint
+                          :rules="redirectTargetRules"
+                          class="mb-4"
+                        ></v-text-field>
+
+                        <v-row>
+                          <v-col cols="12" md="4">
+                            <v-text-field
+                              v-model.number="domainData.redirect.http_port"
+                              label="HTTP Port"
+                              variant="outlined"
+                              type="number"
+                              prepend-inner-icon="mdi-web"
+                              hint="HTTP port on target gateway"
+                              persistent-hint
+                              :rules="portRules"
+                            ></v-text-field>
+                          </v-col>
+                          <v-col cols="12" md="4">
+                            <v-text-field
+                              v-model.number="domainData.redirect.https_port"
+                              label="HTTPS Port"
+                              variant="outlined"
+                              type="number"
+                              prepend-inner-icon="mdi-lock"
+                              hint="HTTPS port on target gateway"
+                              persistent-hint
+                              :rules="portRules"
+                            ></v-text-field>
+                          </v-col>
+                          <v-col cols="12" md="4">
+                            <v-text-field
+                              v-model.number="domainData.redirect.dns_port"
+                              label="DNS Port"
+                              variant="outlined"
+                              type="number"
+                              prepend-inner-icon="mdi-dns"
+                              hint="DNS port on target gateway"
+                              persistent-hint
+                              :rules="portRules"
+                            ></v-text-field>
+                          </v-col>
+                        </v-row>
+
                         <v-alert
                           type="warning"
                           variant="tonal"
                           density="compact"
-                          class="text-caption"
+                          class="text-caption mt-3"
                         >
                           <v-icon start>mdi-alert</v-icon>
-                          When enabled, all requests to this domain will be forwarded to the specified gateway instead of normal routing.
+                          When enabled, all requests to this domain will be forwarded to the specified gateway with the configured ports.
                         </v-alert>
                       </div>
                     </v-card-text>
                   </v-card>
                 </v-form>
 
-                <!-- Summary -->
-                <v-card variant="outlined" class="mt-4">
-                  <v-card-title class="text-subtitle-1">
-                    <v-icon class="me-2">mdi-information</v-icon>
-                    Domain Summary
-                  </v-card-title>
-                  <v-card-text>
-                    <v-list density="compact">
-                      <v-list-item>
-                        <v-list-item-title>Domain Name</v-list-item-title>
-                        <v-list-item-subtitle>{{ domainData.name || 'Not specified' }}</v-list-item-subtitle>
-                      </v-list-item>
-                      <v-list-item v-if="domainData.description">
-                        <v-list-item-title>Description</v-list-item-title>
-                        <v-list-item-subtitle>{{ domainData.description }}</v-list-item-subtitle>
-                      </v-list-item>
-                      <v-list-item>
-                        <v-list-item-title>Network Access</v-list-item-title>
-                        <v-list-item-subtitle>
-                          <v-chip :color="domainData.localNetworkOnly ? 'warning' : 'success'" size="small">
-                            {{ domainData.localNetworkOnly ? 'Local Only' : 'Public Access' }}
-                          </v-chip>
-                        </v-list-item-subtitle>
-                      </v-list-item>
-                      <v-list-item>
-                        <v-list-item-title>Routing</v-list-item-title>
-                        <v-list-item-subtitle>
-                          <v-chip :color="domainData.redirectToGateway ? 'primary' : 'default'" size="small">
-                            {{ domainData.redirectToGateway ? 'Gateway Redirect' : 'Normal Routing' }}
-                          </v-chip>
-                        </v-list-item-subtitle>
-                      </v-list-item>
-                      <v-list-item v-if="domainData.redirectToGateway && domainData.gatewayTarget">
-                        <v-list-item-title>Gateway Target</v-list-item-title>
-                        <v-list-item-subtitle>{{ domainData.gatewayTarget }}</v-list-item-subtitle>
-                      </v-list-item>
-                    </v-list>
-                  </v-card-text>
-                </v-card>
-              </v-card-text>
-            </v-stepper-window-item>
+                <!-- Authentication Configuration (only when needed) -->
+                <div v-if="showAuthConfiguration" class="mt-4">
+                  <v-alert
+                    type="info"
+                    variant="tonal"
+                    class="mb-4"
+                  >
+                    <strong>Authentication Required:</strong> This domain needs an authentication server route to handle user login. Configure the hostname for the built-in OAuth server below.
+                  </v-alert>
 
-            <!-- Step 3: Authentication Route -->
-            <v-stepper-window-item :value="3">
-              <v-card-text class="pt-4">
-                <div class="text-center mb-4">
-                  <v-icon size="48" color="purple" class="mb-3">mdi-shield-account</v-icon>
-                  <h3 class="text-h6 mb-2">Authentication Route</h3>
-                  <p class="text-body-2 text-medium-emphasis">
-                    Configure the mandatory authentication server route for this domain
-                  </p>
-                </div>
-
-                <v-alert
-                  type="info"
-                  variant="tonal"
-                  class="mb-4"
-                >
-                  <strong>Required:</strong> Every domain must have exactly one route that connects to the built-in OAuth authentication server. This route will be created first and handles user login for the domain.
-                </v-alert>
-
-                <v-form ref="step3Form" v-model="step3Valid">
                   <v-text-field
                     v-model="domainData.authHostname"
                     label="Authentication Route Hostname"
@@ -319,54 +291,41 @@
                     hint="Subdomain for the authentication server (e.g., 'auth' creates auth.example.com)"
                     persistent-hint
                     :rules="authHostnameRules"
-                    @input="validateStep3"
+                    @input="validateStep2"
                     required
                   >
                     <template v-slot:append-inner>
                       <span class="text-caption text-medium-emphasis">.{{ domainData.name }}</span>
                     </template>
                   </v-text-field>
-                </v-form>
 
-                <v-card variant="outlined" class="mt-4">
-                  <v-card-title class="text-subtitle-1">
-                    <v-icon class="me-2" color="purple">mdi-arrow-right</v-icon>
-                    Route Configuration
-                  </v-card-title>
-                  <v-card-text>
-                    <v-list density="compact">
-                      <v-list-item>
-                        <v-list-item-title>Full URL</v-list-item-title>
-                        <v-list-item-subtitle>
-                          <code>{{ domainData.authHostname || 'auth' }}.{{ domainData.name || 'example.com' }}</code>
-                        </v-list-item-subtitle>
-                      </v-list-item>
-                      <v-list-item>
-                        <v-list-item-title>Target</v-list-item-title>
-                        <v-list-item-subtitle>
-                          <code>@auth</code> (Built-in OAuth server)
-                        </v-list-item-subtitle>
-                      </v-list-item>
-                      <v-list-item>
-                        <v-list-item-title>Purpose</v-list-item-title>
-                        <v-list-item-subtitle>
-                          Handles user authentication and login for this domain
-                        </v-list-item-subtitle>
-                      </v-list-item>
-                    </v-list>
-                  </v-card-text>
-                </v-card>
-
-                <v-alert
-                  type="success"
-                  variant="tonal"
-                  density="compact"
-                  class="mt-4"
-                >
-                  This authentication route will be automatically created as the first route when the domain is created.
-                </v-alert>
+                  <v-card variant="outlined" class="mt-3">
+                    <v-card-title class="text-subtitle-1">
+                      <v-icon class="me-2" color="purple">mdi-shield-account</v-icon>
+                      Authentication Route Preview
+                    </v-card-title>
+                    <v-card-text>
+                      <v-list density="compact">
+                        <v-list-item>
+                          <v-list-item-title>Full URL</v-list-item-title>
+                          <v-list-item-subtitle>
+                            <code>{{ domainData.authHostname || 'auth' }}.{{ domainData.name || 'example.com' }}</code>
+                          </v-list-item-subtitle>
+                        </v-list-item>
+                        <v-list-item>
+                          <v-list-item-title>Target</v-list-item-title>
+                          <v-list-item-subtitle>
+                            <code>@auth</code> (Built-in OAuth server)
+                          </v-list-item-subtitle>
+                        </v-list-item>
+                      </v-list>
+                    </v-card-text>
+                  </v-card>
+                </div>
               </v-card-text>
             </v-stepper-window-item>
+
+
           </v-stepper-window>
         </v-stepper>
       </v-card-text>
@@ -405,18 +364,9 @@
           <v-btn
             v-if="currentStep === 2"
             color="purple"
-            variant="outlined"
-            @click="nextStep"
-          >
-            Next
-          </v-btn>
-
-          <v-btn
-            v-if="currentStep === 3"
-            color="purple"
             @click="saveDomain"
             :loading="saving"
-            :disabled="!step1Valid || !step3Valid"
+            :disabled="!step2Valid"
           >
             Create Domain
           </v-btn>
@@ -442,14 +392,18 @@ export default {
     return {
       currentStep: 1,
       step1Valid: false,
-      step3Valid: false,
       saving: false,
       domainData: {
         name: '',
         description: '',
         localNetworkOnly: false,
         redirectToGateway: false,
-        gatewayTarget: '',
+        redirect: {
+          target: '',
+          http_port: 10080,
+          https_port: 10443,
+          dns_port: 10053
+        },
         authHostname: 'auth'
       },
       dnsValidation: {
@@ -467,9 +421,12 @@ export default {
           return parts.length >= 3 || 'Domain must have at least 3 parts (e.g., subdomain.example.com) - you need DNS control of the parent domain'
         }
       ],
-      gatewayTargetRules: [
+      redirectTargetRules: [
         v => !this.domainData.redirectToGateway || !!v || 'Gateway target is required when redirection is enabled',
-        v => !v || /^https?:\/\/[a-zA-Z0-9.-]+(\:[0-9]+)?(\/.*)?$/.test(v) || 'Invalid gateway URI format (must start with http:// or https://)'
+        v => !v || /^[a-zA-Z0-9.-]+$/.test(v) || 'Invalid hostname format (no protocol, just hostname)'
+      ],
+      portRules: [
+        v => v >= 1 && v <= 65535 || 'Port must be between 1 and 65535'
       ],
       authHostnameRules: [
         v => !!v || 'Authentication hostname is required',
@@ -488,6 +445,29 @@ export default {
       set(value) {
         this.$emit('update:modelValue', value)
       }
+    },
+    step2Valid() {
+      // Step 2 is valid if: all basic validation passes AND (auth not needed OR auth is valid)
+      const basicValid = this.step1Valid && 
+        (!this.domainData.redirectToGateway || (this.domainData.redirect.target && 
+          this.redirectTargetRules.every(rule => rule(this.domainData.redirect.target) === true)))
+      
+      if (!this.showAuthConfiguration) {
+        return basicValid
+      }
+      
+      // If auth is needed, also validate auth hostname
+      const authValid = this.domainData.authHostname && 
+        this.authHostnameRules.every(rule => rule(this.domainData.authHostname) === true)
+      
+      return basicValid && authValid
+    },
+    showAuthConfiguration() {
+      // Show auth configuration if:
+      // 1. NOT using gateway redirect (redirect doesn't need auth route)
+      // 2. AND no other domain already has @auth target route (check would need API call)
+      // For now, simplified: show if not redirecting to gateway
+      return !this.domainData.redirectToGateway
     }
   },
   watch: {
@@ -501,7 +481,6 @@ export default {
     resetWizard() {
       this.currentStep = 1
       this.step1Valid = false
-      this.step3Valid = true // Auth hostname defaults to 'auth' which is valid
       this.saving = false
       this.dnsValidationInProgress = false
       if (this.dnsValidationTimeout) {
@@ -513,7 +492,12 @@ export default {
         description: '',
         localNetworkOnly: false,
         redirectToGateway: false,
-        gatewayTarget: '',
+        redirect: {
+          target: '',
+          http_port: 10080,
+          https_port: 10443,
+          dns_port: 10053
+        },
         authHostname: 'auth'
       }
       this.dnsValidation = {
@@ -534,22 +518,15 @@ export default {
       }
     },
 
-    validateStep3() {
-      try {
-        const hostname = this.domainData.authHostname || ''
-        this.step3Valid = hostname.length > 0 && this.authHostnameRules.every(rule => rule(hostname) === true)
-        console.log('validateStep3 - hostname:', hostname, 'step3Valid:', this.step3Valid)
-      } catch (error) {
-        console.error('Validation error:', error)
-        this.step3Valid = false
-      }
+    validateStep2() {
+      // Step 2 validation is now handled by the computed property
+      // This method exists for template compatibility
+      console.log('validateStep2 - step2Valid:', this.step2Valid)
     },
 
     nextStep() {
       if (this.currentStep === 1 && this.step1Valid) {
         this.currentStep = 2
-      } else if (this.currentStep === 2) {
-        this.currentStep = 3
       }
     },
 
@@ -605,8 +582,8 @@ export default {
     },
 
     async saveDomain() {
-      console.log('saveDomain called, step1Valid:', this.step1Valid)
-      if (!this.step1Valid) {
+      console.log('saveDomain called, step2Valid:', this.step2Valid)
+      if (!this.step2Valid) {
         console.log('Validation failed, not saving domain')
         return
       }
@@ -618,12 +595,15 @@ export default {
         // Prepare domain data for API
         const domainPayload = {
           name: this.domainData.name.trim().toLowerCase(),
-          routes: [
-            {
-              hostname: this.domainData.authHostname,
-              target: '@auth'
-            }
-          ]
+          routes: []
+        }
+
+        // Add auth route only if needed (when not using gateway redirect)
+        if (this.showAuthConfiguration && this.domainData.authHostname) {
+          domainPayload.routes.push({
+            hostname: this.domainData.authHostname,
+            target: '@auth'
+          })
         }
 
         // Add optional fields if they have values
@@ -633,10 +613,12 @@ export default {
         if (this.domainData.localNetworkOnly) {
           domainPayload.localNetworkOnly = true
         }
-        if (this.domainData.redirectToGateway) {
-          domainPayload.redirectToGateway = true
-          if (this.domainData.gatewayTarget) {
-            domainPayload.gatewayTarget = this.domainData.gatewayTarget
+        if (this.domainData.redirectToGateway && this.domainData.redirect.target) {
+          domainPayload.redirect = {
+            target: this.domainData.redirect.target,
+            http_port: this.domainData.redirect.http_port,
+            https_port: this.domainData.redirect.https_port,
+            dns_port: this.domainData.redirect.dns_port
           }
         }
 

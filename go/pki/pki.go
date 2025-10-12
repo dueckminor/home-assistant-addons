@@ -1,8 +1,10 @@
 package pki
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -18,11 +20,13 @@ type TLSServer interface {
 }
 
 type ServerCertificate interface {
+	io.Closer
 	SetTLSServer(tlsServer TLSServer)
 	GetCertAndKey() (crypto.PrivateKey, crypto.CertificateChain)
 }
 
 type serverCertificate struct {
+	cancel      func()
 	tlsServer   TLSServer
 	key         crypto.PrivateKey
 	chain       crypto.CertificateChain
@@ -34,6 +38,11 @@ type serverCertificate struct {
 	tlsConfig   *tls.Config
 	issuer      CA
 	dnsNames    []string
+}
+
+func (sc *serverCertificate) Close() error {
+	sc.cancel()
+	return nil
 }
 
 func (sc *serverCertificate) SetTLSServer(tlsServer TLSServer) {
@@ -54,17 +63,22 @@ func (sc *serverCertificate) GetCertAndKey() (crypto.PrivateKey, crypto.Certific
 	return sc.key, sc.chain
 }
 
-func (sc *serverCertificate) refreshLoop() {
+func (sc *serverCertificate) refreshLoop(ctx context.Context) {
 	for {
-		err := sc.refreshLoopStep()
+		err := sc.refreshLoopStep(ctx)
 		if err != nil {
 			fmt.Println(err)
-			time.Sleep(time.Second * 5)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.Tick(time.Second * 5):
+				continue
+			}
 		}
 	}
 }
 
-func (sc *serverCertificate) refreshLoopStep() (err error) {
+func (sc *serverCertificate) refreshLoopStep(ctx context.Context) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("panic in refreshLoopStep: %v", r)
@@ -106,8 +120,12 @@ func (sc *serverCertificate) refreshLoopStep() (err error) {
 
 	if percentUsed < 60.0 {
 		fmt.Println("no need to update")
-		time.Sleep(time.Hour * 24)
-		return nil
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Hour * 24):
+			return nil
+		}
 	}
 
 	fmt.Println("trying to get a new certificate")
@@ -157,7 +175,10 @@ func (sc *serverCertificate) createCert() (err error) {
 }
 
 func NewServerCertificate(filename string, issuer CA, dnsNames ...string) (sc ServerCertificate) {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	result := &serverCertificate{
+		cancel:      cancel,
 		keyFile:     filename + ".key.pem",
 		certFile:    filename + ".cert.pem",
 		newKeyFile:  filename + ".new-key.pem",
@@ -167,7 +188,7 @@ func NewServerCertificate(filename string, issuer CA, dnsNames ...string) (sc Se
 		dnsNames:    dnsNames,
 	}
 
-	go result.refreshLoop()
+	go result.refreshLoop(ctx)
 
 	return result
 }

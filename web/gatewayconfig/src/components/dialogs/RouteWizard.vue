@@ -119,7 +119,7 @@
                 </v-card-title>
                 <v-card-text>
                   <v-switch
-                    v-model="routeData.ignoreInvalidTls"
+                    v-model="routeData.options.insecure"
                     color="warning"
                     label="Ignore invalid TLS certificates"
                     hint="Allow connections to targets with self-signed or invalid certificates"
@@ -127,10 +127,10 @@
                   ></v-switch>
                   
                   <v-switch
-                    v-model="routeData.forceHttps"
-                    color="success"
-                    label="Force HTTPS"
-                    hint="Automatically redirect HTTP requests to HTTPS"
+                    v-model="routeData.options.use_target_hostname"
+                    color="info"
+                    label="Use target hostname for requests"
+                    hint="Forward the original hostname to the target server"
                     persistent-hint
                     class="mt-2"
                   ></v-switch>
@@ -148,23 +148,24 @@
                 </v-card-title>
                 <v-card-text>
                   <v-switch
-                    v-model="routeData.requireAuth"
+                    v-model="routeData.options.auth"
                     color="primary"
                     label="Require additional authorization"
                     hint="Force users to authenticate before accessing this route"
                     persistent-hint
                   ></v-switch>
                   
-                  <v-text-field
-                    v-if="routeData.requireAuth"
-                    v-model="routeData.authRealm"
-                    label="Authentication Realm"
-                    variant="outlined"
-                    class="mt-4"
-                    placeholder="Protected API"
-                    hint="Display name for the authentication prompt"
-                    persistent-hint
-                  ></v-text-field>
+                  <div v-if="routeData.options.auth" class="mt-4">
+                    <v-text-field
+                      v-model="routeData.options.auth_secret"
+                      label="Bypass Secret (Optional)"
+                      variant="outlined"
+                      class="mt-4"
+                      placeholder="my-secret-key"
+                      hint="Secret parameter value for bypassing auth (e.g., ?secret=my-secret-key) - needed for 3rd party apps like Home Assistant companion"
+                      persistent-hint
+                    ></v-text-field>
+                  </div>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -266,24 +267,27 @@
             <v-card-text>
               <v-row>
                 <v-col cols="12" md="6">
-                  <v-chip :color="routeData.ignoreInvalidTls ? 'warning' : 'default'" class="mb-2 mr-2">
-                    <v-icon start>{{ routeData.ignoreInvalidTls ? 'mdi-certificate-off' : 'mdi-certificate' }}</v-icon>
-                    {{ routeData.ignoreInvalidTls ? 'Ignore Invalid TLS' : 'Validate TLS' }}
+                  <v-chip :color="routeData.options.insecure ? 'warning' : 'default'" class="mb-2 mr-2">
+                    <v-icon start>{{ routeData.options.insecure ? 'mdi-certificate-off' : 'mdi-certificate' }}</v-icon>
+                    {{ routeData.options.insecure ? 'Ignore Invalid TLS' : 'Validate TLS' }}
                   </v-chip>
                   
-                  <v-chip :color="routeData.forceHttps ? 'success' : 'default'" class="mb-2 mr-2">
-                    <v-icon start>{{ routeData.forceHttps ? 'mdi-lock' : 'mdi-lock-open' }}</v-icon>
-                    {{ routeData.forceHttps ? 'Force HTTPS' : 'Allow HTTP' }}
+                  <v-chip :color="routeData.options.use_target_hostname ? 'info' : 'default'" class="mb-2 mr-2">
+                    <v-icon start>{{ routeData.options.use_target_hostname ? 'mdi-web' : 'mdi-web-off' }}</v-icon>
+                    {{ routeData.options.use_target_hostname ? 'Use Target Hostname' : 'Use Gateway Hostname' }}
                   </v-chip>
                 </v-col>
                 <v-col cols="12" md="6">
-                  <v-chip :color="routeData.requireAuth ? 'primary' : 'default'" class="mb-2 mr-2">
-                    <v-icon start>{{ routeData.requireAuth ? 'mdi-shield-account' : 'mdi-shield-off' }}</v-icon>
-                    {{ routeData.requireAuth ? 'Auth Required' : 'No Auth' }}
+                  <v-chip :color="routeData.options.auth ? 'primary' : 'default'" class="mb-2 mr-2">
+                    <v-icon start>{{ routeData.options.auth ? 'mdi-shield-account' : 'mdi-shield-off' }}</v-icon>
+                    {{ routeData.options.auth ? 'Auth Required' : 'No Auth' }}
                   </v-chip>
                   
-                  <div v-if="routeData.requireAuth && routeData.authRealm" class="text-caption mt-1">
-                    Realm: {{ routeData.authRealm }}
+                  <div v-if="routeData.options.auth && routeData.options.auth_secret" class="text-caption mt-1">
+                    <v-chip size="small" color="info" variant="tonal" class="mt-1">
+                      <v-icon start size="small">mdi-key</v-icon>
+                      Bypass with ?secret={{ routeData.options.auth_secret }}
+                    </v-chip>
                   </div>
                 </v-col>
               </v-row>
@@ -373,10 +377,12 @@ export default {
       routeData: {
         hostname: '',
         target: '',
-        ignoreInvalidTls: false,
-        forceHttps: true,
-        requireAuth: false,
-        authRealm: ''
+        options: {
+          insecure: false,
+          use_target_hostname: false,
+          auth: false,
+          auth_secret: ''
+        }
       },
       
       hostnameRules: [
@@ -480,9 +486,12 @@ export default {
       
       try {
         // TODO: Replace with actual API endpoint
-        const response = await apiRequest(`domains/${this.domainGuid}/routes/test`, 'POST', {
-          target: this.routeData.target,
-          ignoreInvalidTls: this.routeData.ignoreInvalidTls
+        const response = await apiRequest(`domains/${this.domainGuid}/routes/test`, {
+          method: 'POST',
+          body: JSON.stringify({
+            target: this.routeData.target,
+            insecure: this.routeData.options.insecure
+          })
         })
         
         this.testResult = response
@@ -546,10 +555,12 @@ export default {
       this.routeData = {
         hostname: '',
         target: '',
-        ignoreInvalidTls: false,
-        forceHttps: true,
-        requireAuth: false,
-        authRealm: ''
+        options: {
+          insecure: false,
+          use_target_hostname: false,
+          auth: false,
+          auth_secret: ''
+        }
       }
       this.testResult = null
       this.step1Valid = false

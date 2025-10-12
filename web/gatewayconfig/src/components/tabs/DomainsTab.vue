@@ -510,7 +510,9 @@ export default {
         console.log('Remove route:', routeGuid, 'from domain:', domainGuid)
         
         // Call the route deletion API
-        await apiRequest(`domains/${domainGuid}/routes/${routeGuid}`, 'DELETE')
+        await apiRequest(`domains/${domainGuid}/routes/${routeGuid}`, {
+          method: 'DELETE'
+        })
         
         // Update local state - remove the route from the domain
         const domain = this.domains.find(d => d.guid === domainGuid)

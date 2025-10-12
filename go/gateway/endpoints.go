@@ -31,6 +31,7 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.GET("/domains/:guid/routes", ep.GET_DomainsGuidRoutes)
 	r.POST("/domains/:guid/routes", ep.POST_DomainsGuidRoutes)
 	r.DELETE("/domains/:guid/routes/:rguid", ep.DELETE_DomainsGuidRoutesGuid)
+	r.PUT("/domains/:guid/routes/:rguid", ep.PUT_DomainsGuidRoutesGuid)
 }
 
 func (ep *Endpoints) GET_Domains(c *gin.Context) {
@@ -228,4 +229,19 @@ func (ep *Endpoints) DELETE_DomainsGuidRoutesGuid(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"status": "deleted"})
+}
+
+func (ep *Endpoints) PUT_DomainsGuidRoutesGuid(c *gin.Context) {
+	guid := c.Param("guid")
+	rguid := c.Param("rguid")
+
+	var route ConfigRoute
+	c.BindJSON(&route)
+
+	route, err := ep.Gateway.UpdateRoute(guid, rguid, route)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, route)
 }
