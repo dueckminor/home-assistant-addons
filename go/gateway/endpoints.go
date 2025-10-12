@@ -17,7 +17,54 @@ type Endpoints struct {
 	Gateway *Gateway
 }
 
+// CheckHomeAssistantAuth validates Home Assistant authentication headers
+// Allows GET requests for any authenticated HA user
+// Requires admin privileges for all other HTTP methods (POST, PUT, DELETE, etc.)
+func (ep *Endpoints) CheckHomeAssistantAuth(c *gin.Context) {
+	userID := c.GetHeader("X-Hass-User-ID")
+	isAdmin := c.GetHeader("X-Hass-Is-Admin")
+	username := c.GetHeader("X-Hass-User")
+
+	// Check if user is authenticated via Home Assistant
+	if userID == "" {
+		c.AbortWithStatusJSON(401, gin.H{"error": "Home Assistant authentication required"})
+		return
+	}
+
+	// Store user info in context for use by endpoints
+	c.Set("ha_user_id", userID)
+	c.Set("ha_username", username)
+	c.Set("ha_is_admin", isAdmin == "true")
+
+	// For non-GET methods, require admin privileges
+	if c.Request.Method != "GET" {
+		if isAdmin != "true" {
+			c.AbortWithStatusJSON(403, gin.H{
+				"error":  "Admin privileges required for this operation",
+				"user":   username,
+				"method": c.Request.Method,
+			})
+			return
+		}
+	}
+
+	c.Next()
+}
+
+// RequireAuthServer ensures the auth server is available before accessing user/group endpoints
+func (ep *Endpoints) RequireAuthServer(c *gin.Context) {
+	if ep.Gateway.authServer == nil {
+		c.AbortWithStatusJSON(503, gin.H{"error": "Authentication server not available"})
+		return
+	}
+	c.Next()
+}
+
 func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
+	// Apply Home Assistant authentication middleware to all API endpoints
+	r.Use(ep.CheckHomeAssistantAuth)
+
+	// DNS endpoints
 	r.GET("/dns/external/ipv4", ep.GET_ExternalIpv4)
 	r.POST("/dns/external/ipv4", ep.POST_ExternalIpv4)
 	r.GET("/dns/external/ipv6", ep.GET_ExternalIpv6)
@@ -26,27 +73,35 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.GET("/dns/ipv6", ep.GET_Ipv6)
 	r.GET("/dns/lookup", ep.GET_DnsLookup)
 
+	// Domain management endpoints
 	r.GET("/domains", ep.GET_Domains)
 	r.POST("/domains", ep.POST_Domains)
 	r.DELETE("/domains/:guid", ep.DELETE_Domains)
 
+	// Route management endpoints
 	r.GET("/domains/:guid/routes", ep.GET_DomainsGuidRoutes)
 	r.POST("/domains/:guid/routes", ep.POST_DomainsGuidRoutes)
 	r.DELETE("/domains/:guid/routes/:rguid", ep.DELETE_DomainsGuidRoutesGuid)
 	r.PUT("/domains/:guid/routes/:rguid", ep.PUT_DomainsGuidRoutesGuid)
 
-	r.GET("/users", ep.Check_Users, ep.GET_Users)
-	r.POST("/users", ep.Check_Users, ep.POST_Users)
-	r.DELETE("/users/:guid", ep.Check_Users, ep.DELETE_UsersGuid)
-	r.POST("/users/:guid/password_reset", ep.Check_Users, ep.POST_UsersGuidPasswordReset)
+	// User management endpoints (require both HA auth and auth server availability)
+	r.GET("/users", ep.RequireAuthServer, ep.GET_Users)
+	r.POST("/users", ep.RequireAuthServer, ep.POST_Users)
+	r.DELETE("/users/:guid", ep.RequireAuthServer, ep.DELETE_UsersGuid)
+	r.POST("/users/:guid/password_reset", ep.RequireAuthServer, ep.POST_UsersGuidPasswordReset)
 
-	r.GET("/groups", ep.Check_Users, ep.GET_Groups)
-	r.POST("/groups", ep.Check_Users, ep.POST_Groups)
-	r.DELETE("/groups/:guid", ep.Check_Users, ep.DELETE_GroupsGuid)
+	// Group management endpoints (require both HA auth and auth server availability)
+	r.GET("/groups", ep.RequireAuthServer, ep.GET_Groups)
+	r.POST("/groups", ep.RequireAuthServer, ep.POST_Groups)
+	r.DELETE("/groups/:guid", ep.RequireAuthServer, ep.DELETE_GroupsGuid)
 
+	// Mail configuration endpoints
 	r.GET("/mail/config", ep.GET_MailConfig)
 	r.PUT("/mail/config", ep.PUT_MailConfig)
 	r.POST("/mail/test", ep.POST_MailTest)
+
+	// Debug endpoint to inspect Home Assistant headers
+	r.GET("/debug/headers", ep.GET_DebugHeaders)
 }
 
 func (ep *Endpoints) GET_Domains(c *gin.Context) {
@@ -261,12 +316,6 @@ func (ep *Endpoints) PUT_DomainsGuidRoutesGuid(c *gin.Context) {
 	c.JSON(200, route)
 }
 
-func (ep *Endpoints) Check_Users(c *gin.Context) {
-	if ep.Gateway.authServer == nil {
-		c.AbortWithStatusJSON(503, gin.H{"error": "Authentication server not available"})
-	}
-}
-
 func (ep *Endpoints) GET_Users(c *gin.Context) {
 	users := ep.Gateway.authServer.Users()
 	c.JSON(200, gin.H{"users": users.Users()})
@@ -429,4 +478,36 @@ func (ep *Endpoints) POST_MailTest(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{"status": "Test email sent successfully"})
+}
+
+// GET_DebugHeaders returns all request headers for debugging Home Assistant integration
+func (ep *Endpoints) GET_DebugHeaders(c *gin.Context) {
+	headers := make(map[string]string)
+	for name, values := range c.Request.Header {
+		if len(values) > 0 {
+			headers[name] = values[0]
+		}
+	}
+
+	// Also include context values set by our auth middleware
+	haUserID, exists := c.Get("ha_user_id")
+	if exists {
+		headers["_context_ha_user_id"] = haUserID.(string)
+	}
+
+	haUsername, exists := c.Get("ha_username")
+	if exists {
+		headers["_context_ha_username"] = haUsername.(string)
+	}
+
+	haIsAdmin, exists := c.Get("ha_is_admin")
+	if exists {
+		headers["_context_ha_is_admin"] = fmt.Sprintf("%t", haIsAdmin.(bool))
+	}
+
+	c.JSON(200, gin.H{
+		"headers": headers,
+		"method":  c.Request.Method,
+		"path":    c.Request.URL.Path,
+	})
 }

@@ -405,6 +405,20 @@ func (g *Gateway) StartUI(ctx context.Context, port int) error {
 	api := r.Group("/api")
 	ep.setupEndpoints(api)
 
+	// Development endpoint to test headers without authentication (for debugging only)
+	r.GET("/api/dev/headers", func(c *gin.Context) {
+		headers := make(map[string]string)
+		for name, values := range c.Request.Header {
+			if len(values) > 0 {
+				headers[name] = values[0]
+			}
+		}
+		c.JSON(200, gin.H{
+			"headers": headers,
+			"note":    "This endpoint bypasses authentication - for development only",
+		})
+	})
+
 	g.wg.Add(1)
 
 	go func() {
