@@ -1,0 +1,38 @@
+/* Material Design Icons - Subset for Auth App (WOFF2 only, shared from gateway) */
+@font-face {
+  font-family: "Material Design Icons";
+  src: url("../assets/materialdesignicons-webfont.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+.mdi::before,
+.mdi-set {
+  display: inline-block;
+  font: normal normal normal 24px/1 "Material Design Icons";
+  font-size: inherit;
+  text-rendering: auto;
+  line-height: inherit;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Only the icons used in auth app */
+.mdi-account::before { content: "\F0004"; }
+.mdi-alert-circle::before { content: "\F0028"; }
+.mdi-check-circle::before { content: "\F05E0"; }
+.mdi-discord::before { content: "\F066F"; }
+.mdi-email::before { content: "\F01EE"; }
+.mdi-eye::before { content: "\F0208"; }
+.mdi-eye-off::before { content: "\F0209"; }
+.mdi-github::before { content: "\F02A4"; }
+.mdi-key-variant::before { content: "\F030B"; }
+.mdi-lock::before { content: "\F033E"; }
+.mdi-lock-check::before { content: "\F139A"; }
+.mdi-lock-reset::before { content: "\F0773"; }
+.mdi-login::before { content: "\F0342"; }
+.mdi-logout::before { content: "\F0343"; }
+.mdi-reddit::before { content: "\F044D"; }
+.mdi-shield-account::before { content: "\F088F"; }
+.mdi-shield-star-outline::before { content: "\F113C"; }

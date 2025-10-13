@@ -5,7 +5,8 @@
  */
 
 // Styles
-import '@mdi/font/css/materialdesignicons.css'
+// Material Design Icons will be served from the gateway
+import '../styles/mdi-external.css'
 import 'vuetify/styles'
 
 // Composables
