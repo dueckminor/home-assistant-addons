@@ -6,23 +6,27 @@
           <v-col cols="12" sm="8" md="6" lg="4" xl="3">
             <!-- Authentication Success Card -->
             <v-card 
-              v-if="authenticated" 
+              v-if="authenticated || redirecting" 
               class="auth-card"
               elevation="8"
             >
               <v-card-title class="text-center pa-6">
                 <div class="d-flex flex-column align-center">
-                  <v-avatar size="64" color="success" class="mb-4">
+                  <v-avatar v-if="redirecting" size="64" color="primary" class="mb-4">
+                    <v-progress-circular indeterminate size="32" width="3"></v-progress-circular>
+                  </v-avatar>
+                  <v-avatar v-else size="64" color="success" class="mb-4">
                     <v-icon size="32">mdi-check-circle</v-icon>
                   </v-avatar>
-                  <h2 class="text-h5 mb-2">Welcome back!</h2>
-                  <p class="text-body-1 text-medium-emphasis mb-0">
+                  <h2 v-if="redirecting" class="text-h5 mb-2">Redirecting...</h2>
+                  <h2 v-else class="text-h5 mb-2">Welcome back!</h2>
+                  <p v-if="!redirecting" class="text-body-1 text-medium-emphasis mb-0">
                     Logged in as <strong>{{ username }}</strong>
                   </p>
                 </div>
               </v-card-title>
 
-              <v-card-text class="pa-6 pt-0">
+              <v-card-text v-if="!redirecting" class="pa-6 pt-0">
                 <v-alert
                   type="success"
                   variant="tonal"
@@ -389,6 +393,7 @@ export default {
     const authenticated = ref(false)
     const loading = ref(false)
     const loggingOut = ref(false)
+    const redirecting = ref(false)
     const formValid = ref(false)
     const showPassword = ref(false)
     const rememberMe = ref(false)
@@ -551,21 +556,22 @@ export default {
         
         if (response.ok) {
           // Login successful
-          authenticated.value = true
-          credentials.password = '' // Clear password for security
-          
-          showNotification('Login successful!', 'success', 'mdi-check-circle')
           
           // Handle OAuth redirect if needed
           if (oauth.redirectURI && oauth.redirectURI !== '') {
+            redirecting.value = true // Show redirecting state
+            
             const redirectUrl = new URL('/oauth/authorize', window.location.origin)
             redirectUrl.searchParams.set('client_id', oauth.clientId)
             redirectUrl.searchParams.set('redirect_uri', oauth.redirectURI)
             redirectUrl.searchParams.set('response_type', oauth.responseType)
             
-            setTimeout(() => {
-              window.location.href = redirectUrl.toString()
-            }, 1500) // Give user time to see success message
+            // Redirect immediately - no delay needed
+            window.location.href = redirectUrl.toString()
+          } else {
+            // Show welcome screen - no notification needed
+            authenticated.value = true
+            credentials.password = '' // Clear password for security
           }
         } else {
           // Login failed
@@ -802,6 +808,7 @@ export default {
       authenticated,
       loading,
       loggingOut,
+      redirecting,
       formValid,
       showPassword,
       rememberMe,
