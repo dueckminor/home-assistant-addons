@@ -8,8 +8,49 @@ import VueRouter from 'unplugin-vue-router/vite'
 // Utilities
 import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url'
-import { copyFileSync, existsSync, mkdirSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'fs'
 import { resolve, dirname } from 'path'
+import yaml from 'js-yaml'
+
+// Function to calculate allowed hosts from gateway config
+const getAuthAllowedHosts = () => {
+  try {
+    const configPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../gen/data/gateway/config.yml')
+    if (!existsSync(configPath)) {
+      console.warn('Gateway config not found, using localhost for dev server')
+      return ['localhost']
+    }
+    
+    const configContent = readFileSync(configPath, 'utf8')
+    const config = yaml.load(configContent)
+    
+    const allowedHosts = []
+    
+    // Find all routes with target "@auth" across all domains
+    if (config.domains && Array.isArray(config.domains)) {
+      for (const domain of config.domains) {
+        if (domain.routes && Array.isArray(domain.routes)) {
+          for (const route of domain.routes) {
+            if (route.target === '@auth' && route.hostname && domain.name) {
+              allowedHosts.push(`${route.hostname}.${domain.name}`)
+            }
+          }
+        }
+      }
+    }
+    
+    // Always include localhost for local development
+    if (!allowedHosts.includes('localhost')) {
+      allowedHosts.push('localhost')
+    }
+    
+    console.log('Auth allowed hosts:', allowedHosts)
+    return allowedHosts
+  } catch (error) {
+    console.warn('Failed to read gateway config:', error.message)
+    return ['localhost']
+  }
+}
 
 // Plugin to copy WOFF2 font from our own node_modules during build
 const copyMdiFont = () => ({
@@ -84,6 +125,6 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    allowedHosts: ['auth.rh94-dev.dueckminor.de']
+    allowedHosts: getAuthAllowedHosts()
   },
 })
