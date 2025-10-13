@@ -21,24 +21,6 @@ type ReverseProxyOptions struct {
 	SessionStore      sessions.Store
 }
 
-func ParseReverseProxyOptions(options string) (result ReverseProxyOptions) {
-	for _, option := range strings.Split(options, ",") {
-		if option == "insecure" {
-			result.InsecureTLS = true
-		}
-		if option == "use-target-hostname" {
-			result.UseTargetHostname = true
-		}
-		if option == "auth" {
-			result.Auth = true
-		}
-		if strings.HasPrefix(option, "secret=") {
-			result.AuthSecret = option[7:]
-		}
-	}
-	return result
-}
-
 func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) ServeCtx {
 	r := gin.Default()
 

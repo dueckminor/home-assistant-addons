@@ -54,6 +54,7 @@ type TLSProxy interface {
 	ListenAndServe(ctx context.Context, network string, address string) error
 	SetExternalIp(address string)
 	AddHandler(sni string, handler any)
+	DeleteHandler(sni string)
 	InternalOnly(sni string)
 	AddTLSConfig(sni string, tlsConfig *tls.Config)
 }
@@ -128,6 +129,12 @@ func (tp *tlsProxy) AddHandler(sni string, handler any) {
 		tp.dialHandlers[sni] = dialHandler
 		delete(tp.serveHandlers, sni)
 	}
+}
+
+func (tp *tlsProxy) DeleteHandler(sni string) {
+	delete(tp.dialHandlers, sni)
+	delete(tp.serveHandlers, sni)
+	delete(tp.internal, sni)
 }
 
 func (tp *tlsProxy) InternalOnly(sni string) {

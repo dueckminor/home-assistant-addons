@@ -78,6 +78,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Build web assets
+        if: matrix.addon == 'gateway'
+        run: |
+          echo "Building web assets for gateway..."
+          pushd web/auth
+          npm ci
+          npm run build
+          popd
+          pushd web/gatewayconfig
+          npm ci
+          npm run build
+          popd
+
       - name: Build binaries for all platforms
         run: |
           echo "Building ${{ matrix.addon }} binaries for all platforms..."
@@ -86,16 +99,6 @@ jobs:
           
           # Build ARM64 binary  
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-arm64 ./go/tools/${{ matrix.addon }}/
-
-      - name: Build web assets
-        if: matrix.addon == 'gateway'
-        run: |
-          echo "Building web assets for gateway..."
-          cd web/auth
-          npm ci
-          npm run build
-          cp -r dist ../../addons/${{ matrix.addon }}/
-          cd ../..
 
       - name: Test multi-arch Docker build
         run: |

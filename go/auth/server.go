@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto"
+	"embed"
 	"encoding/base64"
 	"net"
 	"net/http"
@@ -10,18 +11,21 @@ import (
 	"strings"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
+	"github.com/dueckminor/home-assistant-addons/go/ginutil"
+	"github.com/dueckminor/home-assistant-addons/go/smtp"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
-	"github.com/gin-contrib/static"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 )
 
+//go:embed dist/*
+var distFS embed.FS
+
 func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer, err error) {
 	a = new(AuthServer)
-	a.distDir = distDir
 	a.dataDir = dataDir
 	a.clients = NewAuthClientConfigManager(path.Join(dataDir, "clients"))
 
@@ -35,22 +39,26 @@ func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer
 		return nil, err
 	}
 
-	r.Use(static.ServeRoot("/", distDir))
-	r.NoRoute(func(c *gin.Context) {
-		c.File(path.Join(distDir, "index.html"))
-	})
+	if distDir != "" {
+		ginutil.ServeFromUri(r, distDir)
+	} else {
+		ginutil.ServeEmbedFS(r, distFS, "dist")
+	}
 
 	a.Register(r)
 	return a, nil
 }
 
 type AuthServer struct {
-	distDir      string
 	dataDir      string
 	config       *AuthServerConfig
 	clients      AuthClientConfigManager
 	sessionStore sessions.Store
 	users        Users
+	// for the password reset
+	hostname   string
+	domain     string
+	smtpClient *smtp.Client
 }
 
 func (a *AuthServer) Register(r *gin.Engine) {
@@ -65,6 +73,12 @@ func (a *AuthServer) Register(r *gin.Engine) {
 	rg.GET("/status", a.handleStatus)
 	rg.GET("/oauth/authorize", a.handleOauthAuthorize)
 	rg.POST("/oauth/token", a.handleOauthToken)
+	rg.POST("/send_reset_password_mail", a.sendResetPasswordMail)
+	rg.POST("/reset_password", a.resetPassword)
+}
+
+func (a *AuthServer) Users() Users {
+	return a.users
 }
 
 func (a *AuthServer) GetPublicKey() (p crypto.PublicKey) {
@@ -80,6 +94,12 @@ func (a *AuthServer) GetSessionStore() sessions.Store {
 		a.sessionStore = cookie.NewStore(a.config.AuthKey, a.config.EncKey)
 	}
 	return a.sessionStore
+}
+
+func (a *AuthServer) EnableSMTP(hostname string, domain string, smtpClient *smtp.Client) {
+	a.hostname = hostname
+	a.domain = domain
+	a.smtpClient = smtpClient
 }
 
 func (a *AuthServer) login(c *gin.Context) {
@@ -256,6 +276,59 @@ func (a *AuthServer) handleLogout(c *gin.Context) {
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
 	}
+	c.AbortWithStatus(http.StatusAccepted)
+}
+
+func (a *AuthServer) sendResetPasswordMail(c *gin.Context) {
+	payload := struct {
+		Mail string
+	}{}
+
+	c.BindJSON(&payload)
+
+	if payload.Mail == "" {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	if a.smtpClient == nil {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+
+	go func() {
+
+		user, err := a.Users().StartPasswordReset(payload.Mail)
+		if err != nil {
+			return
+		}
+
+		resetURL := "https://" + a.hostname + "?password_reset=" + user.ResetToken
+		a.smtpClient.SendPasswordResetEmail(user.Mail, user.ResetToken, resetURL)
+	}()
+
+	c.AbortWithStatus(http.StatusAccepted)
+}
+
+func (a *AuthServer) resetPassword(c *gin.Context) {
+	payload := struct {
+		Token    string
+		Password string
+	}{}
+
+	c.BindJSON(&payload)
+
+	if payload.Token == "" || payload.Password == "" {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	err := a.Users().PasswordReset(payload.Token, payload.Password)
+	if err != nil {
+		c.AbortWithStatus(http.StatusForbidden)
+		return
+	}
+
 	c.AbortWithStatus(http.StatusAccepted)
 }
 

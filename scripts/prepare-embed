@@ -1,0 +1,23 @@
+#!/bin/bash
+# Build script for local development with multi-arch binaries
+
+set -eou pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+
+if [[ "${1:-}" == "--fast" ]]; then
+    if [[ -f "${ROOT_DIR}/go/auth/dist/index.html" ]] && [[ -f "${ROOT_DIR}/go/gatewayconfig/dist/index.html" ]]; then
+        echo "Fast build, skipping web assets..."
+        exit 0
+    fi
+fi
+
+echo "Building web assets..."
+
+pushd "${ROOT_DIR}/web/auth"
+npm run build
+popd
+
+pushd "${ROOT_DIR}/web/gatewayconfig"
+npm run build
+popd

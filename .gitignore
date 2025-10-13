@@ -5,3 +5,12 @@ __debug_*
 addons/*/dist
 addons/*/*-amd64
 addons/*/*-arm64
+
+# Font files (generated from node_modules during build)
+*.woff2
+*.woff
+*.ttf
+*.eot
+web/*/public/assets/*.woff*
+web/*/public/assets/*.ttf
+web/*/public/assets/*.eot

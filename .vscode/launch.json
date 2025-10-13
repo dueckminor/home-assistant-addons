@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+
         {
             "name": "Launch Gateway",
             "type": "go",
@@ -11,13 +12,32 @@
             "mode": "auto",
             "program": "${workspaceFolder}/go/tools/gateway/gateway.go",
             "envFile": "${workspaceFolder}/gen/data/env.txt",
+            "preLaunchTask": "build-web-fast",
             "args": [
-                "--data-dir=${workspaceFolder}/gen/data/gateway",
-                "--dist-dir=${workspaceFolder}/web/auth/dist",
+                "--data=${workspaceFolder}/gen/data/gateway",
                 "--dns-port=10053",
                 "--http-port=10080",
                 "--https-port=10443",
+                "--debug",
             ]
+        },
+        {
+            "name": "Launch Gateway (serve)",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/go/tools/gateway/gateway.go",
+            "envFile": "${workspaceFolder}/gen/data/env.txt",
+            "preLaunchTask": "serve",
+            "args": [
+                "--data=${workspaceFolder}/gen/data/gateway",
+                "--dist-auth=http://localhost:3000",
+                "--dist-gateway=http://localhost:3001",
+                "--dns-port=10053",
+                "--http-port=10080",
+                "--https-port=10443",
+                "--debug",
+            ],
         },
         {
             "name": "Launch MQTT-Bridge",
