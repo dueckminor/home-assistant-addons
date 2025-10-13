@@ -24,7 +24,10 @@ func reverseProxy(target string) gin.HandlerFunc {
 func ServeFromUri(r *gin.Engine, uri string) {
 	if strings.HasPrefix(uri, "http://") {
 		// use a reverse proxy - but only for non-API routes
-		r.NoRoute(reverseProxy(uri))
+		r.NoRoute(func(c *gin.Context) {
+			// make vite happy
+			c.Request.Host = "localhost"
+		}, reverseProxy(uri))
 	} else {
 		// serve static files - but only for non-API routes
 		r.NoRoute(static.ServeRoot("/", uri))
