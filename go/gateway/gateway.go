@@ -60,6 +60,12 @@ type Gateway struct {
 
 	httpServer  network.HttpToHttps
 	httpsServer network.TLSProxy
+
+	debug bool
+}
+
+func (g *Gateway) EnableDebugMode() {
+	g.debug = true
 }
 
 func (g *Gateway) Wait() {
@@ -403,6 +409,12 @@ func (g *Gateway) StartUI(ctx context.Context, port int) error {
 
 	ep := Endpoints{Gateway: g}
 	api := r.Group("/api")
+
+	if !g.debug {
+		// Apply Home Assistant authentication middleware to all API endpoints
+		api.Use(ep.CheckHomeAssistantAuth)
+	}
+
 	ep.setupEndpoints(api)
 
 	// Development endpoint to test headers without authentication (for debugging only)

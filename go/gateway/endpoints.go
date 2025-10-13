@@ -61,9 +61,6 @@ func (ep *Endpoints) RequireAuthServer(c *gin.Context) {
 }
 
 func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
-	// Apply Home Assistant authentication middleware to all API endpoints
-	r.Use(ep.CheckHomeAssistantAuth)
-
 	// DNS endpoints
 	r.GET("/dns/external/ipv4", ep.GET_ExternalIpv4)
 	r.POST("/dns/external/ipv4", ep.POST_ExternalIpv4)

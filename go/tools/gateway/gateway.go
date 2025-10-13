@@ -17,11 +17,13 @@ var distAuth string
 var dnsPort int
 var httpPort int
 var httpsPort int
+var debug bool
 
 func init() {
 	flag.StringVar(&data, "data", "/data", "the data dir")
 	flag.StringVar(&distGateway, "dist-gateway", "", "the dist dir for the gateway (or uri)")
 	flag.StringVar(&distAuth, "dist-auth", "", "the dist dir for the auth (or uri)")
+	flag.BoolVar(&debug, "debug", true, "start in debug mode (without authentication)")
 	flag.IntVar(&dnsPort, "dns-port", 53, "the DNS port")
 	flag.IntVar(&httpPort, "http-port", 80, "the HTTP port")
 	flag.IntVar(&httpsPort, "https-port", 443, "the HTTPS port")
@@ -44,6 +46,10 @@ func main() {
 	gw, err := gateway.NewGateway(data, distGateway, distAuth)
 	if err != nil {
 		panic(err)
+	}
+
+	if debug {
+		gw.EnableDebugMode()
 	}
 
 	err = gw.Start(ctx, dnsPort, httpPort, httpsPort, 8099)

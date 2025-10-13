@@ -18,6 +18,7 @@
                 "--dns-port=10053",
                 "--http-port=10080",
                 "--https-port=10443",
+                "--debug",
             ]
         },
         {
@@ -35,6 +36,7 @@
                 "--dns-port=10053",
                 "--http-port=10080",
                 "--https-port=10443",
+                "--debug",
             ],
         },
         {
