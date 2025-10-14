@@ -87,7 +87,7 @@
                       <!-- Status Indicators -->
                       <div class="d-flex align-center">
                         <!-- DNS Status (only for regular domains) -->
-                        <v-tooltip v-if="!domain.redirect" text="DNS Configuration Status">
+                        <v-tooltip v-if="!domain.redirect" :text="getDnsStatusTooltip(domain)">
                           <template v-slot:activator="{ props }">
                             <v-chip
                               v-bind="props"
@@ -192,13 +192,89 @@
                               <div class="d-flex align-center mb-2">
                                 <v-icon class="me-2" size="small">mdi-dns</v-icon>
                                 <span class="text-subtitle-2">DNS Configuration</span>
+                                <v-spacer></v-spacer>
+                                <v-btn
+                                  icon="mdi-refresh"
+                                  size="x-small"
+                                  variant="text"
+                                  @click="checkDomainDnsOnly(domain)"
+                                  :loading="domain.dnsChecking"
+                                  title="Refresh DNS status"
+                                ></v-btn>
+                                <v-btn
+                                  v-if="domain.dnsStatus"
+                                  :icon="domain.showDnsDetails ? 'mdi-chevron-up' : 'mdi-chevron-down'"
+                                  size="x-small"
+                                  variant="text"
+                                  @click="domain.showDnsDetails = !domain.showDnsDetails"
+                                  :title="domain.showDnsDetails ? 'Hide DNS details' : 'Show DNS details'"
+                                ></v-btn>
                               </div>
                               <div class="text-body-2">
                                 Status: <v-chip :color="getDnsStatusColor(domain)" size="x-small">{{ getDnsStatusText(domain) }}</v-chip>
                               </div>
-                              <div class="text-caption mt-1 text-medium-emphasis">
-                                Last checked: {{ formatDate(domain.lastDnsCheck) }}
+                              <div v-if="domain.dnsStatus?.hostnameChecked" class="text-caption mt-1 text-medium-emphasis">
+                                Checking: {{ domain.dnsStatus.hostnameChecked }}
                               </div>
+                              
+                              <!-- Expandable DNS Details -->
+                              <v-expand-transition>
+                                <div v-if="domain.showDnsDetails && domain.dnsStatus" class="mt-3 pt-2 border-t-thin">
+                                  <div class="text-caption">
+                                    <!-- IPv4 Status -->
+                                    <div v-if="domain.dnsStatus.ipv4" class="mb-2">
+                                      <div class="d-flex align-center mb-1">
+                                        <v-icon 
+                                          size="x-small" 
+                                          :color="domain.dnsStatus.ipv4.status === 'ok' ? 'success' : domain.dnsStatus.ipv4.status === 'warning' ? 'warning' : 'error'"
+                                          class="me-1"
+                                        >
+                                          {{ domain.dnsStatus.ipv4.status === 'ok' ? 'mdi-check' : domain.dnsStatus.ipv4.status === 'warning' ? 'mdi-alert' : 'mdi-close' }}
+                                        </v-icon>
+                                        <strong>IPv4 (A Record)</strong>
+                                      </div>
+                                      <div class="ms-4">
+                                        <div>Expected: {{ domain.dnsStatus.ipv4.expected }}</div>
+                                        <div v-if="domain.dnsStatus.ipv4.actual?.length" class="text-medium-emphasis">
+                                          Actual: {{ domain.dnsStatus.ipv4.actual.join(', ') }}
+                                        </div>
+                                        <div v-else class="text-medium-emphasis">
+                                          Actual: No records found
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    <!-- IPv6 Status -->
+                                    <div v-if="domain.dnsStatus.ipv6" class="mb-2">
+                                      <div class="d-flex align-center mb-1">
+                                        <v-icon 
+                                          size="x-small" 
+                                          :color="domain.dnsStatus.ipv6.status === 'ok' ? 'success' : domain.dnsStatus.ipv6.status === 'warning' ? 'warning' : 'error'"
+                                          class="me-1"
+                                        >
+                                          {{ domain.dnsStatus.ipv6.status === 'ok' ? 'mdi-check' : domain.dnsStatus.ipv6.status === 'warning' ? 'mdi-alert' : 'mdi-close' }}
+                                        </v-icon>
+                                        <strong>IPv6 (AAAA Record)</strong>
+                                      </div>
+                                      <div class="ms-4">
+                                        <div>Expected: {{ domain.dnsStatus.ipv6.expected }}</div>
+                                        <div v-if="domain.dnsStatus.ipv6.actual?.length" class="text-medium-emphasis">
+                                          Actual: {{ domain.dnsStatus.ipv6.actual.join(', ') }}
+                                        </div>
+                                        <div v-else class="text-medium-emphasis">
+                                          Actual: No records found
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    <!-- Last Checked -->
+                                    <div class="text-medium-emphasis">
+                                      Last checked: {{ formatDate(domain.dnsStatus.lastChecked) }}
+                                    </div>
+                                  </div>
+                                </div>
+                              </v-expand-transition>
+
                             </v-card-text>
                           </v-card>
                         </v-col>
@@ -212,8 +288,13 @@
                               <div class="text-body-2">
                                 Status: <v-chip :color="getCertificateStatusColor(domain)" size="x-small">{{ getCertificateStatusText(domain) }}</v-chip>
                               </div>
-                              <div class="text-caption mt-1 text-medium-emphasis" v-if="domain.certificate && domain.certificate.expiresAt">
-                                Expires: {{ formatDate(domain.certificate.expiresAt) }}
+                              <div v-if="domain.server_certificate" class="text-caption mt-1 text-medium-emphasis">
+                                <div v-if="domain.server_certificate.valid_not_before">
+                                  Valid from: {{ formatDate(domain.server_certificate.valid_not_before) }}
+                                </div>
+                                <div v-if="domain.server_certificate.valid_not_after">
+                                  Valid until: {{ formatDate(domain.server_certificate.valid_not_after) }}
+                                </div>
                               </div>
                             </v-card-text>
                           </v-card>
@@ -383,11 +464,159 @@ export default {
         this.error = null
         const response = await apiGet('domains')
         this.domains = response.domains || []
+        
+        // Initialize UI state for each domain
+        this.domains.forEach(domain => {
+          domain.showDnsDetails = false
+        })
+        
+        // Check DNS status for each domain
+        await this.checkDnsStatusForAllDomains()
       } catch (err) {
         this.error = `Failed to load domains: ${err.message}`
         console.error('Error loading domains:', err)
       } finally {
         this.loading = false
+      }
+    },
+
+    // DNS Status Checking Methods
+    async checkDnsStatusForAllDomains() {
+      // Get external IPs once
+      const [externalIpv4, externalIpv6] = await Promise.allSettled([
+        this.getExternalIp('ipv4'),
+        this.getExternalIp('ipv6')
+      ])
+
+      // Check DNS for each domain
+      for (const domain of this.domains) {
+        if (!domain.redirect) { // Only check DNS for non-redirect domains
+          domain.dnsStatus = await this.checkDomainDnsStatus(domain, externalIpv4, externalIpv6)
+        }
+      }
+    },
+
+    async getExternalIp(version) {
+      try {
+        const response = await apiGet(`dns/external/${version}`)
+        return response.address
+      } catch (error) {
+        console.warn(`Failed to get external ${version}:`, error)
+        return null
+      }
+    },
+
+    async checkDomainDnsStatus(domain, externalIpv4Result, externalIpv6Result) {
+      const status = {
+        status: 'ok',
+        ipv4: null,
+        ipv6: null,
+        hostnameChecked: null,
+        lastChecked: new Date().toISOString()
+      }
+
+      const expectedIpv4 = externalIpv4Result.status === 'fulfilled' ? externalIpv4Result.value : null
+      const expectedIpv6 = externalIpv6Result.status === 'fulfilled' ? externalIpv6Result.value : null
+
+      // Determine hostname to check - use wildcard or first route hostname
+      let hostnameToCheck = `*.${domain.name}` // Default to wildcard
+      
+      // If domain has routes, check the first route's hostname instead
+      if (domain.routes && domain.routes.length > 0) {
+        hostnameToCheck = `${domain.routes[0].hostname}.${domain.name}`
+      }
+
+      // Store which hostname we're checking
+      status.hostnameChecked = hostnameToCheck
+
+      // Check IPv4 (A record)
+      if (expectedIpv4) {
+        status.ipv4 = await this.checkDnsRecord(hostnameToCheck, 'A', expectedIpv4)
+      }
+
+      // Check IPv6 (AAAA record)
+      if (expectedIpv6) {
+        status.ipv6 = await this.checkDnsRecord(hostnameToCheck, 'AAAA', expectedIpv6)
+      }
+
+      // Determine overall status
+      const ipv4Status = status.ipv4?.status || 'unknown'
+      const ipv6Status = status.ipv6?.status || 'unknown'
+
+      if (ipv4Status === 'error' || ipv6Status === 'error') {
+        status.status = 'error'
+      } else if (ipv4Status === 'warning' || ipv6Status === 'warning') {
+        status.status = 'warning'
+      } else if (ipv4Status === 'ok' || ipv6Status === 'ok') {
+        status.status = 'ok'
+      } else {
+        status.status = 'unknown'
+      }
+
+      return status
+    },
+
+    async checkDomainDnsOnly(domain) {
+      if (domain.redirect) return // Skip redirect domains
+      
+      try {
+        domain.dnsChecking = true
+        
+        // Get external IPs
+        const [externalIpv4, externalIpv6] = await Promise.allSettled([
+          this.getExternalIp('ipv4'),
+          this.getExternalIp('ipv6')
+        ])
+        
+        // Update DNS status for this domain
+        domain.dnsStatus = await this.checkDomainDnsStatus(domain, externalIpv4, externalIpv6)
+      } catch (error) {
+        console.error('Error checking DNS for domain:', domain.name, error)
+      } finally {
+        domain.dnsChecking = false
+      }
+    },
+
+    async checkDnsRecord(domainName, recordType, expectedIp) {
+      try {
+        const response = await apiGet(`dns/lookup?hostname=${domainName}&type=${recordType}`)
+        
+        if (response.records && response.records.length > 0) {
+          // Check if any of the returned records match the expected IP
+          const actualIps = response.records.map(record => record.value || record.ip || record)
+          const matches = actualIps.includes(expectedIp)
+          
+          return {
+            status: matches ? 'ok' : 'error',
+            expected: expectedIp,
+            actual: actualIps,
+            matches
+          }
+        } else {
+          return {
+            status: 'error',
+            expected: expectedIp,
+            actual: [],
+            error: 'No records found'
+          }
+        }
+      } catch (error) {
+        // Handle 404 as "no records found"
+        if (error.message.includes('404')) {
+          return {
+            status: 'warning',
+            expected: expectedIp,
+            actual: [],
+            error: 'No DNS records configured'
+          }
+        }
+        
+        return {
+          status: 'error',
+          expected: expectedIp,
+          actual: [],
+          error: error.message
+        }
       }
     },
 
@@ -448,51 +677,114 @@ export default {
     },
 
     getDnsStatusText(domain) {
-      if (!domain.dnsStatus) return 'Unknown'
+      if (!domain.dnsStatus) return 'Checking...'
+      
+      const ipv4Status = domain.dnsStatus.ipv4?.status
+      const ipv6Status = domain.dnsStatus.ipv6?.status
+      
+      // Count configured records
+      let configuredCount = 0
+      let totalRecords = 0
+      
+      if (domain.dnsStatus.ipv4) {
+        totalRecords++
+        if (ipv4Status === 'ok') configuredCount++
+      }
+      
+      if (domain.dnsStatus.ipv6) {
+        totalRecords++
+        if (ipv6Status === 'ok') configuredCount++
+      }
+      
+      if (totalRecords === 0) return 'No checks'
+      if (configuredCount === totalRecords) return 'All OK'
+      if (configuredCount > 0) return `${configuredCount}/${totalRecords} OK`
+      
       switch (domain.dnsStatus.status) {
-        case 'ok': return 'Configured'
-        case 'warning': return 'Warning'
+        case 'warning': return 'Missing'
         case 'error': return 'Error'
         default: return 'Unknown'
       }
     },
 
+    getDnsStatusTooltip(domain) {
+      if (!domain.dnsStatus) return 'DNS status not checked'
+      
+      const lines = []
+      
+      if (domain.dnsStatus.hostnameChecked) {
+        lines.push(`Checking DNS for: ${domain.dnsStatus.hostnameChecked}`)
+        lines.push('')
+      }
+      
+      if (domain.dnsStatus.ipv4) {
+        const ipv4 = domain.dnsStatus.ipv4
+        const status = ipv4.status === 'ok' ? '✅' : ipv4.status === 'warning' ? '⚠️' : '❌'
+        lines.push(`${status} IPv4 (A): Expected ${ipv4.expected}`)
+        if (ipv4.actual && ipv4.actual.length > 0) {
+          lines.push(`   Actual: ${ipv4.actual.join(', ')}`)
+        } else {
+          lines.push(`   Actual: No records found`)
+        }
+      }
+      
+      if (domain.dnsStatus.ipv6) {
+        const ipv6 = domain.dnsStatus.ipv6
+        const status = ipv6.status === 'ok' ? '✅' : ipv6.status === 'warning' ? '⚠️' : '❌'
+        lines.push(`${status} IPv6 (AAAA): Expected ${ipv6.expected}`)
+        if (ipv6.actual && ipv6.actual.length > 0) {
+          lines.push(`   Actual: ${ipv6.actual.join(', ')}`)
+        } else {
+          lines.push(`   Actual: No records found`)
+        }
+      }
+      
+      if (lines.length === 0) {
+        return 'No DNS checks performed'
+      }
+      
+      lines.push('', `Last checked: ${new Date(domain.dnsStatus.lastChecked).toLocaleString()}`)
+      return lines.join('\n')
+    },
+
     // Certificate Status Methods
     getCertificateStatusColor(domain) {
-      if (!domain.certificate) return 'grey'
-      const cert = domain.certificate
-      if (!cert.valid) return 'error'
+      if (!domain.server_certificate) return 'grey'
+      const cert = domain.server_certificate
+      if (!cert.valid_not_after) return 'grey'
       
       // Check expiration
-      const expiresAt = new Date(cert.expiresAt)
+      const expiresAt = new Date(cert.valid_not_after)
       const now = new Date()
       const daysUntilExpiry = (expiresAt - now) / (1000 * 60 * 60 * 24)
       
+      if (daysUntilExpiry < 0) return 'error' // Expired
       if (daysUntilExpiry < 7) return 'error'
       if (daysUntilExpiry < 30) return 'warning'
       return 'success'
     },
 
     getCertificateStatusIcon(domain) {
-      if (!domain.certificate) return 'mdi-help'
-      const cert = domain.certificate
-      if (!cert.valid) return 'mdi-close'
+      if (!domain.server_certificate) return 'mdi-help'
+      const cert = domain.server_certificate
+      if (!cert.valid_not_after) return 'mdi-help'
       
-      const expiresAt = new Date(cert.expiresAt)
+      const expiresAt = new Date(cert.valid_not_after)
       const now = new Date()
       const daysUntilExpiry = (expiresAt - now) / (1000 * 60 * 60 * 24)
       
+      if (daysUntilExpiry < 0) return 'mdi-close' // Expired
       if (daysUntilExpiry < 7) return 'mdi-alert'
       if (daysUntilExpiry < 30) return 'mdi-clock-alert'
       return 'mdi-check'
     },
 
     getCertificateStatusText(domain) {
-      if (!domain.certificate) return 'None'
-      const cert = domain.certificate
-      if (!cert.valid) return 'Invalid'
+      if (!domain.server_certificate) return 'None'
+      const cert = domain.server_certificate
+      if (!cert.valid_not_after) return 'Unknown'
       
-      const expiresAt = new Date(cert.expiresAt)
+      const expiresAt = new Date(cert.valid_not_after)
       const now = new Date()
       const daysUntilExpiry = Math.floor((expiresAt - now) / (1000 * 60 * 60 * 24))
       
@@ -503,12 +795,13 @@ export default {
     },
 
     getCertificateTooltip(domain) {
-      if (!domain.certificate) return 'No certificate configured'
-      const cert = domain.certificate
-      if (!cert.valid) return 'Certificate is invalid'
+      if (!domain.server_certificate) return 'No certificate configured'
+      const cert = domain.server_certificate
+      if (!cert.valid_not_after) return 'Certificate information unavailable'
       
-      const expiresAt = new Date(cert.expiresAt)
-      return `Certificate expires on ${expiresAt.toLocaleDateString()}`
+      const validFrom = new Date(cert.valid_not_before)
+      const validUntil = new Date(cert.valid_not_after)
+      return `Certificate valid from ${validFrom.toLocaleDateString()} until ${validUntil.toLocaleDateString()}`
     },
 
     // Route Management Methods

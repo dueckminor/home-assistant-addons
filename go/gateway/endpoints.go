@@ -101,8 +101,32 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.GET("/debug/headers", ep.GET_DebugHeaders)
 }
 
+type CertificateInfo struct {
+	ValidNotBefore time.Time `json:"valid_not_before"`
+	ValidNotAfter  time.Time `json:"valid_not_after,omitempty"`
+}
+type DomainWithStatus struct {
+	ConfigDomain      `json:",inline"`
+	ServerCertificate *CertificateInfo `json:"server_certificate"`
+}
+
 func (ep *Endpoints) GET_Domains(c *gin.Context) {
-	c.JSON(200, gin.H{"domains": ep.Gateway.config.Domains})
+	domainsWithStatus := make([]DomainWithStatus, 0, len(ep.Gateway.config.Domains))
+	for _, domain := range ep.Gateway.config.Domains {
+		domainWithStatus := DomainWithStatus{
+			ConfigDomain: *domain,
+		}
+		chain := domain.serverCertificate.GetChain()
+		if chain != nil {
+			domainWithStatus.ServerCertificate = &CertificateInfo{
+				ValidNotBefore: chain[0].OBJ().NotBefore,
+				ValidNotAfter:  chain[0].OBJ().NotAfter,
+			}
+		}
+		domainsWithStatus = append(domainsWithStatus, domainWithStatus)
+	}
+
+	c.JSON(200, gin.H{"domains": domainsWithStatus})
 }
 
 func (ep *Endpoints) POST_Domains(c *gin.Context) {

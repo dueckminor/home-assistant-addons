@@ -22,14 +22,19 @@ type TLSServer interface {
 type ServerCertificate interface {
 	io.Closer
 	SetTLSServer(tlsServer TLSServer)
+	GetChain() crypto.CertificateChain
 	GetCertAndKey() (crypto.PrivateKey, crypto.CertificateChain)
+}
+
+type keyAndChain struct {
+	key   crypto.PrivateKey
+	chain crypto.CertificateChain
 }
 
 type serverCertificate struct {
 	cancel      func()
 	tlsServer   TLSServer
-	key         crypto.PrivateKey
-	chain       crypto.CertificateChain
+	keyAndChain *keyAndChain
 	keyFile     string
 	certFile    string
 	newKeyFile  string
@@ -59,8 +64,20 @@ func (sc *serverCertificate) updateTLSServer() {
 	}
 }
 
+func (sc *serverCertificate) GetChain() crypto.CertificateChain {
+	keyAndChain := sc.keyAndChain
+	if keyAndChain == nil {
+		return nil
+	}
+	return keyAndChain.chain
+}
+
 func (sc *serverCertificate) GetCertAndKey() (crypto.PrivateKey, crypto.CertificateChain) {
-	return sc.key, sc.chain
+	keyAndChain := sc.keyAndChain
+	if keyAndChain == nil {
+		return nil, nil
+	}
+	return keyAndChain.key, keyAndChain.chain
 }
 
 func (sc *serverCertificate) refreshLoop(ctx context.Context) {
@@ -106,6 +123,11 @@ func (sc *serverCertificate) refreshLoopStep(ctx context.Context) (err error) {
 				Leaf:        chain[0].OBJ(),
 			},
 		},
+	}
+
+	sc.keyAndChain = &keyAndChain{
+		key:   key,
+		chain: chain,
 	}
 
 	sc.updateTLSServer()
