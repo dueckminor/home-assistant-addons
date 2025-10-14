@@ -46,6 +46,19 @@ jobs:
             echo "version=latest" >> $GITHUB_OUTPUT
           fi
 
+      - name: Build web assets
+        if: matrix.addon == 'gateway'
+        run: |
+          echo "Building web assets for gateway..."
+          pushd web/auth
+          npm ci
+          npm run build
+          popd
+          pushd web/gatewayconfig
+          npm ci
+          npm run build
+          popd
+
       - name: Build binaries for all platforms
         run: |
           # Build AMD64 binary
@@ -53,15 +66,6 @@ jobs:
 
           # Build ARM64 binary
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-arm64 ./go/tools/${{ matrix.addon }}/
-
-      - name: Build web assets
-        if: matrix.addon == 'gateway'
-        run: |
-          cd web/auth
-          npm ci
-          npm run build
-          cp -r dist ../../addons/${{ matrix.addon }}/
-          cd ../..
 
       - name: Build and push multi-arch image
         uses: docker/build-push-action@v6
