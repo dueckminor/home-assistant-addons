@@ -1,13 +1,15 @@
 <template>
   <v-row>
     <v-col cols="12">
-      <div class="text-center mb-6">
-        <v-icon size="48" color="primary" class="mb-3">mdi-dns</v-icon>
-        <h2 class="text-h5 mb-2">DNS Configuration</h2>
-        <p class="text-body-2 text-medium-emphasis">
+      <v-card>
+        <v-card-title class="text-h6 d-flex align-center">
+          <v-icon class="me-2" color="primary">mdi-dns</v-icon>
+          DNS Configuration
+        </v-card-title>
+        <v-card-subtitle>
           Configure DNS server settings and external IP detection
-        </p>
-      </div>
+        </v-card-subtitle>
+      </v-card>
     </v-col>
   </v-row>
 
@@ -140,40 +142,6 @@
           <div class="text-caption text-medium-emphasis">
             Last updated: {{ dnsConfig.ipv6.lastUpdate || 'Never' }}
           </div>
-        </v-card-text>
-      </v-card>
-    </v-col>
-  </v-row>
-
-  <!-- DNS Server Status -->
-  <v-row class="mt-4">
-    <v-col cols="12">
-      <v-card color="grey-lighten-5">
-        <v-card-title class="text-h6 d-flex align-center">
-          <v-icon class="me-2" color="success">mdi-server</v-icon>
-          DNS Server Status
-        </v-card-title>
-        <v-card-text>
-          <v-row>
-            <v-col cols="12" md="4">
-              <v-chip color="success" class="ma-1">
-                <v-icon start>mdi-port</v-icon>
-                Port: 53 (UDP/TCP)
-              </v-chip>
-            </v-col>
-            <v-col cols="12" md="4">
-              <v-chip color="info" class="ma-1">
-                <v-icon start>mdi-earth</v-icon>
-                External IP Detection
-              </v-chip>
-            </v-col>
-            <v-col cols="12" md="4">
-              <v-chip color="primary" class="ma-1">
-                <v-icon start>mdi-check-circle</v-icon>
-                Running
-              </v-chip>
-            </v-col>
-          </v-row>
         </v-card-text>
       </v-card>
     </v-col>

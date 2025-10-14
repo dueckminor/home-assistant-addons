@@ -1,14 +1,19 @@
 <template>
   <div class="pa-4">
     <!-- Header -->
-    <div class="d-flex justify-space-between align-center mb-6">
-      <div>
-        <h2 class="text-h5 mb-2">Users & Groups</h2>
-        <p class="text-body-2 text-medium-emphasis">
-          Manage user accounts and access groups for OAuth authentication
-        </p>
-      </div>
-    </div>
+    <v-row>
+      <v-col cols="12">
+        <v-card>
+          <v-card-title class="text-h6 d-flex align-center">
+            <v-icon class="me-2" color="success">mdi-account-group</v-icon>
+            Users & Groups Configuration
+          </v-card-title>
+          <v-card-subtitle>
+            Manage user accounts and access groups for OAuth authentication
+          </v-card-subtitle>
+        </v-card>
+      </v-col>
+    </v-row>
 
     <!-- Error Display -->
     <v-alert

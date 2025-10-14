@@ -74,24 +74,6 @@
                 </v-tabs-window>
               </v-card-text>
             </v-card>
-
-            <!-- Status Footer -->
-            <v-card class="mt-6" color="grey-lighten-4">
-              <v-card-text class="text-center pa-4">
-                <v-chip color="success" class="ma-1">
-                  <v-icon start>mdi-server</v-icon>
-                  Gateway: Running
-                </v-chip>
-                <v-chip color="info" class="ma-1">
-                  <v-icon start>mdi-network</v-icon>
-                  Ports: 53, 80, 443, 8099
-                </v-chip>
-                <v-chip color="warning" class="ma-1">
-                  <v-icon start>mdi-construction</v-icon>
-                  Configuration: In Development
-                </v-chip>
-              </v-card-text>
-            </v-card>
           </v-col>
         </v-row>
       </v-container>

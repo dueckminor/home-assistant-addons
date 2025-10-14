@@ -116,11 +116,13 @@ func (ep *Endpoints) GET_Domains(c *gin.Context) {
 		domainWithStatus := DomainWithStatus{
 			ConfigDomain: *domain,
 		}
-		chain := domain.serverCertificate.GetChain()
-		if chain != nil {
-			domainWithStatus.ServerCertificate = &CertificateInfo{
-				ValidNotBefore: chain[0].OBJ().NotBefore,
-				ValidNotAfter:  chain[0].OBJ().NotAfter,
+		if domain.serverCertificate != nil {
+			chain := domain.serverCertificate.GetChain()
+			if chain != nil {
+				domainWithStatus.ServerCertificate = &CertificateInfo{
+					ValidNotBefore: chain[0].OBJ().NotBefore,
+					ValidNotAfter:  chain[0].OBJ().NotAfter,
+				}
 			}
 		}
 		domainsWithStatus = append(domainsWithStatus, domainWithStatus)

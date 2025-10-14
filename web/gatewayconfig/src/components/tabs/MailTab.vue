@@ -3,10 +3,13 @@
     <v-row>
       <v-col cols="12">
         <v-card>
-          <v-card-title class="d-flex align-center">
-            <v-icon class="mr-3">mdi-email</v-icon>
+          <v-card-title class="text-h6 d-flex align-center">
+            <v-icon class="me-2" color="orange">mdi-email</v-icon>
             Mail Configuration
           </v-card-title>
+          <v-card-subtitle>
+            Configure SMTP settings for password reset emails and notifications
+          </v-card-subtitle>
           
           <v-card-text>
             <v-alert
