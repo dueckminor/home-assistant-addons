@@ -1,16 +1,4 @@
 <template>
-  <v-row>
-    <v-col cols="12">
-      <div class="text-center mb-6">
-        <v-icon size="48" color="purple" class="mb-3">mdi-sitemap</v-icon>
-        <h2 class="text-h5 mb-2">Domains & Routes</h2>
-        <p class="text-body-2 text-medium-emphasis">
-          Manage domains, routes, DNS configuration, and SSL certificates
-        </p>
-      </div>
-    </v-col>
-  </v-row>
-
   <!-- Managed Domains -->
   <v-row>
     <v-col cols="12">
@@ -20,7 +8,7 @@
           Domains & Routes Configuration
         </v-card-title>
         <v-card-subtitle>
-          Add domains and configure their routes, DNS settings, and SSL certificates
+          Add domains and configure their routes
         </v-card-subtitle>
         <v-card-text>
           <!-- Error Display -->
@@ -34,26 +22,6 @@
           >
             {{ error }}
           </v-alert>
-          <div class="d-flex justify-center align-center gap-3 mb-4">
-            <v-btn
-              color="purple"
-              variant="elevated"
-              prepend-icon="mdi-web-plus"
-              @click="openAddDomainWizard"
-              size="large"
-            >
-              Add New Domain
-            </v-btn>
-            <v-btn
-              icon="mdi-refresh"
-              variant="outlined"
-              size="large"
-              @click="loadDomains"
-              :loading="loading"
-              title="Refresh domains"
-            ></v-btn>
-          </div>
-
           <!-- Domain Tree List -->
           <v-row v-if="!loading && domains && domains.length > 0" class="mt-2">
             <v-col cols="12">
@@ -63,6 +31,26 @@
                   <v-icon class="me-2" size="small">mdi-sitemap</v-icon>
                   Configured Domains & Routes ({{ domains.length }} domains)
                 </h4>
+                <div class="d-flex align-center">
+                  <v-btn
+                    icon="mdi-refresh"
+                    variant="outlined"
+                    size="x-small"
+                    @click="loadDomains"
+                    :loading="loading"
+                    title="Refresh domains"
+                    class="me-3"
+                  ></v-btn>
+                  <v-btn
+                    color="purple"
+                    variant="elevated"
+                    prepend-icon="mdi-web-plus"
+                    @click="openAddDomainWizard"
+                    size="small"
+                  >
+                    Add Domain
+                  </v-btn>
+                </div>
               </div>
               
               <!-- Domain Tree -->
@@ -470,8 +458,10 @@ export default {
           domain.showDnsDetails = false
         })
         
-        // Check DNS status for each domain
-        await this.checkDnsStatusForAllDomains()
+        // Check DNS status for each domain asynchronously (don't await)
+        this.checkDnsStatusForAllDomains().catch(err => {
+          console.error('Error checking DNS status:', err)
+        })
       } catch (err) {
         this.error = `Failed to load domains: ${err.message}`
         console.error('Error loading domains:', err)
