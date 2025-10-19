@@ -20,7 +20,7 @@ npm ci
 npm run build
 popd
 
-pushd "${ROOT_DIR}/web/gatewayconfig"
+pushd "${ROOT_DIR}/web/gateway"
 npm ci
 npm run build
 popd

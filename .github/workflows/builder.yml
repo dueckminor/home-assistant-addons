@@ -86,7 +86,7 @@ jobs:
           npm ci
           npm run build
           popd
-          pushd web/gatewayconfig
+          pushd web/gateway
           npm ci
           npm run build
           popd

@@ -6,7 +6,7 @@ set -eou pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 
 if [[ "${1:-}" == "--fast" ]]; then
-    if [[ -f "${ROOT_DIR}/go/auth/dist/index.html" ]] && [[ -f "${ROOT_DIR}/go/gatewayconfig/dist/index.html" ]]; then
+    if [[ -f "${ROOT_DIR}/go/auth/dist/index.html" ]] && [[ -f "${ROOT_DIR}/go/gateway/dist/index.html" ]]; then
         echo "Fast build, skipping web assets..."
         exit 0
     fi
@@ -18,6 +18,6 @@ pushd "${ROOT_DIR}/web/auth"
 npm run build
 popd
 
-pushd "${ROOT_DIR}/web/gatewayconfig"
+pushd "${ROOT_DIR}/web/gateway"
 npm run build
 popd

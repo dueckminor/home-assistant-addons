@@ -21,7 +21,7 @@ pushd web/auth
 npm run build
 popd
 
-pushd web/gatewayconfig
+pushd web/gateway
 npm run build
 popd
 

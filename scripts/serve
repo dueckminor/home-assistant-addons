@@ -20,8 +20,8 @@ SERVICES = [
         "port": 3000
     },
     {
-        "name": "gatewayconfig", 
-        "path": WORKSPACE_ROOT / "web" / "gatewayconfig",
+        "name": "gateway", 
+        "path": WORKSPACE_ROOT / "web" / "gateway",
         "command": ["./node_modules/.bin/vite", "serve"],
         "port": 3001
     }
