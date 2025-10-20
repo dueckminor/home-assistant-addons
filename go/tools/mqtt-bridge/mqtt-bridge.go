@@ -11,8 +11,10 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
+	mqttbridge "github.com/dueckminor/home-assistant-addons/go/mqtt-bridge"
 	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
 	"github.com/dueckminor/home-assistant-addons/go/services/automation"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
@@ -23,11 +25,15 @@ import (
 )
 
 var dataDir string
+var adminPort int
+var distAdmin string
 
 var theConfig BrigeConfig
 
 func init() {
 	flag.StringVar(&dataDir, "data-dir", "/data", "the data dir")
+	flag.IntVar(&adminPort, "admin-port", 0, "the port for the admin-ui")
+	flag.StringVar(&distAdmin, "dist-admin", "", "the URL for the admin-ui")
 	flag.Parse()
 
 	configFile := path.Join(dataDir, "options.json")
@@ -91,7 +97,7 @@ type influxAvailability struct {
 	available    bool
 }
 
-func toInflux(mqttConn mqtt.Conn, influxConfig InfluxDbConfig) {
+func toInflux(mqttConn mqtt.Conn, influxConfig InfluxDbConfig, server *mqttbridge.Server) {
 
 	influx, err := influxdb.NewClient(influxConfig.InfluxDbUri, "ha", influxConfig.InfluxDbUser, influxConfig.InfluxDbPassword)
 	if err != nil {
@@ -137,6 +143,17 @@ func toInflux(mqttConn mqtt.Conn, influxConfig InfluxDbConfig) {
 	})
 
 	mqttConn.Subscribe("#", func(topic, payload string) {
+		// Send WebSocket event for all MQTT messages
+		if server != nil {
+			event := mqttbridge.Event{
+				Source: "mqtt",
+				Time:   time.Now(),
+				Topic:  topic,
+				Value:  payload,
+			}
+			server.SendEvent(event)
+		}
+
 		if a, ok := availabilityTopics[topic]; ok {
 			fmt.Println("availability_topic:", topic)
 			available := payload == "online"
@@ -197,12 +214,40 @@ func main() {
 
 	automation.GetRegistry().EnableMqtt(mqttBroker)
 
+	// Create server first so we can pass it to other functions
+	s := mqttbridge.NewServer(adminPort, distAdmin)
+	s.SetMqttConn(mqttConn)
+
+	var mqttConnUi mqtt.Conn
+	// Set up WebSocket client lifecycle callbacks
+	s.SetOnFirstClientConnected(func() {
+		mqttConnUi, err = mqttBroker.Dial(mqttClientId+"-ui", "")
+		if err != nil {
+			return
+		}
+		mqttConn.Subscribe("#", func(topic, payload string) {
+			s.SendEvent(mqttbridge.Event{
+				Source: "mqtt",
+				Time:   time.Now(),
+				Topic:  topic,
+				Value:  payload,
+			})
+		})
+	})
+
+	s.SetOnLastClientDisconnected(func() {
+		if mqttConnUi != nil {
+			mqttConnUi.Close()
+			mqttConnUi = nil
+		}
+	})
+
 	if theConfig.Legacy != nil && theConfig.Legacy.MqttURI != "" {
 		fromLegacyMqtt(mqttConn, theConfig.Legacy.MqttConfig, mqttClientId)
 	}
 
 	if theConfig.InfluxDbUri != "" {
-		toInflux(mqttConn, theConfig.InfluxDbConfig)
+		toInflux(mqttConn, theConfig.InfluxDbConfig, s)
 	}
 
 	if theConfig.AlphaEssUri != "" {
@@ -213,6 +258,17 @@ func main() {
 	if theConfig.HomematicUri != "" {
 		homematic.StartMqttBridge(theConfig.HomematicConfig)
 	}
+
+	err = s.Listen()
+	if err != nil {
+		panic(err)
+	}
+
+	wg.Add(1)
+	go func() {
+		s.Serve(ctx)
+		wg.Done()
+	}()
 
 	wg.Add(1)
 	go func() {

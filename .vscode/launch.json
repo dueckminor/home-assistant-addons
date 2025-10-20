@@ -46,7 +46,9 @@
             "mode": "auto",
             "program": "${workspaceFolder}/go/tools/mqtt-bridge/mqtt-bridge.go",
             "args": [
-                "--data-dir=${workspaceFolder}/gen/data/mqtt-bridge"
+                "--data-dir=${workspaceFolder}/gen/data/mqtt-bridge",
+                "--admin-port=4002",
+                "--dist-admin=http://localhost:3002"
             ]
         },
         {

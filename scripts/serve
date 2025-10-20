@@ -30,6 +30,12 @@ SERVICES = [
         "path": WORKSPACE_ROOT / "web" / "security", 
         "command": ["./node_modules/.bin/vite", "serve"],
         "port": 3002
+    },
+    {
+        "name": "mqtt-bridge",
+        "path": WORKSPACE_ROOT / "web" / "mqtt-bridge", 
+        "command": ["./node_modules/.bin/vite", "serve"],
+        "port": 3003
     }
 ]
 
