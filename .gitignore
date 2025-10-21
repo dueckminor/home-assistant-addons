@@ -6,6 +6,9 @@ addons/*/dist
 addons/*/*-amd64
 addons/*/*-arm64
 
+web/**/node_modules
+go/**/dist
+
 # Font files (generated from node_modules during build)
 *.woff2
 *.woff
