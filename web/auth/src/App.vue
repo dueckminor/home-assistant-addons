@@ -91,6 +91,7 @@
                     :disabled="loading || showForgotPasswordDialog"
                     autofocus
                     required
+                    aria-label="Username"
                     :name="showForgotPasswordDialog ? 'login-username-hidden' : 'username'"
                     :id="showForgotPasswordDialog ? 'login-username-hidden' : 'username'"
                     :autocomplete="showForgotPasswordDialog ? 'off' : 'username'"
@@ -112,6 +113,7 @@
                     :rules="passwordRules"
                     :disabled="loading || showForgotPasswordDialog"
                     required
+                    aria-label="Password"
                     :name="showForgotPasswordDialog ? 'login-password-hidden' : 'password'"
                     :id="showForgotPasswordDialog ? 'login-password-hidden' : 'password'"
                     :autocomplete="showForgotPasswordDialog ? 'off' : 'current-password'"
@@ -604,7 +606,6 @@ export default {
           authenticated.value = false
           credentials.username = ''
           credentials.password = ''
-          showNotification('Logged out successfully', 'info', 'mdi-logout')
         } else {
           throw new Error(`Logout failed: ${response.status}`)
         }
