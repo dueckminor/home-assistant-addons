@@ -39,3 +39,5 @@
 .mdi-reddit::before { content: "\F044D"; }
 .mdi-shield-account::before { content: "\F088F"; }
 .mdi-shield-star-outline::before { content: "\F113C"; }
+.mdi-weather-night::before { content: "\F0F31"; }
+.mdi-weather-sunny::before { content: "\F0F36"; }
