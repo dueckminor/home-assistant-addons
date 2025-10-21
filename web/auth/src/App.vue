@@ -85,7 +85,6 @@
                 <v-form ref="loginForm" v-model="formValid" @submit.prevent="login">
                   <v-text-field
                     v-model="username"
-                    label="Username"
                     variant="outlined"
                     prepend-inner-icon="mdi-account"
                     :rules="usernameRules"
@@ -106,7 +105,6 @@
                   <v-text-field
                     ref="passwordField"
                     v-model="password"
-                    label="Password"
                     variant="outlined"
                     prepend-inner-icon="mdi-lock"
                     :append-inner-icon="showPassword ? 'mdi-eye' : 'mdi-eye-off'"
