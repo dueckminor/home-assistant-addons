@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"time"
 
@@ -159,46 +160,98 @@ func (ep *Endpoints) DELETE_Domains(c *gin.Context) {
 }
 
 func (ep *Endpoints) GET_ExternalIpv4(c *gin.Context) {
-	addr, err := ep.lookup(c.Request.Context(), ep.Gateway.config.Dns.ExternalIpv4.Options, false)
-	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+	ext := ep.Gateway.ExternalIPv4()
+	if ext == nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "external IPv4 not configured"})
 		return
 	}
-	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv4.Source, "source": ep.Gateway.config.Dns.ExternalIpv4.Options, "address": addr, "timestamp": time.Now()})
+	ip, err := ext.Refresh()
+	if ip == nil {
+		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv4.Method, "param": ep.Gateway.config.Dns.ExternalIpv4.Param, "address": ip.String(), "timestamp": time.Now()})
+
 }
 
 func (ep *Endpoints) POST_ExternalIpv4(c *gin.Context) {
-	var h gin.H
-	c.BindJSON(&h)
-	ep.Gateway.config.Dns.ExternalIpv4.Source = "dns"
-	ep.Gateway.config.Dns.ExternalIpv4.Options = h["source"].(string)
+	body := struct {
+		Test   bool
+		Method string
+		Param  string
+	}{}
+	c.BindJSON(&body)
 
-	extIPv4 := dns.NewExternalIP("ip4", ep.Gateway.config.Dns.ExternalIpv4.Options)
-	ip := extIPv4.ExternalIP()
-	ep.Gateway.dnsServer.SetExternalIP(extIPv4)
-	ep.Gateway.config.save()
+	var externalIp dns.ExternalIP
 
-	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv4.Source, "source": ep.Gateway.config.Dns.ExternalIpv4.Options, "address": ip.String(), "timestamp": time.Now()})
-}
-func (ep *Endpoints) GET_ExternalIpv6(c *gin.Context) {
-	addr, err := ep.lookup(c.Request.Context(), ep.Gateway.config.Dns.ExternalIpv6.Options, true)
+	testOnly := body.Test
+	method := body.Method
+	param := body.Param
+
+	switch method {
+	case "dns":
+		externalIp = dns.NewExternalIP("ip4", param)
+	}
+
+	ip, err := externalIp.Refresh()
 	if err != nil {
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv6.Source, "source": ep.Gateway.config.Dns.ExternalIpv6.Options, "address": addr, "timestamp": time.Now()})
+
+	if !testOnly {
+		ep.Gateway.config.Dns.ExternalIpv4.Method = method
+		ep.Gateway.config.Dns.ExternalIpv4.Param = param
+		ep.Gateway.SetExternalIPv4(externalIp)
+		ep.Gateway.config.save()
+
+	}
+
+	c.JSON(200, gin.H{"method": method, "param": param, "address": ip.String(), "timestamp": time.Now()})
+}
+func (ep *Endpoints) GET_ExternalIpv6(c *gin.Context) {
+	ext := ep.Gateway.ExternalIPv6()
+	if ext == nil {
+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "external IPv6 not configured"})
+		return
+	}
+	ip, err := ext.Refresh()
+	if ip == nil {
+		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv6.Method, "param": ep.Gateway.config.Dns.ExternalIpv6.Param, "address": ip.String(), "timestamp": time.Now()})
 }
 func (ep *Endpoints) POST_ExternalIpv6(c *gin.Context) {
-	var h gin.H
-	c.BindJSON(&h)
-	ep.Gateway.config.Dns.ExternalIpv6.Source = "dns"
-	ep.Gateway.config.Dns.ExternalIpv6.Options = h["source"].(string)
-	extIPv6 := dns.NewExternalIP("ip6", ep.Gateway.config.Dns.ExternalIpv6.Options)
-	ip := extIPv6.ExternalIP()
-	ep.Gateway.dnsServer.SetExternalIPv6(extIPv6)
-	ep.Gateway.config.save()
+	body := struct {
+		Test   bool
+		Method string
+		Param  string
+	}{}
+	c.BindJSON(&body)
 
-	c.JSON(200, gin.H{"method": ep.Gateway.config.Dns.ExternalIpv6.Source, "source": ep.Gateway.config.Dns.ExternalIpv6.Options, "address": ip.String(), "timestamp": time.Now()})
+	var externalIp dns.ExternalIP
+
+	externalIp, err := ep.Gateway.CreateExternalIPv6(body.Method, body.Param)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ip, err := externalIp.Refresh()
+	if ip == nil {
+		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+
+	if !body.Test {
+		ep.Gateway.config.Dns.ExternalIpv6.Method = body.Method
+		ep.Gateway.config.Dns.ExternalIpv6.Param = body.Param
+		ep.Gateway.SetExternalIPv6(externalIp)
+		ep.Gateway.config.save()
+	}
+
+	c.JSON(200, gin.H{"method": body.Method, "param": body.Param, "address": ip.String(), "timestamp": time.Now()})
 }
 
 func (ep *Endpoints) GET_Ipv4(c *gin.Context) {

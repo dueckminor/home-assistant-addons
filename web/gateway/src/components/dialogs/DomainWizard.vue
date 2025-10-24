@@ -873,9 +873,9 @@ export default {
       try {
         // Get the DNS configuration to extract the IPv4 Source Address
         const response = await apiGet('dns/external/ipv4')
-        if (response.source) {
+        if (response.param) {
           // Use the IPv4 Source Address as the NS target
-          this.gatewayNsTarget = response.source
+          this.gatewayNsTarget = response.param
         }
       } catch (error) {
         console.warn('Could not fetch gateway NS target:', error)

@@ -40,7 +40,19 @@
             hint="The address to query for your external IPv4"
             persistent-hint
             class="mb-4"
-          ></v-text-field>
+          >
+            <template v-slot:append-inner>
+              <v-btn
+                icon="mdi-test-tube"
+                variant="text"
+                size="small"
+                color="primary"
+                @click="testIPv4"
+                :loading="ipv4Testing"
+                title="Test this configuration without saving"
+              ></v-btn>
+            </template>
+          </v-text-field>
 
           <v-text-field
             v-model="dnsConfig.ipv4.current"
@@ -90,7 +102,7 @@
         <v-card-text>
           <v-select
             v-model="dnsConfig.ipv6.method"
-            :items="ipDetectionMethods"
+            :items="ipv6DetectionMethods"
             label="Detection Method"
             variant="outlined"
             prepend-inner-icon="mdi-cog"
@@ -98,6 +110,7 @@
           ></v-select>
           
           <v-text-field
+            v-if="dnsConfig.ipv6.method === 'dns'"
             v-model="dnsConfig.ipv6.source"
             label="IPv6 Source Address"
             variant="outlined"
@@ -106,7 +119,32 @@
             hint="The address to query for your external IPv6"
             persistent-hint
             class="mb-4"
-          ></v-text-field>
+          >
+            <template v-slot:append-inner>
+              <v-btn
+                icon="mdi-test-tube"
+                variant="text"
+                size="small"
+                color="secondary"
+                @click="testIPv6"
+                :loading="ipv6Testing"
+                title="Test this configuration without saving"
+              ></v-btn>
+            </template>
+          </v-text-field>
+
+          <v-alert
+            v-if="dnsConfig.ipv6.method === 'homeassistant'"
+            type="info"
+            variant="tonal"
+            class="mb-4"
+          >
+            <v-icon start>mdi-home-assistant</v-icon>
+            <div>
+              <div class="font-weight-medium">Home Assistant Supervisor API</div>
+              <div class="text-body-2">Uses the Supervisor API to automatically detect IPv6 addresses from the Home Assistant network configuration. No additional configuration required.</div>
+            </div>
+          </v-alert>
 
           <v-text-field
             v-model="dnsConfig.ipv6.current"
@@ -160,6 +198,10 @@ export default {
       type: Array,
       required: true
     },
+    ipv6DetectionMethods: {
+      type: Array,
+      required: true
+    },
     ipv4Loading: {
       type: Boolean,
       default: false
@@ -175,9 +217,23 @@ export default {
     showIpv6Revert: {
       type: Boolean,
       default: false
+    },
+    ipv4Testing: {
+      type: Boolean,
+      default: false
+    },
+    ipv6Testing: {
+      type: Boolean,
+      default: false
     }
   },
-  emits: ['refresh-ipv4', 'refresh-ipv6', 'revert-ipv4', 'revert-ipv6'],
+  computed: {
+    // Show test button only for methods that require parameters
+    showIPv6TestButton() {
+      return this.dnsConfig.ipv6.method === 'dns';
+    }
+  },
+  emits: ['refresh-ipv4', 'refresh-ipv6', 'revert-ipv4', 'revert-ipv6', 'test-ipv4', 'test-ipv6'],
   methods: {
     refreshIPv4() {
       this.$emit('refresh-ipv4');
@@ -190,6 +246,12 @@ export default {
     },
     revertIPv6() {
       this.$emit('revert-ipv6');
+    },
+    testIPv4() {
+      this.$emit('test-ipv4');
+    },
+    testIPv6() {
+      this.$emit('test-ipv6');
     }
   }
 }

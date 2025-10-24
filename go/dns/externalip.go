@@ -3,11 +3,11 @@ package dns
 import (
 	"fmt"
 	"net"
-	"time"
 )
 
 type ExternalIP interface {
 	ExternalIP() net.IP
+	Refresh() (net.IP, error)
 }
 
 func NewExternalIP(network string, address string) ExternalIP {
@@ -19,26 +19,20 @@ func NewExternalIP(network string, address string) ExternalIP {
 
 type externalIP struct {
 	ip      net.IP
-	ttl     time.Time
 	network string
 	address string
 }
 
 func (e *externalIP) ExternalIP() net.IP {
-	if len(e.ip) > 0 && time.Now().Before(e.ttl) {
-		return e.ip
-	}
-	e.refresh()
 	return e.ip
 }
 
-func (e *externalIP) refresh() {
-	fmt.Println("try to resolve", e.network, e.address)
+func (e *externalIP) Refresh() (net.IP, error) {
 	addr, err := net.ResolveIPAddr(e.network, e.address)
 	if err != nil {
 		fmt.Println("failed:", err)
-		return
+		return nil, err
 	}
 	e.ip = addr.IP
-	e.ttl = time.Now().Add(time.Second * 30)
+	return e.ip, nil
 }

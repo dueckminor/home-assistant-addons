@@ -15,6 +15,7 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/pki"
+	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
 	"github.com/dueckminor/home-assistant-addons/go/smtp"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -60,6 +61,9 @@ type Gateway struct {
 
 	httpServer  network.HttpToHttps
 	httpsServer network.TLSProxy
+
+	externalIPv4 dns.ExternalIP
+	externalIPv6 dns.ExternalIP
 
 	debug bool
 }
@@ -267,25 +271,62 @@ func (g *Gateway) UpdateRoute(domainGuid string, routeGuid string, route ConfigR
 	return *existingRoute, nil
 }
 
-func (g *Gateway) StartDNS(ctx context.Context, port int) (err error) {
-	var extIPv4 dns.ExternalIP
-	var extIPv6 dns.ExternalIP
+func (g *Gateway) ExternalIPv4() (extIp dns.ExternalIP) {
+	return g.externalIPv4
+}
 
-	switch g.config.Dns.ExternalIpv4.Source {
+func (g *Gateway) ExternalIPv6() (extIp dns.ExternalIP) {
+	return g.externalIPv6
+}
+
+func (g *Gateway) SetExternalIPv4(extIp dns.ExternalIP) {
+	g.externalIPv4 = extIp
+	g.dnsServer.SetExternalIPv4(extIp)
+}
+
+func (g *Gateway) SetExternalIPv6(extIp dns.ExternalIP) {
+	g.externalIPv6 = extIp
+	g.dnsServer.SetExternalIPv6(extIp)
+}
+
+func (g *Gateway) CreateExternalIPv4(method, params string) (extIp dns.ExternalIP, err error) {
+	switch method {
+	case "":
+		return nil, nil
 	case "dns":
-		extIPv4 = dns.NewExternalIP("ip4", g.config.Dns.ExternalIpv4.Options)
+		return dns.NewExternalIP("ip4", params), nil
 	}
-	switch g.config.Dns.ExternalIpv6.Source {
+	return nil, fmt.Errorf("unknown external ipv4 method %q", method)
+}
+
+func (g *Gateway) CreateExternalIPv6(method, params string) (extIp dns.ExternalIP, err error) {
+	switch method {
+	case "":
+		return nil, nil
 	case "dns":
-		extIPv6 = dns.NewExternalIP("ip6", g.config.Dns.ExternalIpv6.Options)
+		return dns.NewExternalIP("ip6", params), nil
+	case "homeassistant":
+		return homeassistant.NewExternalIP(), nil
+	}
+	return nil, fmt.Errorf("unknown external ipv6 method %q", method)
+}
+
+func (g *Gateway) StartDNS(ctx context.Context, port int) (err error) {
+	g.externalIPv4, err = g.CreateExternalIPv4(g.config.Dns.ExternalIpv4.Method, g.config.Dns.ExternalIpv4.Param)
+	if err != nil {
+		return err
+	}
+	g.externalIPv6, err = g.CreateExternalIPv6(g.config.Dns.ExternalIpv6.Method, g.config.Dns.ExternalIpv6.Param)
+	if err != nil {
+		return err
 	}
 
 	g.dnsServer, err = dns.NewServer(fmt.Sprintf(":%d", port))
 	if err != nil {
 		panic(err)
 	}
-	g.dnsServer.SetExternalIP(extIPv4)
-	g.dnsServer.SetExternalIPv6(extIPv6)
+	g.dnsServer.SetExternalIPv4(g.externalIPv4)
+	g.dnsServer.SetExternalIPv6(g.externalIPv6)
 
 	return nil
 }

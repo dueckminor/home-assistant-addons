@@ -10,7 +10,7 @@ import (
 )
 
 type Server interface {
-	SetExternalIP(externalIP ExternalIP) error
+	SetExternalIPv4(externalIP ExternalIP) error
 	SetExternalIPv6(externalIP ExternalIP) error
 	AddDomains(domains ...string) error
 	AddProxyDomain(domain string, target string) error
@@ -118,7 +118,7 @@ type server struct {
 	ipv6 ExternalIP
 }
 
-func (s *server) SetExternalIP(externalIP ExternalIP) error {
+func (s *server) SetExternalIPv4(externalIP ExternalIP) error {
 	s.ipv4 = externalIP
 	return nil
 }

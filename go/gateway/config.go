@@ -10,8 +10,8 @@ import (
 )
 
 type ConfigExternalIp struct {
-	Source  string `yaml:"source" json:"source"`
-	Options string `yaml:"options" json:"options"`
+	Method string `yaml:"method" json:"method"`
+	Param  string `yaml:"param" json:"param"`
 }
 
 type ConfigRouteOptions struct {
