@@ -91,14 +91,118 @@
               ></v-text-field>
             </v-col>
             <v-col cols="12">
+              <div class="d-flex align-center mb-3">
+                <v-icon class="me-2">mdi-link</v-icon>
+                <span class="text-subtitle-2">Target Configuration</span>
+                <v-spacer></v-spacer>
+                <v-btn-toggle
+                  v-model="targetInputMode"
+                  mandatory
+                  variant="outlined"
+                  density="compact"
+                >
+                  <v-btn value="addon" size="small">
+                    <v-icon start>mdi-puzzle</v-icon>
+                    Add-on
+                  </v-btn>
+                  <v-btn value="manual" size="small">
+                    <v-icon start>mdi-keyboard</v-icon>
+                    Manual
+                  </v-btn>
+                </v-btn-toggle>
+              </div>
+
+              <!-- Add-on Selection Mode -->
+              <div v-if="targetInputMode === 'addon'">
+                <v-select
+                  v-model="selectedAddon"
+                  :items="availableAddons"
+                  item-title="name"
+                  item-value="url"
+                  label="Select Add-on"
+                  variant="outlined"
+                  prepend-inner-icon="mdi-puzzle"
+                  :loading="loadingAddons"
+                  :disabled="loadingAddons"
+                  placeholder="Choose an add-on to route to"
+                  hint="Select from running Home Assistant add-ons"
+                  persistent-hint
+                  @update:modelValue="onAddonSelected"
+                >
+                  <template v-slot:item="{ props, item }">
+                    <v-list-item v-bind="props" class="addon-item">
+                      <template v-slot:prepend>
+                        <v-icon color="success">mdi-puzzle</v-icon>
+                      </template>
+                      <v-list-item-title>{{ item.raw.name }}</v-list-item-title>
+                      <v-list-item-subtitle>
+                        <div class="d-flex align-center">
+                          <span class="me-2">{{ item.raw.url }}</span>
+                          <v-chip size="x-small" color="success" variant="tonal">
+                            <v-icon start size="x-small">mdi-play</v-icon>
+                            Running
+                          </v-chip>
+                        </div>
+                        <div class="text-caption">{{ item.raw.description }}</div>
+                      </v-list-item-subtitle>
+                    </v-list-item>
+                  </template>
+                  
+                  <template v-slot:no-data>
+                    <v-list-item>
+                      <v-list-item-title>
+                        <div v-if="addonsError" class="text-center py-4">
+                          <v-icon color="error" size="48" class="mb-2">mdi-alert-circle</v-icon>
+                          <div class="text-body-2 text-error">{{ addonsError }}</div>
+                          <v-btn 
+                            variant="outlined" 
+                            size="small" 
+                            class="mt-2"
+                            @click="loadAddons"
+                          >
+                            Retry
+                          </v-btn>
+                        </div>
+                        <div v-else class="text-center py-4">
+                          <v-icon color="grey" size="48" class="mb-2">mdi-puzzle-outline</v-icon>
+                          <div class="text-body-2">No running add-ons found</div>
+                          <div class="text-caption text-medium-emphasis">
+                            Start some Home Assistant add-ons to see them here
+                          </div>
+                        </div>
+                      </v-list-item-title>
+                    </v-list-item>
+                  </template>
+                </v-select>
+
+                <!-- Selected Add-on Preview -->
+                <v-card v-if="selectedAddonDetails" variant="tonal" color="primary" class="mt-3">
+                  <v-card-text class="py-3">
+                    <div class="d-flex align-center">
+                      <v-icon class="me-3" color="primary">mdi-puzzle</v-icon>
+                      <div class="flex-grow-1">
+                        <div class="text-subtitle-2">{{ selectedAddonDetails.name }}</div>
+                        <div class="text-body-2">Target: {{ selectedAddonDetails.url }}</div>
+                      </div>
+                      <v-chip size="small" color="success" variant="elevated">
+                        <v-icon start size="small">mdi-check</v-icon>
+                        Ready
+                      </v-chip>
+                    </div>
+                  </v-card-text>
+                </v-card>
+              </div>
+
+              <!-- Manual Entry Mode -->
               <v-text-field
+                v-else
                 v-model="routeData.target"
                 label="Target URI"
                 variant="outlined"
                 prepend-inner-icon="mdi-link"
-                placeholder="https://fritz.box or http://something.local"
+                placeholder="https://fritz.box or http://something.local:8080"
                 :rules="targetRules"
-                hint="The target URI to route traffic to (including protocol)"
+                hint="The target URI to route traffic to (including protocol and port)"
                 persistent-hint
                 @update:modelValue="validateStep1"
               ></v-text-field>
@@ -374,6 +478,14 @@ export default {
       saving: false,
       testResult: null,
       
+      // Add-on discovery
+      targetInputMode: 'addon', // 'addon' or 'manual'
+      availableAddons: [],
+      loadingAddons: false,
+      addonsError: null,
+      selectedAddon: null,
+      selectedAddonDetails: null,
+      
       routeData: {
         hostname: '',
         target: '',
@@ -424,10 +536,13 @@ export default {
       if (newVal && this.editRoute) {
         // Populate form with existing route data
         this.routeData = { ...this.editRoute }
+        // Determine if this is an add-on target or manual
+        this.detectTargetMode()
         this.validateStep1()
       } else if (newVal) {
-        // Reset form for new route
+        // Reset form for new route and load add-ons
         this.resetForm()
+        this.loadAddons()
       }
     },
     
@@ -437,11 +552,28 @@ export default {
     
     'routeData.target'() {
       this.validateStep1()
+    },
+    
+    targetInputMode(newMode) {
+      // Clear target when switching modes
+      if (newMode === 'addon') {
+        this.selectedAddon = null
+        this.selectedAddonDetails = null
+        this.routeData.target = ''
+      } else {
+        this.selectedAddon = null
+        this.selectedAddonDetails = null
+      }
+      this.validateStep1()
     }
   },
   
   mounted() {
     this.validateStep1()
+    // Load add-ons when component is ready
+    if (this.modelValue) {
+      this.loadAddons()
+    }
   },
   
   methods: {
@@ -451,6 +583,70 @@ export default {
       if (currentStepNum > step) return 'success'
       return 'default'
     },
+
+    async loadAddons() {
+      this.loadingAddons = true
+      this.addonsError = null
+      
+      try {
+        const response = await apiRequest('addons/running')
+        
+        if (response.result === 'ok' && Array.isArray(response.data)) {
+          this.availableAddons = response.data.map(addon => ({
+            ...addon,
+            // Ensure we have all required fields
+            name: addon.name || addon.slug,
+            description: addon.description || 'Home Assistant Add-on',
+            url: addon.url || `http://${addon.hostname}:${addon.port}`
+          }))
+        } else {
+          throw new Error('Invalid response format from add-ons API')
+        }
+      } catch (error) {
+        console.error('Failed to load add-ons:', error)
+        this.addonsError = 'Failed to load add-ons: ' + error.message
+        this.availableAddons = []
+      } finally {
+        this.loadingAddons = false
+      }
+    },
+
+    onAddonSelected(addonUrl) {
+      this.selectedAddon = addonUrl
+      
+      if (addonUrl) {
+        // Find the selected add-on details
+        this.selectedAddonDetails = this.availableAddons.find(addon => addon.url === addonUrl)
+        // Set the target in routeData
+        this.routeData.target = addonUrl
+      } else {
+        this.selectedAddonDetails = null
+        this.routeData.target = ''
+      }
+      
+      this.validateStep1()
+    },
+
+    detectTargetMode() {
+      // Check if the current target matches any available add-on
+      const target = this.routeData.target
+      if (!target) {
+        this.targetInputMode = 'addon'
+        return
+      }
+
+      // Load add-ons first, then check if target matches
+      this.loadAddons().then(() => {
+        const matchingAddon = this.availableAddons.find(addon => addon.url === target)
+        if (matchingAddon) {
+          this.targetInputMode = 'addon'
+          this.selectedAddon = target
+          this.selectedAddonDetails = matchingAddon
+        } else {
+          this.targetInputMode = 'manual'
+        }
+      })
+    },
     
     validateStep1() {
       try {
@@ -458,7 +654,15 @@ export default {
         const target = this.routeData.target || ''
         
         const hostnameValid = hostname.length > 0 && this.hostnameRules.every(rule => rule(hostname) === true)
-        const targetValid = target.length > 0 && this.targetRules.every(rule => rule(target) === true)
+        
+        let targetValid = false
+        if (this.targetInputMode === 'addon') {
+          // For add-on mode, target is valid if an add-on is selected
+          targetValid = !!this.selectedAddon && !!target
+        } else {
+          // For manual mode, validate using rules
+          targetValid = target.length > 0 && this.targetRules.every(rule => rule(target) === true)
+        }
         
         this.step1Valid = hostnameValid && targetValid
       } catch (error) {
@@ -564,6 +768,12 @@ export default {
       }
       this.testResult = null
       this.step1Valid = false
+      
+      // Reset add-on related data
+      this.targetInputMode = 'addon'
+      this.selectedAddon = null
+      this.selectedAddonDetails = null
+      this.addonsError = null
     },
     
     closeDialog() {
@@ -594,5 +804,14 @@ export default {
 .v-card-text {
   flex: 1;
   overflow-y: auto;
+}
+
+.addon-item {
+  min-height: 72px;
+}
+
+.addon-item :deep(.v-list-item-subtitle) {
+  white-space: normal;
+  line-height: 1.4;
 }
 </style>

@@ -80,10 +80,18 @@ Target URI: http://a0d7b954-bitwarden:7277
 ```
 
 ### After: Automatic Discovery
-The frontend can now:
-1. Call `/api/addons/running` to get available add-ons
-2. Display a user-friendly dropdown with add-on names
-3. Auto-populate the target URI when user selects an add-on
+The frontend now provides two input modes:
+
+1. **Add-on Selection Mode** (Default)
+   - Calls `/api/addons/running` to get available add-ons
+   - Displays user-friendly dropdown with add-on names and descriptions
+   - Shows real-time status (Running/Stopped)
+   - Auto-populates target URI when user selects an add-on
+
+2. **Manual Entry Mode** (Advanced)
+   - Traditional text input for custom targets
+   - Supports external services and custom URIs
+   - Maintains full flexibility for power users
 
 ### Suggested UI Improvements
 

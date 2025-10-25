@@ -4,7 +4,9 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -120,9 +122,67 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 				g.startRoute(route)
 			}
 		}
+
+		if domain.Redirect != nil && domain.Redirect.Target != "" {
+			g.httpServer.SetHandler("supervisor."+domain.Name, http.HandlerFunc(g.redirectToSupervisor))
+		}
+	}
+	return nil
+}
+
+func (g *Gateway) redirectToSupervisor(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
 
-	return nil
+	debugTokenPath := path.Join(g.dataDir, "debug_token")
+	debugToken := ""
+	if tokenBytes, err := os.ReadFile(debugTokenPath); err == nil {
+		debugToken = strings.TrimSpace(string(tokenBytes))
+	}
+	if debugToken == "" || r.Header.Get("Authorization") != "Bearer "+debugToken {
+		http.Error(w, "Supervisor access is not allowed", http.StatusForbidden)
+		return
+	}
+
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, "http://supervisor"+r.URL.Path, r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Copy headers from original request
+	for name, values := range r.Header {
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
+	}
+
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("SUPERVISOR_TOKEN"))
+
+	// Copy query parameters
+	req.URL.RawQuery = r.URL.RawQuery
+
+	// Forward the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy response headers
+	for name, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(name, value)
+		}
+	}
+
+	// Copy status code and body
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 func (g *Gateway) startRoute(route *ConfigRoute) {
@@ -319,6 +379,13 @@ func (g *Gateway) StartDNS(ctx context.Context, port int) (err error) {
 	g.externalIPv6, err = g.CreateExternalIPv6(g.config.Dns.ExternalIpv6.Method, g.config.Dns.ExternalIpv6.Param)
 	if err != nil {
 		return err
+	}
+
+	if g.externalIPv4 != nil {
+		_, _ = g.externalIPv4.Refresh()
+	}
+	if g.externalIPv6 != nil {
+		_, _ = g.externalIPv6.Refresh()
 	}
 
 	g.dnsServer, err = dns.NewServer(fmt.Sprintf(":%d", port))

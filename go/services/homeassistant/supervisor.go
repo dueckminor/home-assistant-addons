@@ -14,10 +14,19 @@ type ExternalIP interface {
 }
 
 var supervisorURI = "http://supervisor"
+var supervisorToken = ""
+
+func init() {
+	uri := os.Getenv("SUPERVISOR_URI")
+	if uri != "" {
+		supervisorURI = uri
+	}
+	supervisorToken = os.Getenv("SUPERVISOR_TOKEN")
+}
 
 func NewExternalIP() ExternalIP {
 	return &externalIP{
-		token: os.Getenv("SUPERVISOR_TOKEN"),
+		token: supervisorToken,
 	}
 }
 

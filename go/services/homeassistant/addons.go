@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 )
 
 type AddonInfo struct {
@@ -19,8 +18,10 @@ type AddonInfo struct {
 }
 
 type AddonsResponse struct {
-	Result string      `json:"result"`
-	Data   []AddonInfo `json:"data"`
+	Result string `json:"result"`
+	Data   struct {
+		Addons []AddonInfo `json:"addons"`
+	} `json:"data"`
 }
 
 type AddonResponse struct {
@@ -35,8 +36,8 @@ type SupervisorClient struct {
 
 func NewSupervisorClient() *SupervisorClient {
 	return &SupervisorClient{
-		token:   os.Getenv("SUPERVISOR_TOKEN"),
-		baseURL: "http://supervisor",
+		token:   supervisorToken,
+		baseURL: supervisorURI,
 	}
 }
 
@@ -61,12 +62,12 @@ func (sc *SupervisorClient) GetAllAddons() ([]AddonInfo, error) {
 		return nil, err
 	}
 
-	return addonsResp.Data, nil
+	return addonsResp.Data.Addons, nil
 }
 
 // GetAddonInfo retrieves detailed info for a specific add-on
 func (sc *SupervisorClient) GetAddonInfo(slug string) (*AddonInfo, error) {
-	req, err := http.NewRequest("GET", sc.baseURL+"/addons/"+slug, nil)
+	req, err := http.NewRequest("GET", sc.baseURL+"/addons/"+slug+"/info", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -80,9 +81,21 @@ func (sc *SupervisorClient) GetAddonInfo(slug string) (*AddonInfo, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == 404 {
+		return nil, fmt.Errorf("add-on %s not found (possibly a local add-on)", slug)
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API request failed with status %d", resp.StatusCode)
+	}
+
 	var addonResp AddonResponse
 	if err := json.NewDecoder(resp.Body).Decode(&addonResp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode response: %v", err)
+	}
+
+	if addonResp.Result != "ok" {
+		return nil, fmt.Errorf("API returned error result: %s", addonResp.Result)
 	}
 
 	return &addonResp.Data, nil
@@ -98,22 +111,59 @@ func (sc *SupervisorClient) GetRunningAddons() ([]AddonTarget, error) {
 	var targets []AddonTarget
 	for _, addon := range addons {
 		if addon.State == "started" {
-			// Get detailed info to get network configuration
-			info, err := sc.GetAddonInfo(addon.Slug)
-			if err != nil {
-				continue // Skip if we can't get info
+			// Try to get detailed info, but fall back to basic info if it fails
+			info := &addon
+			if detailedInfo, err := sc.GetAddonInfo(addon.Slug); err == nil {
+				info = detailedInfo
+			}
+			// If GetAddonInfo fails, we'll use the basic info from the initial list
+
+			// Skip our own add-on to avoid self-reference
+			if info.Slug == "local_home_assistant_gateway" {
+				continue
 			}
 
 			// Find the main service port
-			for portName, port := range info.Network {
+			if len(info.Network) > 0 {
+				for portName, port := range info.Network {
+					// Handle the case where port might be 0 (ingress-only add-ons)
+					actualPort := port
+					if actualPort == 0 {
+						// For ingress add-ons, we can still create a target but note it's ingress-only
+						// They are typically accessible via their slug without explicit port
+						actualPort = 80 // Default web port for URL construction
+					}
+
+					target := AddonTarget{
+						Name:        info.Name,
+						Slug:        info.Slug,
+						Description: info.Description,
+						Hostname:    info.Slug, // Add-ons are accessible via their slug as hostname
+						Port:        actualPort,
+						PortName:    portName,
+						URL:         fmt.Sprintf("http://%s:%d", info.Slug, actualPort),
+					}
+
+					// Special handling for ingress add-ons (port 0)
+					if port == 0 {
+						// Ingress add-ons are typically accessible without explicit port
+						target.URL = fmt.Sprintf("http://%s", info.Slug)
+						target.Port = 0 // Keep original port as 0 to indicate ingress
+					}
+
+					targets = append(targets, target)
+					break // Only take the first port for now
+				}
+			} else {
+				// Add-ons without network config might still be accessible via ingress
 				target := AddonTarget{
 					Name:        info.Name,
 					Slug:        info.Slug,
 					Description: info.Description,
-					Hostname:    info.Slug, // Add-ons are accessible via their slug as hostname
-					Port:        port,
-					PortName:    portName,
-					URL:         fmt.Sprintf("http://%s:%d", info.Slug, port),
+					Hostname:    info.Slug,
+					Port:        0,
+					PortName:    "ingress",
+					URL:         fmt.Sprintf("http://%s", info.Slug),
 				}
 				targets = append(targets, target)
 			}

@@ -3,9 +3,9 @@ description: "Home Assistant Gateway is a HTTP/S proxy with integrated DNS and L
 version: "0.1.0"
 slug: "home_assistant_gateway"
 startup: "services"
-apparmor: "local/gateway"
+#apparmor: "local/gateway"
 hassio_api: true
-hassio_role: default
+hassio_role: manager
 init: false
 ingress: true
 ingress_port: 8099
