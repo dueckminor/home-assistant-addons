@@ -130,21 +130,15 @@
                   @update:modelValue="onAddonSelected"
                 >
                   <template v-slot:item="{ props, item }">
-                    <v-list-item v-bind="props" class="addon-item">
+                    <v-list-item 
+                      :value="props.value"
+                      @click="props.onClick"
+                    >
                       <template v-slot:prepend>
                         <v-icon color="success">mdi-puzzle</v-icon>
                       </template>
                       <v-list-item-title>{{ item.raw.name }}</v-list-item-title>
-                      <v-list-item-subtitle>
-                        <div class="d-flex align-center">
-                          <span class="me-2">{{ item.raw.url }}</span>
-                          <v-chip size="x-small" color="success" variant="tonal">
-                            <v-icon start size="x-small">mdi-play</v-icon>
-                            Running
-                          </v-chip>
-                        </div>
-                        <div class="text-caption">{{ item.raw.description }}</div>
-                      </v-list-item-subtitle>
+                      <v-list-item-subtitle>{{ item.raw.url }}</v-list-item-subtitle>
                     </v-list-item>
                   </template>
                   
@@ -459,7 +453,7 @@
 </template>
 
 <script>
-import { apiRequest } from '../../utils/api.js'
+import { apiRequest, apiGet } from '../../utils/api.js'
 
 export default {
   name: 'RouteWizard',
@@ -479,12 +473,13 @@ export default {
       testResult: null,
       
       // Add-on discovery
-      targetInputMode: 'addon', // 'addon' or 'manual'
+      targetInputMode: 'manual', // 'addon' or 'manual'
       availableAddons: [],
       loadingAddons: false,
       addonsError: null,
       selectedAddon: null,
       selectedAddonDetails: null,
+      rememberedManualUri: '', // Remember manual URI when switching modes
       
       routeData: {
         hostname: '',
@@ -555,14 +550,34 @@ export default {
     },
     
     targetInputMode(newMode) {
-      // Clear target when switching modes
       if (newMode === 'addon') {
-        this.selectedAddon = null
-        this.selectedAddonDetails = null
-        this.routeData.target = ''
+        // Save manual URI before switching to addon mode
+        this.rememberedManualUri = this.routeData.target
+        
+        // Check if current URI matches any available add-on
+        const matchingAddon = this.availableAddons.find(addon => addon.url === this.routeData.target)
+        
+        if (matchingAddon) {
+          // Current URI belongs to an add-on, select it
+          this.selectedAddon = matchingAddon.url
+          this.selectedAddonDetails = matchingAddon
+          // Keep the target as is since it matches
+        } else {
+          // No matching add-on, clear selection but keep URI until user selects something
+          this.selectedAddon = null
+          this.selectedAddonDetails = null
+          // Don't clear routeData.target yet - keep it until user makes a selection
+        }
       } else {
+        // Switching to manual mode
         this.selectedAddon = null
         this.selectedAddonDetails = null
+        
+        // If we have a remembered manual URI and current target is empty or from an add-on, restore it
+        if (this.rememberedManualUri && 
+            (!this.routeData.target || this.availableAddons.some(addon => addon.url === this.routeData.target))) {
+          this.routeData.target = this.rememberedManualUri
+        }
       }
       this.validateStep1()
     }
@@ -589,7 +604,7 @@ export default {
       this.addonsError = null
       
       try {
-        const response = await apiRequest('addons/running')
+        const response = await apiGet('addons/running')
         
         if (response.result === 'ok' && Array.isArray(response.data)) {
           this.availableAddons = response.data.map(addon => ({
@@ -770,10 +785,11 @@ export default {
       this.step1Valid = false
       
       // Reset add-on related data
-      this.targetInputMode = 'addon'
+      this.targetInputMode = 'manual'
       this.selectedAddon = null
       this.selectedAddonDetails = null
       this.addonsError = null
+      this.rememberedManualUri = ''
     },
     
     closeDialog() {
@@ -806,12 +822,5 @@ export default {
   overflow-y: auto;
 }
 
-.addon-item {
-  min-height: 72px;
-}
 
-.addon-item :deep(.v-list-item-subtitle) {
-  white-space: normal;
-  line-height: 1.4;
-}
 </style>
