@@ -332,7 +332,7 @@ func (g *Gateway) StartDNS(ctx context.Context, port int) (err error) {
 }
 
 func (g *Gateway) StartAcmeClient(ctx context.Context) (err error) {
-	g.acmeClient, err = acme.NewClient(g.dataDir, g.dnsServer)
+	g.acmeClient, err = acme.NewClient(path.Join(g.dataDir, "acme"), g.dnsServer)
 	if err != nil {
 		return err
 	}
@@ -387,7 +387,7 @@ func (g *Gateway) startDomain(domain *ConfigDomain) {
 	}
 
 	g.dnsServer.AddDomains(domain.Name)
-	domain.serverCertificate = pki.NewServerCertificate(path.Join(g.dataDir, domain.Name), g.acmeClient, "*."+domain.Name)
+	domain.serverCertificate = pki.NewServerCertificate(path.Join(g.acmeClient.DataDir(), domain.Name), g.acmeClient, "*."+domain.Name)
 	domain.serverCertificate.SetTLSServer(g.httpsServer)
 }
 

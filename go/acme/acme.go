@@ -3,6 +3,7 @@ package acme
 import (
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 )
 
 type Client interface {
+	DataDir() string
 	IssueCertificate(csr crypto.CSR) (chain crypto.CertificateChain, err error)
 }
 
@@ -19,9 +21,14 @@ type ChallengeHandler interface {
 }
 
 type client struct {
+	dataDir          string
 	client           *acme.Client
 	account          *acme.Account
 	challengeHandler ChallengeHandler
+}
+
+func (c *client) DataDir() string {
+	return c.dataDir
 }
 
 func (c *client) IssueCertificate(csr crypto.CSR) (chain crypto.CertificateChain, err error) {
@@ -148,11 +155,16 @@ func (c *client) acceptChallenges(ctx context.Context, order *acme.Order) (err e
 }
 
 func NewClient(dataDir string, challengeHandler ChallengeHandler) (c Client, err error) {
+	err = os.MkdirAll(dataDir, 0700)
+	if err != nil {
+		return nil, err
+	}
 	key, err := crypto.GetOrCreatePrivateKeyFile(path.Join(dataDir, "account_key.pem"))
 	if err != nil {
 		return nil, err
 	}
 	return &client{
+		dataDir:          dataDir,
 		client:           &acme.Client{Key: key},
 		challengeHandler: challengeHandler,
 	}, nil
