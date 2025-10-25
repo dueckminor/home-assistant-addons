@@ -10,6 +10,7 @@ import (
 
 	"github.com/dueckminor/home-assistant-addons/go/auth"
 	"github.com/dueckminor/home-assistant-addons/go/dns"
+	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
 	"github.com/dueckminor/home-assistant-addons/go/smtp"
 	"github.com/gin-gonic/gin"
 )
@@ -97,6 +98,10 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.GET("/mail/config", ep.GET_MailConfig)
 	r.PUT("/mail/config", ep.PUT_MailConfig)
 	r.POST("/mail/test", ep.POST_MailTest)
+
+	// Add-on discovery endpoints
+	r.GET("/addons/running", ep.GET_AddonsDiscovery)
+	r.GET("/addons/:slug", ep.GET_AddonInfo)
 
 	// Debug endpoint to inspect Home Assistant headers
 	r.GET("/debug/headers", ep.GET_DebugHeaders)
@@ -585,5 +590,43 @@ func (ep *Endpoints) GET_DebugHeaders(c *gin.Context) {
 		"headers": headers,
 		"method":  c.Request.Method,
 		"path":    c.Request.URL.Path,
+	})
+}
+
+// GET_AddonsDiscovery returns all running add-ons with their network details
+func (e *Endpoints) GET_AddonsDiscovery(c *gin.Context) {
+	supervisorClient := homeassistant.NewSupervisorClient()
+
+	targets, err := supervisorClient.GetRunningAddons()
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to discover add-ons: " + err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"result": "ok",
+		"data":   targets,
+	})
+}
+
+// GET_AddonInfo returns detailed information for a specific add-on
+func (e *Endpoints) GET_AddonInfo(c *gin.Context) {
+	slug := c.Param("slug")
+	if slug == "" {
+		c.JSON(400, gin.H{"error": "Add-on slug is required"})
+		return
+	}
+
+	supervisorClient := homeassistant.NewSupervisorClient()
+
+	info, err := supervisorClient.GetAddonInfo(slug)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to get add-on info: " + err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"result": "ok",
+		"data":   info,
 	})
 }
