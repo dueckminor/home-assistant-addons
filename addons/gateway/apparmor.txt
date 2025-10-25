@@ -1,0 +1,87 @@
+#include <tunables/global>
+
+profile gateway flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+  #include <abstractions/ssl_certs>
+
+  # Data directory - where add-on stores persistent data
+  /data/** rw,
+  
+  # Temporary files for certificate generation and processing
+  /tmp/** rw,
+  
+  # Configuration and runtime files
+  /etc/passwd r,
+  /etc/group r,
+  /etc/hosts r,
+  /etc/resolv.conf r,
+  /etc/nsswitch.conf r,
+  /etc/services r,
+  
+  # SSL/TLS certificate locations
+  /usr/share/ca-certificates/** r,
+  /etc/ssl/certs/** r,
+  /etc/ca-certificates.conf r,
+  
+  # Network capabilities for DNS server and HTTPS proxy
+  network inet dgram,     # UDP for DNS queries
+  network inet stream,    # TCP for HTTP/HTTPS
+  network inet6 dgram,    # IPv6 UDP for DNS
+  network inet6 stream,   # IPv6 TCP for HTTP/HTTPS
+  
+  # Allow binding to privileged ports (53, 80, 443)
+  capability net_bind_service,
+  
+  # Unix sockets for Home Assistant Supervisor API
+  network unix stream,
+  network unix dgram,
+  
+  # Process management
+  /proc/sys/net/core/somaxconn r,
+  /proc/loadavg r,
+  /proc/meminfo r,
+  /proc/stat r,
+  /proc/uptime r,
+  /proc/version r,
+  
+  # System information
+  /sys/class/net/ r,
+  /sys/class/net/*/address r,
+  /sys/class/net/*/operstate r,
+  
+  # Allow reading own process info
+  owner /proc/*/stat r,
+  owner /proc/*/status r,
+  owner /proc/*/cmdline r,
+  owner /proc/*/environ r,
+  
+  # Deny dangerous operations
+  deny mount,
+  deny umount,
+  deny pivot_root,
+  deny ptrace,
+  deny /proc/*/mem rw,
+  deny /proc/kcore rw,
+  deny /proc/kmem rw,
+  deny /sys/** w,
+  deny /dev/mem rw,
+  deny /dev/kmem rw,
+  deny capability sys_admin,
+  deny capability sys_module,
+  deny capability sys_rawio,
+  
+  # Deny access to other users' home directories
+  deny /home/** rw,
+  deny /root/** rw,
+  
+  # Deny writing to system directories
+  deny /etc/** w,
+  deny /usr/** w,
+  deny /lib/** w,
+  deny /lib64/** w,
+  deny /bin/** w,
+  deny /sbin/** w,
+  deny /boot/** rw,
+  deny /var/log/** w,
+}
