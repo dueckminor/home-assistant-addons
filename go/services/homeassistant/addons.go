@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type AddonInfo struct {
@@ -126,46 +127,28 @@ func (sc *SupervisorClient) GetRunningAddons() ([]AddonTarget, error) {
 			// Find the main service port
 			if len(info.Network) > 0 {
 				for portName, port := range info.Network {
-					// Handle the case where port might be 0 (ingress-only add-ons)
-					actualPort := port
-					if actualPort == 0 {
-						// For ingress add-ons, we can still create a target but note it's ingress-only
-						// They are typically accessible via their slug without explicit port
-						actualPort = 80 // Default web port for URL construction
+					if port == 0 {
+						// Handle the case where port might be 0 (ingress-only add-ons)
+						// these addons are meant to be reached via the home-assistant UI
+						continue
 					}
+
+					// Convert slug to hostname (underscores to hyphens)
+					hostname := strings.ReplaceAll(info.Slug, "_", "-")
 
 					target := AddonTarget{
 						Name:        info.Name,
 						Slug:        info.Slug,
 						Description: info.Description,
-						Hostname:    info.Slug, // Add-ons are accessible via their slug as hostname
-						Port:        actualPort,
+						Hostname:    hostname,
+						Port:        port,
 						PortName:    portName,
-						URL:         fmt.Sprintf("http://%s:%d", info.Slug, actualPort),
-					}
-
-					// Special handling for ingress add-ons (port 0)
-					if port == 0 {
-						// Ingress add-ons are typically accessible without explicit port
-						target.URL = fmt.Sprintf("http://%s", info.Slug)
-						target.Port = 0 // Keep original port as 0 to indicate ingress
+						URL:         fmt.Sprintf("http://%s:%d", hostname, port),
 					}
 
 					targets = append(targets, target)
 					break // Only take the first port for now
 				}
-			} else {
-				// Add-ons without network config might still be accessible via ingress
-				target := AddonTarget{
-					Name:        info.Name,
-					Slug:        info.Slug,
-					Description: info.Description,
-					Hostname:    info.Slug,
-					Port:        0,
-					PortName:    "ingress",
-					URL:         fmt.Sprintf("http://%s", info.Slug),
-				}
-				targets = append(targets, target)
 			}
 		}
 	}
