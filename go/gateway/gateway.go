@@ -10,6 +10,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/acme"
 	"github.com/dueckminor/home-assistant-addons/go/auth"
@@ -127,6 +128,23 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 			g.httpServer.SetHandler("supervisor."+domain.Name, http.HandlerFunc(g.redirectToSupervisor))
 		}
 	}
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(5 * time.Minute):
+				if g.externalIPv4 != nil {
+					go g.externalIPv4.Refresh()
+				}
+				if g.externalIPv6 != nil {
+					go g.externalIPv6.Refresh()
+				}
+			}
+		}
+	}()
+
 	return nil
 }
 
