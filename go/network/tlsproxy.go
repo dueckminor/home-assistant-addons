@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
@@ -50,8 +51,7 @@ func (d dialCtx) DialCtx(ctx context.Context, sni string) (net.Conn, error) {
 }
 
 type TLSProxy interface {
-	Serve
-	ListenAndServe(ctx context.Context, network string, address string) error
+	io.Closer
 	SetExternalIp(address string)
 	AddHandler(sni string, handler any)
 	DeleteHandler(sni string)
@@ -60,6 +60,7 @@ type TLSProxy interface {
 }
 
 type tlsProxy struct {
+	listener      net.Listener
 	serveHandlers map[string]ServeCtx
 	dialHandlers  map[string]DialCtx
 	tlsConfigs    map[string]*tls.Config
@@ -67,39 +68,50 @@ type tlsProxy struct {
 	externalAddr  net.IP
 }
 
-func NewTLSProxy() (TLSProxy, error) {
-	return &tlsProxy{
+func NewTLSProxy(network string, address string) (TLSProxy, error) {
+	tp := &tlsProxy{
 		serveHandlers: make(map[string]ServeCtx),
 		dialHandlers:  make(map[string]DialCtx),
 		tlsConfigs:    make(map[string]*tls.Config),
 		internal:      make(map[string]bool),
-	}, nil
+	}
+	err := tp.start(network, address)
+	if err != nil {
+		return nil, err
+	}
+
+	return tp, nil
 }
 
-func (tp *tlsProxy) ListenAndServe(ctx context.Context, network string, address string) error {
+func (tp *tlsProxy) Close() error {
+	if tp.listener != nil {
+		tp.listener.Close()
+		tp.listener = nil
+	}
+	return nil
+}
+
+func (tp *tlsProxy) start(network string, address string) error {
 	listener, err := net.Listen(network, address)
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
-
 	go func() {
-		<-ctx.Done()
-		listener.Close()
-	}()
 
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Fatal("could not accept client connection", err)
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				log.Fatal("could not accept client connection", err)
+			}
+			go func() {
+				remoteAddr := conn.RemoteAddr()
+				fmt.Printf("client '%v' connected!\n", remoteAddr)
+				tp.Serve(conn)
+				fmt.Printf("client '%v' disconnected!\n", remoteAddr)
+			}()
 		}
-		go func() {
-			remoteAddr := conn.RemoteAddr()
-			fmt.Printf("client '%v' connected!\n", remoteAddr)
-			tp.Serve(conn)
-			fmt.Printf("client '%v' disconnected!\n", remoteAddr)
-		}()
-	}
+	}()
+	return nil
 }
 
 func (tp *tlsProxy) SetExternalIp(address string) {

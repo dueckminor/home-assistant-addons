@@ -407,43 +407,28 @@ func (g *Gateway) StartAcmeClient(ctx context.Context) (err error) {
 }
 
 func (g *Gateway) StartHttpServer(ctx context.Context, port int) (err error) {
-	g.httpServer = network.NewHttpToHttps()
-
-	g.wg.Add(1)
-
+	g.httpServer, err = network.NewHttpToHttps("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return err
+	}
 	go func() {
-		defer func() {
-			g.httpServer = nil
-			g.wg.Done()
-		}()
-		err := g.httpServer.ListenAndServe(ctx, "tcp", fmt.Sprintf(":%d", port))
-		if err != nil {
-			fmt.Println(err)
-		}
+		<-ctx.Done()
+		g.httpServer.Close()
+		g.httpServer = nil
 	}()
-
 	return nil
 }
 
 func (g *Gateway) StartHttpsServer(ctx context.Context, port int) (err error) {
-	g.httpsServer, err = network.NewTLSProxy()
+	g.httpsServer, err = network.NewTLSProxy("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return err
 	}
-
-	g.wg.Add(1)
-
 	go func() {
-		defer func() {
-			g.httpsServer = nil
-			g.wg.Done()
-		}()
-		err := g.httpsServer.ListenAndServe(ctx, "tcp", fmt.Sprintf(":%d", port))
-		if err != nil {
-			fmt.Println(err)
-		}
+		<-ctx.Done()
+		g.httpServer.Close()
+		g.httpServer = nil
 	}()
-
 	return nil
 }
 
