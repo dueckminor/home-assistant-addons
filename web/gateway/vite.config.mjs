@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify'
 import { fileURLToPath, URL } from 'node:url'
 
 // Plugin to exclude heavy font formats (TTF, EOT, WOFF) - keep only WOFF2
@@ -17,7 +18,15 @@ const excludeHeavyFonts = () => ({
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [vue(), excludeHeavyFonts()],
+  plugins: [
+    vue({
+      template: { transformAssetUrls }
+    }),
+    vuetify({
+      autoImport: true,
+    }),
+    excludeHeavyFonts()
+  ],
   base: './', // Generate relative paths instead of absolute
   build: {
     outDir: '../../go/gateway/dist',
