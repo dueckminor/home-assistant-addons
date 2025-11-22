@@ -16,7 +16,7 @@ require (
 	github.com/influxdata/influxdb1-client v0.0.0-20220302092344-a9ab5670611c
 	github.com/miekg/dns v1.1.68
 	github.com/simonvetter/modbus v1.6.4
-	golang.org/x/crypto v0.44.0
+	golang.org/x/crypto v0.45.0
 	golang.org/x/net v0.47.0
 	golang.org/x/text v0.31.0
 	gopkg.in/yaml.v3 v3.0.1
