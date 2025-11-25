@@ -11,8 +11,8 @@ import (
 type Client interface {
 	Close() error
 	Flush()
-	SendMetric(measurement string, value float64, tags map[string]string)
-	SendMetricAtTs(measurement string, value float64, tags map[string]string, ts time.Time)
+	SendMetric(measurement string, value float64, tags map[string]string) error
+	SendMetricAtTs(measurement string, value float64, tags map[string]string, ts time.Time) error
 }
 
 type client struct {
@@ -28,26 +28,28 @@ func (c *client) Flush() {
 
 }
 
-func (c *client) SendMetric(measurement string, value float64, tags map[string]string) {
-	c.SendMetricAtTs(measurement, value, tags, time.Now().UTC())
+func (c *client) SendMetric(measurement string, value float64, tags map[string]string) error {
+	return c.SendMetricAtTs(measurement, value, tags, time.Now().UTC())
 }
 
-func (c *client) SendMetricAtTs(measurement string, value float64, tags map[string]string, ts time.Time) {
+func (c *client) SendMetricAtTs(measurement string, value float64, tags map[string]string, ts time.Time) error {
 	points, err := influxdb1.NewBatchPoints(c.config)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to create batch points: %w", err)
 	}
 	point, err := influxdb1.NewPoint(measurement, tags, map[string]any{"value": value}, ts)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to create point: %w", err)
 	}
 
 	points.AddPoint(point)
 
 	err = c.client.Write(points)
 	if err != nil {
-		fmt.Println(err)
+		return fmt.Errorf("failed to write to InfluxDB: %w", err)
 	}
+
+	return nil
 }
 
 func NewClient(uri, database, user, password string) (c Client, err error) {
