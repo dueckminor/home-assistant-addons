@@ -13,9 +13,6 @@ import (
 
 type dialFunc func() (net.Conn, error)
 
-func (d dialFunc) Dial(sni string) (net.Conn, error) {
-	return d()
-}
 func (d dialFunc) DialCtx(ctx context.Context, sni string) (net.Conn, error) {
 	return d()
 }
@@ -28,10 +25,6 @@ func NewDialTCPRaw(network string, addr string) DialCtx {
 ////////////////////////////////////////////////////////////////////////////////
 
 type dialFixedAddress func() (net.Conn, error)
-
-func (f dialFixedAddress) Serve(conn net.Conn) {
-	f.ServeCtx(context.Background(), conn)
-}
 
 func (f dialFixedAddress) ServeCtx(ctx context.Context, conn net.Conn) {
 	defer conn.Close()

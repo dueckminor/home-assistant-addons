@@ -11,43 +11,11 @@ import (
 	"strings"
 )
 
-type Serve interface {
-	Serve(conn net.Conn)
-}
 type ServeCtx interface {
-	Serve
 	ServeCtx(ctx context.Context, conn net.Conn)
 }
-
-type serveCtx struct {
-	serve Serve
-}
-
-func (s serveCtx) Serve(conn net.Conn) {
-	s.serve.Serve(conn)
-}
-func (s serveCtx) ServeCtx(ctx context.Context, conn net.Conn) {
-	s.serve.Serve(conn)
-}
-
-type Dial interface {
-	Dial(sni string) (net.Conn, error)
-}
 type DialCtx interface {
-	Dial
 	DialCtx(ctx context.Context, sni string) (net.Conn, error)
-}
-
-type dialCtx struct {
-	dial Dial
-}
-
-func (d dialCtx) Dial(sni string) (net.Conn, error) {
-	return d.dial.Dial(sni)
-}
-
-func (d dialCtx) DialCtx(ctx context.Context, sni string) (net.Conn, error) {
-	return d.dial.Dial(sni)
 }
 
 type TLSProxy interface {
@@ -106,7 +74,7 @@ func (tp *tlsProxy) start(network string, address string) error {
 			go func() {
 				remoteAddr := conn.RemoteAddr()
 				fmt.Printf("client '%v' connected!\n", remoteAddr)
-				tp.Serve(conn)
+				tp.ServeCtx(context.Background(), conn)
 				fmt.Printf("client '%v' disconnected!\n", remoteAddr)
 			}()
 		}
@@ -125,12 +93,8 @@ func (tp *tlsProxy) AddHandler(sni string, handler any) {
 	switch v := handler.(type) {
 	case ServeCtx:
 		serveHandler = v
-	case Serve:
-		serveHandler = serveCtx{serve: v}
 	case DialCtx:
 		dialHandler = v
-	case Dial:
-		dialHandler = dialCtx{dial: v}
 	default:
 		return
 	}
@@ -201,11 +165,6 @@ func (tp *tlsProxy) isValidHostname(sni string) bool {
 //   - redirect the complete connection to a different host without
 //     removing the TLS layer (here the cache is used to repeat the client hello)
 //   - complete the TLS handshake and forward the content to a different host
-
-func (tp *tlsProxy) Serve(conn net.Conn) {
-	tp.ServeCtx(context.Background(), conn)
-}
-
 func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 	clientWrapper := &connWrapper{conn: conn, cacheRead: true}
 

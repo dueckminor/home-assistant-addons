@@ -3,6 +3,7 @@ package network
 import (
 	"io"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -66,23 +67,23 @@ func (w *connWrapper) SetWriteDeadline(t time.Time) error {
 }
 
 func forwardConnect(client, server net.Conn) {
-	done := make(chan bool, 2)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	go func() {
+		defer wg.Done()
 		// when the server closes the connection,
 		// it's no longer necessary to send something
 		// -> lets close the client connection
 		defer client.Close()
 
 		io.Copy(client, server) // nolint: errcheck
-		done <- true
 	}()
 
 	go func() {
+		defer wg.Done()
 		io.Copy(server, client) // nolint: errcheck
-		done <- true
 	}()
 
-	<-done
-	<-done
+	wg.Wait()
 }
