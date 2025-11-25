@@ -68,7 +68,8 @@ type Gateway struct {
 	externalIPv4 dns.ExternalIP
 	externalIPv6 dns.ExternalIP
 
-	influxDBConfig *homeassistant.InfluxDBConfig
+	influxDBConfig   *homeassistant.InfluxDBConfig
+	metricsCollector *MetricsCollector
 
 	debug bool
 }
@@ -130,10 +131,25 @@ func (g *Gateway) detectInfluxDB() {
 		// Only send startup metric if credentials are available
 		if g.influxDBConfig.Username != "" {
 			g.sendStartupMetric()
+			g.startMetricsCollector()
 		}
 	} else {
 		fmt.Println("ℹ️  No InfluxDB add-on detected")
 	}
+}
+
+func (g *Gateway) startMetricsCollector() {
+	client, err := g.influxDBConfig.CreateClient()
+	if err != nil {
+		fmt.Printf("⚠️  Failed to create InfluxDB client for metrics: %v\n", err)
+		return
+	}
+
+	// Create metrics collector with 1-minute interval
+	g.metricsCollector = NewMetricsCollector(client, 1*time.Minute)
+	g.metricsCollector.Start()
+
+	fmt.Println("📊 Metrics collector started (reporting every 1 minute)")
 }
 
 func (g *Gateway) sendStartupMetric() {
@@ -607,6 +623,11 @@ func (g *Gateway) StartUI(ctx context.Context, port int) error {
 	if !g.debug {
 		// Apply Home Assistant authentication middleware to all API endpoints
 		api.Use(ep.CheckHomeAssistantAuth)
+	}
+
+	// Add metrics collection middleware if available
+	if g.metricsCollector != nil {
+		api.Use(g.metricsCollector.MetricsMiddleware())
 	}
 
 	ep.setupEndpoints(api)
