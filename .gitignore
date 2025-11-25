@@ -11,6 +11,7 @@ addons/*/*-arm64
 
 # Dependencies of the JS projects
 web/**/node_modules
+web/**/.vite
 
 # Generated files of the JS projects which are embedded in the Go projects
 go/**/dist
