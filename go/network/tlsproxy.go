@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 type ServeCtx interface {
@@ -22,18 +23,20 @@ type TLSProxy interface {
 	io.Closer
 	SetExternalIp(address string)
 	AddHandler(sni string, handler any)
+	SetMetricCallback(metricCallback MetricCallback)
 	DeleteHandler(sni string)
 	InternalOnly(sni string)
 	AddTLSConfig(sni string, tlsConfig *tls.Config)
 }
 
 type tlsProxy struct {
-	listener      net.Listener
-	serveHandlers map[string]ServeCtx
-	dialHandlers  map[string]DialCtx
-	tlsConfigs    map[string]*tls.Config
-	internal      map[string]bool
-	externalAddr  net.IP
+	listener       net.Listener
+	serveHandlers  map[string]ServeCtx
+	dialHandlers   map[string]DialCtx
+	tlsConfigs     map[string]*tls.Config
+	internal       map[string]bool
+	externalAddr   net.IP
+	metricCallback MetricCallback
 }
 
 func NewTLSProxy(network string, address string) (TLSProxy, error) {
@@ -49,6 +52,10 @@ func NewTLSProxy(network string, address string) (TLSProxy, error) {
 	}
 
 	return tp, nil
+}
+
+func (tp *tlsProxy) SetMetricCallback(metricCallback MetricCallback) {
+	tp.metricCallback = metricCallback
 }
 
 func (tp *tlsProxy) Close() error {
@@ -168,6 +175,8 @@ func (tp *tlsProxy) isValidHostname(sni string) bool {
 func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 	clientWrapper := &connWrapper{conn: conn, cacheRead: true}
 
+	clientAddr := conn.RemoteAddr()
+
 	closeConn := true
 	defer func() {
 		if closeConn {
@@ -187,7 +196,7 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 
 		serve, dial, internal = tp.getHandler(sni)
 
-		fmt.Println("Remote:", conn.RemoteAddr())
+		fmt.Println("Remote:", clientAddr)
 		if internal {
 			fmt.Println("Internal!")
 		}
@@ -219,11 +228,27 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 
 	if nil == serve && nil == dial {
 		fmt.Println("ServerName:", sni, "rejected")
+		if tp.metricCallback != nil {
+			tp.metricCallback(Metric{
+				Timestamp:    time.Now(),
+				ClientAddr:   clientAddr.String(),
+				Hostname:     sni,
+				ResponseCode: 666,
+			})
+		}
 		return
 	}
 
 	if err != nil && dial == nil {
 		fmt.Println("Handshake Err:", err)
+		if tp.metricCallback != nil {
+			tp.metricCallback(Metric{
+				Timestamp:    time.Now(),
+				ClientAddr:   clientAddr.String(),
+				Hostname:     sni,
+				ResponseCode: 667,
+			})
+		}
 		return
 	}
 

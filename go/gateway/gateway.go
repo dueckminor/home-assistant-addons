@@ -175,6 +175,10 @@ func (g *Gateway) sendStartupMetric() {
 	fmt.Println("✅ Startup metric sent to InfluxDB successfully")
 }
 
+func (g *Gateway) metricCallback(metric network.Metric) {
+	fmt.Println(metric.ClientAddr, metric.Hostname, metric.ResponseCode)
+}
+
 func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPort int, configPort int) (err error) {
 	ctx, g.cancel = context.WithCancel(ctx)
 
@@ -311,6 +315,7 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 			InsecureTLS:       route.Options.Insecure,
 			Auth:              route.Options.Auth,
 			AuthSecret:        route.Options.AuthSecret,
+			MetricCallback:    g.metricCallback,
 		}
 		if options.Auth {
 			if g.authClient == nil {
@@ -538,6 +543,7 @@ func (g *Gateway) StartHttpServer(ctx context.Context, port int) (err error) {
 
 func (g *Gateway) StartHttpsServer(ctx context.Context, port int) (err error) {
 	g.httpsServer, err = network.NewTLSProxy("tcp", fmt.Sprintf(":%d", port))
+	g.httpsServer.SetMetricCallback(g.metricCallback)
 	if err != nil {
 		return err
 	}
