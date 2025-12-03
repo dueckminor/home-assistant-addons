@@ -2,7 +2,7 @@
 ARG BUILD_FROM=ghcr.io/hassio-addons/base:19.0.0
 
 # Platform selector stage
-FROM alpine:3.22 AS platform_selector
+FROM alpine:3.23 AS platform_selector
 
 COPY gateway-* /binaries/
 
