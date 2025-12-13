@@ -176,7 +176,9 @@ func (g *Gateway) sendStartupMetric() {
 }
 
 func (g *Gateway) metricCallback(metric network.Metric) {
-	fmt.Println(metric.ClientAddr, metric.Hostname, metric.ResponseCode)
+	if g.metricsCollector != nil {
+		g.metricsCollector.RecordMetric(metric)
+	}
 }
 
 func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPort int, configPort int) (err error) {
@@ -629,11 +631,6 @@ func (g *Gateway) StartUI(ctx context.Context, port int) error {
 	if !g.debug {
 		// Apply Home Assistant authentication middleware to all API endpoints
 		api.Use(ep.CheckHomeAssistantAuth)
-	}
-
-	// Add metrics collection middleware if available
-	if g.metricsCollector != nil {
-		api.Use(g.metricsCollector.MetricsMiddleware())
 	}
 
 	ep.setupEndpoints(api)

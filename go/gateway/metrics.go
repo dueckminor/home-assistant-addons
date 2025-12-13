@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
-	"github.com/gin-gonic/gin"
 )
 
 // RouteMetrics stores aggregated metrics for a specific route
@@ -17,6 +17,7 @@ type RouteMetrics struct {
 	MaxDuration   time.Duration
 	ErrorCount    int64
 	StatusCodes   map[int]int64
+	ClientAddrs   map[string]int64 // Track requests per client IP
 }
 
 // MetricsCollector aggregates HTTP metrics and sends them to InfluxDB periodically
@@ -39,37 +40,50 @@ func NewMetricsCollector(influxClient influxdb.Client, interval time.Duration) *
 	}
 }
 
-// RecordRequest records metrics for a single HTTP request
-func (mc *MetricsCollector) RecordRequest(route string, method string, statusCode int, duration time.Duration) {
+// RecordMetric records metrics from a network.Metric
+func (mc *MetricsCollector) RecordMetric(metric network.Metric) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
-	key := fmt.Sprintf("%s:%s", method, route)
+	// Create key from hostname, method, and path for better granularity
+	// Special cases:
+	// - ResponseCode 666: Unknown hostname (port scan attack) - no method/path
+	// - ResponseCode 667: TLS handshake failure - no method/path
+	var key string
+	if metric.ResponseCode == 666 {
+		key = fmt.Sprintf("%s:UNKNOWN:unknown_host", metric.Hostname)
+	} else if metric.ResponseCode == 667 {
+		key = fmt.Sprintf("%s:TLS:handshake_failed", metric.Hostname)
+	} else {
+		key = fmt.Sprintf("%s:%s:%s", metric.Hostname, metric.Method, metric.Path)
+	}
 
 	metrics, exists := mc.routes[key]
 	if !exists {
 		metrics = &RouteMetrics{
 			StatusCodes: make(map[int]int64),
-			MinDuration: duration,
+			ClientAddrs: make(map[string]int64),
+			MinDuration: metric.Duration,
 		}
 		mc.routes[key] = metrics
 	}
 
 	metrics.RequestCount++
-	metrics.TotalDuration += duration
+	metrics.TotalDuration += metric.Duration
 
-	if duration < metrics.MinDuration {
-		metrics.MinDuration = duration
+	if metric.Duration < metrics.MinDuration || metrics.MinDuration == 0 {
+		metrics.MinDuration = metric.Duration
 	}
-	if duration > metrics.MaxDuration {
-		metrics.MaxDuration = duration
+	if metric.Duration > metrics.MaxDuration {
+		metrics.MaxDuration = metric.Duration
 	}
 
-	if statusCode >= 400 {
+	if metric.ResponseCode >= 400 || metric.ResponseCode == 666 || metric.ResponseCode == 667 {
 		metrics.ErrorCount++
 	}
 
-	metrics.StatusCodes[statusCode]++
+	metrics.StatusCodes[metric.ResponseCode]++
+	metrics.ClientAddrs[metric.ClientAddr]++
 }
 
 // Start begins the periodic metrics reporting
@@ -123,6 +137,8 @@ func (mc *MetricsCollector) sendMetrics() {
 	now := time.Now()
 
 	for routeKey, metrics := range snapshot {
+		// Parse the route key to extract hostname, method, and path
+		// Format: "hostname:method:path"
 		tags := map[string]string{
 			"route": routeKey,
 		}
@@ -171,31 +187,16 @@ func (mc *MetricsCollector) sendMetrics() {
 				fmt.Printf("Failed to send status code metric: %v\n", err)
 			}
 		}
-	}
-}
 
-// MetricsMiddleware returns a Gin middleware that records HTTP metrics
-func (mc *MetricsCollector) MetricsMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if mc == nil {
-			c.Next()
-			return
+		// Send client address distribution
+		for clientAddr, count := range metrics.ClientAddrs {
+			clientTags := map[string]string{
+				"route":       routeKey,
+				"client_addr": clientAddr,
+			}
+			if err := mc.influxDB.SendMetricAtTs("gateway_client_requests", float64(count), clientTags, now); err != nil {
+				fmt.Printf("Failed to send client request metric: %v\n", err)
+			}
 		}
-
-		start := time.Now()
-
-		// Process request
-		c.Next()
-
-		// Record metrics
-		duration := time.Since(start)
-		route := c.FullPath()
-		if route == "" {
-			route = c.Request.URL.Path
-		}
-		method := c.Request.Method
-		statusCode := c.Writer.Status()
-
-		mc.RecordRequest(route, method, statusCode, duration)
 	}
 }
