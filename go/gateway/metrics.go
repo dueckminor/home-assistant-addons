@@ -177,8 +177,19 @@ func (mc *MetricsCollector) sendMetrics() {
 			tags["org"] = metrics.GeoLocation.Org
 		}
 
-		// Send request count
-		if err := mc.influxDB.SendMetricAtTs("gateway_requests", float64(metrics.RequestCount), tags, now); err != nil {
+		// Create fields map starting with the main metric
+		fields := map[string]interface{}{
+			"value": float64(metrics.RequestCount),
+		}
+
+		// Add lat/lon as fields if available
+		if metrics.GeoLocation != nil {
+			fields["latitude"] = metrics.GeoLocation.Lat
+			fields["longitude"] = metrics.GeoLocation.Lon
+		}
+
+		// Send request count with lat/lon fields
+		if err := mc.influxDB.SendMetricWithFieldsAtTs("gateway_requests", fields, tags, now); err != nil {
 			fmt.Printf("Failed to send request count metric: %v\n", err)
 		}
 
@@ -218,7 +229,7 @@ func (mc *MetricsCollector) sendMetrics() {
 				"client_addr": metrics.ClientAddr,
 				"status":      fmt.Sprintf("%d", statusCode),
 			}
-			// Add geolocation tags to status codes as well
+			// Add geolocation tags to status codes as well (but not lat/lon - those go in fields)
 			if metrics.GeoLocation != nil {
 				statusTags["country"] = metrics.GeoLocation.Country
 				statusTags["country_code"] = metrics.GeoLocation.CountryCode
@@ -227,7 +238,17 @@ func (mc *MetricsCollector) sendMetrics() {
 				statusTags["isp"] = metrics.GeoLocation.ISP
 				statusTags["org"] = metrics.GeoLocation.Org
 			}
-			if err := mc.influxDB.SendMetricAtTs("gateway_status_codes", float64(count), statusTags, now); err != nil {
+
+			// Create fields with count and lat/lon
+			statusFields := map[string]interface{}{
+				"value": float64(count),
+			}
+			if metrics.GeoLocation != nil {
+				statusFields["lat"] = metrics.GeoLocation.Lat
+				statusFields["lon"] = metrics.GeoLocation.Lon
+			}
+
+			if err := mc.influxDB.SendMetricWithFieldsAtTs("gateway_status_codes", statusFields, statusTags, now); err != nil {
 				fmt.Printf("Failed to send status code metric: %v\n", err)
 			}
 		}

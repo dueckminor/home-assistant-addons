@@ -103,6 +103,12 @@ func (g *Gateway) detectInfluxDB() {
 		envUsername := os.Getenv("INFLUXDB_USERNAME")
 		envPassword := os.Getenv("INFLUXDB_PASSWORD")
 		envDatabase := os.Getenv("INFLUXDB_DATABASE")
+		envInfluxURL := os.Getenv("INFLUXDB_URL")
+
+		// Override URL if provided
+		if envInfluxURL != "" {
+			g.influxDBConfig.URL = envInfluxURL
+		}
 
 		if envUsername != "" {
 			g.influxDBConfig.Username = envUsername
@@ -190,10 +196,17 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 		}
 	}()
 
+	err = g.StartDNS(ctx, dnsPort)
+	for _, domain := range g.config.Domains {
+		if domain.Redirect != nil && domain.Redirect.Target != "" {
+			continue
+		}
+		g.dnsServer.AddDomains(domain.Name)
+	}
+
 	// Detect InfluxDB add-on at startup
 	g.detectInfluxDB()
 
-	err = g.StartDNS(ctx, dnsPort)
 	if err == nil {
 		err = g.StartHttpServer(ctx, httpPort)
 	}
@@ -332,6 +345,9 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 	}
 	if strings.HasPrefix(route.Target, "tcp://") {
 		g.httpsServer.AddHandler(hostname, network.NewDialTCPRaw("tcp", route.Target[6:]))
+	}
+	if strings.HasPrefix(route.Target, "proxy+tcp://") {
+		g.httpsServer.AddHandler(hostname, network.NewProxyDial(network.NewDialTCPRaw("tcp", route.Target[12:])))
 	}
 }
 
@@ -545,6 +561,11 @@ func (g *Gateway) StartHttpServer(ctx context.Context, port int) (err error) {
 
 func (g *Gateway) StartHttpsServer(ctx context.Context, port int) (err error) {
 	g.httpsServer, err = network.NewTLSProxy("tcp", fmt.Sprintf(":%d", port))
+
+	if g.debug {
+		g.httpsServer.EnableProxyProtocol(true)
+	}
+
 	g.httpsServer.SetMetricCallback(g.metricCallback)
 	if err != nil {
 		return err

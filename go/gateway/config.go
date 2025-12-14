@@ -41,7 +41,7 @@ type ConfigRedirect struct {
 }
 
 func (configRedirect *ConfigRedirect) GetHTTPSTarget() string {
-	return fmt.Sprintf("tcp://%s:%d", configRedirect.Target, configRedirect.HttpsPort)
+	return fmt.Sprintf("proxy+tcp://%s:%d", configRedirect.Target, configRedirect.HttpsPort)
 }
 
 func (configRedirect *ConfigRedirect) GetDNSTarget() string {
