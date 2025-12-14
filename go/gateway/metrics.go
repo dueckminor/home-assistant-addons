@@ -3,7 +3,9 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -155,102 +157,95 @@ func (mc *MetricsCollector) sendMetrics() {
 	now := time.Now()
 
 	for routeKey, metrics := range snapshot {
-		// Parse the route key to extract client, hostname, method, and path
-		// Format: "clientaddr:hostname:method:path"
-		tags := map[string]string{
-			"route":       routeKey,
-			"client_addr": metrics.ClientAddr,
+		// Parse route key: "clientaddr:hostname:method:path"
+		parts := strings.Split(routeKey, ":")
+		if len(parts) < 4 {
+			continue
 		}
+
+		hostname := parts[1]
+		method := parts[2]
+		path := strings.Join(parts[3:], ":") // Rejoin in case path contains colons
 
 		// Resolve geolocation for this client IP (async, won't block requests)
 		if metrics.GeoLocation == nil {
 			metrics.GeoLocation = mc.getGeoLocation(metrics.ClientAddr)
 		}
 
-		// Add geolocation tags if available
-		if metrics.GeoLocation != nil {
-			tags["country"] = metrics.GeoLocation.Country
-			tags["country_code"] = metrics.GeoLocation.CountryCode
-			tags["city"] = metrics.GeoLocation.City
-			tags["region"] = metrics.GeoLocation.Region
-			tags["isp"] = metrics.GeoLocation.ISP
-			tags["org"] = metrics.GeoLocation.Org
+		// Create optimized tags (low cardinality)
+		tags := map[string]string{
+			"hostname": hostname,
+			"method":   method,
 		}
 
-		// Create fields map starting with the main metric
+		// Create comprehensive fields (numeric and string data)
 		fields := map[string]interface{}{
-			"value": float64(metrics.RequestCount),
+			"request_count": float64(metrics.RequestCount),
+			"error_count":   float64(metrics.ErrorCount),
+			"client_ip":     metrics.ClientAddr,
+			"full_path":     path,
 		}
 
-		// Add lat/lon as fields if available
+		// Add response time fields
+		if metrics.RequestCount > 0 {
+			fields["response_time_avg"] = float64(metrics.TotalDuration.Milliseconds()) / float64(metrics.RequestCount)
+		}
+		if metrics.MinDuration > 0 {
+			fields["response_time_min"] = float64(metrics.MinDuration.Milliseconds())
+		}
+		if metrics.MaxDuration > 0 {
+			fields["response_time_max"] = float64(metrics.MaxDuration.Milliseconds())
+		}
+
+		// Add geolocation fields (numeric and string)
 		if metrics.GeoLocation != nil {
 			fields["latitude"] = metrics.GeoLocation.Lat
 			fields["longitude"] = metrics.GeoLocation.Lon
+			fields["country_name"] = metrics.GeoLocation.Country
+			fields["city_name"] = metrics.GeoLocation.City
 		}
 
-		// Send request count with lat/lon fields
-		if err := mc.influxDB.SendMetricWithFieldsAtTs("gateway_requests", fields, tags, now); err != nil {
-			fmt.Printf("Failed to send request count metric: %v\n", err)
-		}
-
-		// Send average response time (in milliseconds)
-		if metrics.RequestCount > 0 {
-			avgMs := float64(metrics.TotalDuration.Milliseconds()) / float64(metrics.RequestCount)
-			if err := mc.influxDB.SendMetricAtTs("gateway_response_time_avg", avgMs, tags, now); err != nil {
-				fmt.Printf("Failed to send avg response time metric: %v\n", err)
-			}
-		}
-
-		// Send min response time (in milliseconds)
-		if metrics.MinDuration > 0 {
-			if err := mc.influxDB.SendMetricAtTs("gateway_response_time_min", float64(metrics.MinDuration.Milliseconds()), tags, now); err != nil {
-				fmt.Printf("Failed to send min response time metric: %v\n", err)
-			}
-		}
-
-		// Send max response time (in milliseconds)
-		if metrics.MaxDuration > 0 {
-			if err := mc.influxDB.SendMetricAtTs("gateway_response_time_max", float64(metrics.MaxDuration.Milliseconds()), tags, now); err != nil {
-				fmt.Printf("Failed to send max response time metric: %v\n", err)
-			}
-		}
-
-		// Send error count
-		if metrics.ErrorCount > 0 {
-			if err := mc.influxDB.SendMetricAtTs("gateway_errors", float64(metrics.ErrorCount), tags, now); err != nil {
-				fmt.Printf("Failed to send error count metric: %v\n", err)
-			}
-		}
-
-		// Send status code distribution
+		// Add individual status code counts as fields
+		var status2xx, status3xx, status4xx, status5xx, statusSpecial float64
 		for statusCode, count := range metrics.StatusCodes {
-			statusTags := map[string]string{
-				"route":       routeKey,
-				"client_addr": metrics.ClientAddr,
-				"status":      fmt.Sprintf("%d", statusCode),
-			}
-			// Add geolocation tags to status codes as well (but not lat/lon - those go in fields)
-			if metrics.GeoLocation != nil {
-				statusTags["country"] = metrics.GeoLocation.Country
-				statusTags["country_code"] = metrics.GeoLocation.CountryCode
-				statusTags["city"] = metrics.GeoLocation.City
-				statusTags["region"] = metrics.GeoLocation.Region
-				statusTags["isp"] = metrics.GeoLocation.ISP
-				statusTags["org"] = metrics.GeoLocation.Org
-			}
+			fieldName := fmt.Sprintf("status_%d", statusCode)
+			fields[fieldName] = float64(count)
 
-			// Create fields with count and lat/lon
-			statusFields := map[string]interface{}{
-				"value": float64(count),
+			// Group status codes by category
+			switch {
+			case statusCode >= 200 && statusCode < 300:
+				status2xx += float64(count)
+			case statusCode >= 300 && statusCode < 400:
+				status3xx += float64(count)
+			case statusCode >= 400 && statusCode < 500:
+				status4xx += float64(count)
+			case statusCode >= 500 && statusCode < 600:
+				status5xx += float64(count)
+			case statusCode == 666 || statusCode == 667:
+				statusSpecial += float64(count)
 			}
-			if metrics.GeoLocation != nil {
-				statusFields["lat"] = metrics.GeoLocation.Lat
-				statusFields["lon"] = metrics.GeoLocation.Lon
-			}
+		}
 
-			if err := mc.influxDB.SendMetricWithFieldsAtTs("gateway_status_codes", statusFields, statusTags, now); err != nil {
-				fmt.Printf("Failed to send status code metric: %v\n", err)
-			}
+		// Add grouped status code fields
+		if status2xx > 0 {
+			fields["status_2xx"] = status2xx
+		}
+		if status3xx > 0 {
+			fields["status_3xx"] = status3xx
+		}
+		if status4xx > 0 {
+			fields["status_4xx"] = status4xx
+		}
+		if status5xx > 0 {
+			fields["status_5xx"] = status5xx
+		}
+		if statusSpecial > 0 {
+			fields["status_special"] = statusSpecial
+		}
+
+		// Send single consolidated metric
+		if err := mc.influxDB.SendMetricWithFieldsAtTs("gateway_metrics", fields, tags, now); err != nil {
+			fmt.Printf("Failed to send gateway metrics: %v\n", err)
 		}
 	}
 }
@@ -323,4 +318,11 @@ func (mc *MetricsCollector) getGeoLocation(ipAddr string) *GeoLocation {
 	mc.geoCacheMu.Unlock()
 
 	return geoLocation
+}
+
+// simpleHash creates a simple numeric hash of a string for privacy-preserving IP tracking
+func simpleHash(s string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	return h.Sum32()
 }
