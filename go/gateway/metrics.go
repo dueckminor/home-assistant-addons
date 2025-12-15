@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +28,8 @@ type GeoLocation struct {
 // RouteMetrics stores metrics for a specific route and client
 type RouteMetrics struct {
 	ClientAddr    string
+	Hostname      string
+	Method        string
 	GeoLocation   *GeoLocation
 	RequestCount  int64
 	TotalDuration time.Duration
@@ -70,18 +72,30 @@ func (mc *MetricsCollector) RecordMetric(metric network.Metric) {
 	// - ResponseCode 666: Unknown hostname (port scan attack) - no method/path
 	// - ResponseCode 667: TLS handshake failure - no method/path
 	var key string
-	if metric.ResponseCode == 666 {
-		key = fmt.Sprintf("%s:%s:UNKNOWN:unknown_host", metric.ClientAddr, metric.Hostname)
-	} else if metric.ResponseCode == 667 {
-		key = fmt.Sprintf("%s:%s:TLS:handshake_failed", metric.ClientAddr, metric.Hostname)
-	} else {
-		key = fmt.Sprintf("%s:%s:%s:%s", metric.ClientAddr, metric.Hostname, metric.Method, metric.Path)
+
+	// Remove the port from client address for key (safely)
+	clientIP := metric.ClientAddr
+	if host, _, err := net.SplitHostPort(metric.ClientAddr); err == nil {
+		clientIP = host
 	}
+
+	hostname := metric.Hostname
+	if hostname == "" {
+		hostname = "NONE"
+	}
+	method := metric.Method
+	if method == "" {
+		method = "NONE"
+	}
+
+	key = fmt.Sprintf("%s/%s/%s", clientIP, hostname, method)
 
 	metrics, exists := mc.routes[key]
 	if !exists {
 		metrics = &RouteMetrics{
-			ClientAddr:  metric.ClientAddr,
+			Hostname:    hostname,
+			Method:      method,
+			ClientAddr:  clientIP,
 			GeoLocation: nil, // Will be resolved during sendMetrics
 			StatusCodes: make(map[int]int64),
 			MinDuration: metric.Duration,
@@ -156,16 +170,8 @@ func (mc *MetricsCollector) sendMetrics() {
 
 	now := time.Now()
 
-	for routeKey, metrics := range snapshot {
+	for _, metrics := range snapshot {
 		// Parse route key: "clientaddr:hostname:method:path"
-		parts := strings.Split(routeKey, ":")
-		if len(parts) < 4 {
-			continue
-		}
-
-		hostname := parts[1]
-		method := parts[2]
-		path := strings.Join(parts[3:], ":") // Rejoin in case path contains colons
 
 		// Resolve geolocation for this client IP (async, won't block requests)
 		if metrics.GeoLocation == nil {
@@ -174,8 +180,8 @@ func (mc *MetricsCollector) sendMetrics() {
 
 		// Create optimized tags (low cardinality)
 		tags := map[string]string{
-			"hostname": hostname,
-			"method":   method,
+			"hostname": metrics.Hostname,
+			"method":   metrics.Method,
 		}
 
 		// Create comprehensive fields (numeric and string data)
@@ -183,7 +189,6 @@ func (mc *MetricsCollector) sendMetrics() {
 			"request_count": float64(metrics.RequestCount),
 			"error_count":   float64(metrics.ErrorCount),
 			"client_ip":     metrics.ClientAddr,
-			"full_path":     path,
 		}
 
 		// Add response time fields
