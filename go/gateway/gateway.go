@@ -68,6 +68,9 @@ type Gateway struct {
 	externalIPv4 dns.ExternalIP
 	externalIPv6 dns.ExternalIP
 
+	influxDBConfig   *homeassistant.InfluxDBConfig
+	metricsCollector *MetricsCollector
+
 	debug bool
 }
 
@@ -77,6 +80,111 @@ func (g *Gateway) EnableDebugMode() {
 
 func (g *Gateway) Wait() {
 	g.wg.Wait()
+}
+
+func (g *Gateway) detectInfluxDB() {
+	// Only attempt detection if running in Home Assistant (SUPERVISOR_TOKEN is set)
+	if os.Getenv("SUPERVISOR_TOKEN") == "" {
+		fmt.Println("InfluxDB detection skipped: not running in Home Assistant environment")
+		return
+	}
+
+	supervisorClient := homeassistant.NewSupervisorClient()
+	config, err := supervisorClient.DetectInfluxDB()
+	if err != nil {
+		fmt.Printf("InfluxDB detection error: %v\n", err)
+		return
+	}
+
+	if config.Found {
+		g.influxDBConfig = config
+
+		// Try to get credentials from environment variables (set by add-on options)
+		envUsername := os.Getenv("INFLUXDB_USERNAME")
+		envPassword := os.Getenv("INFLUXDB_PASSWORD")
+		envDatabase := os.Getenv("INFLUXDB_DATABASE")
+		envInfluxURL := os.Getenv("INFLUXDB_URL")
+
+		// Override URL if provided
+		if envInfluxURL != "" {
+			g.influxDBConfig.URL = envInfluxURL
+		}
+
+		if envUsername != "" {
+			g.influxDBConfig.Username = envUsername
+			g.influxDBConfig.Password = envPassword
+		} else if g.config.InfluxDB.Username != "" {
+			// Fallback to config file credentials if no env vars
+			g.influxDBConfig.Username = g.config.InfluxDB.Username
+			g.influxDBConfig.Password = g.config.InfluxDB.Password
+		}
+
+		// Override database name if provided
+		if envDatabase != "" {
+			g.influxDBConfig.Database = envDatabase
+		}
+
+		fmt.Printf("✅ InfluxDB detected: %s\n", config.Name)
+		fmt.Printf("   URL: %s\n", config.URL)
+		fmt.Printf("   Database: %s\n", g.influxDBConfig.Database)
+		if g.influxDBConfig.Username != "" {
+			fmt.Printf("   Username: %s\n", g.influxDBConfig.Username)
+		} else {
+			fmt.Println("   ⚠️  No credentials configured - metrics disabled")
+			fmt.Println("   Configure in Home Assistant add-on settings")
+		}
+
+		// Only send startup metric if credentials are available
+		if g.influxDBConfig.Username != "" {
+			g.sendStartupMetric()
+			g.startMetricsCollector()
+		}
+	} else {
+		fmt.Println("ℹ️  No InfluxDB add-on detected")
+	}
+}
+
+func (g *Gateway) startMetricsCollector() {
+	client, err := g.influxDBConfig.CreateClient()
+	if err != nil {
+		fmt.Printf("⚠️  Failed to create InfluxDB client for metrics: %v\n", err)
+		return
+	}
+
+	// Create metrics collector with 1-minute interval
+	g.metricsCollector = NewMetricsCollector(client, 1*time.Minute)
+	g.metricsCollector.Start()
+
+	fmt.Println("📊 Metrics collector started (reporting every 1 minute)")
+}
+
+func (g *Gateway) sendStartupMetric() {
+	client, err := g.influxDBConfig.CreateClient()
+	if err != nil {
+		fmt.Printf("⚠️  Failed to create InfluxDB client: %v\n", err)
+		return
+	}
+	defer client.Close()
+
+	// Send startup event with value 1
+	tags := map[string]string{
+		"service": "gateway",
+		"event":   "startup",
+	}
+
+	err = client.SendMetric("gateway_events", 1, tags)
+	if err != nil {
+		fmt.Printf("⚠️  Failed to send startup metric: %v\n", err)
+		return
+	}
+
+	fmt.Println("✅ Startup metric sent to InfluxDB successfully")
+}
+
+func (g *Gateway) metricCallback(metric network.Metric) {
+	if g.metricsCollector != nil {
+		g.metricsCollector.RecordMetric(metric)
+	}
 }
 
 func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPort int, configPort int) (err error) {
@@ -89,6 +197,16 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 	}()
 
 	err = g.StartDNS(ctx, dnsPort)
+	for _, domain := range g.config.Domains {
+		if domain.Redirect != nil && domain.Redirect.Target != "" {
+			continue
+		}
+		g.dnsServer.AddDomains(domain.Name)
+	}
+
+	// Detect InfluxDB add-on at startup
+	g.detectInfluxDB()
+
 	if err == nil {
 		err = g.StartHttpServer(ctx, httpPort)
 	}
@@ -212,6 +330,7 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 			InsecureTLS:       route.Options.Insecure,
 			Auth:              route.Options.Auth,
 			AuthSecret:        route.Options.AuthSecret,
+			MetricCallback:    g.metricCallback,
 		}
 		if options.Auth {
 			if g.authClient == nil {
@@ -226,6 +345,9 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 	}
 	if strings.HasPrefix(route.Target, "tcp://") {
 		g.httpsServer.AddHandler(hostname, network.NewDialTCPRaw("tcp", route.Target[6:]))
+	}
+	if strings.HasPrefix(route.Target, "proxy+tcp://") {
+		g.httpsServer.AddHandler(hostname, network.NewProxyDial(network.NewDialTCPRaw("tcp", route.Target[12:])))
 	}
 }
 
@@ -439,6 +561,12 @@ func (g *Gateway) StartHttpServer(ctx context.Context, port int) (err error) {
 
 func (g *Gateway) StartHttpsServer(ctx context.Context, port int) (err error) {
 	g.httpsServer, err = network.NewTLSProxy("tcp", fmt.Sprintf(":%d", port))
+
+	if g.debug {
+		g.httpsServer.EnableProxyProtocol(true)
+	}
+
+	g.httpsServer.SetMetricCallback(g.metricCallback)
 	if err != nil {
 		return err
 	}

@@ -41,7 +41,7 @@ type ConfigRedirect struct {
 }
 
 func (configRedirect *ConfigRedirect) GetHTTPSTarget() string {
-	return fmt.Sprintf("tcp://%s:%d", configRedirect.Target, configRedirect.HttpsPort)
+	return fmt.Sprintf("proxy+tcp://%s:%d", configRedirect.Target, configRedirect.HttpsPort)
 }
 
 func (configRedirect *ConfigRedirect) GetDNSTarget() string {
@@ -106,11 +106,17 @@ type ConfigMail struct {
 	FromName  string `yaml:"from_name" json:"from_name"`
 }
 
+type ConfigInfluxDB struct {
+	Username string `yaml:"username" json:"username"`
+	Password string `yaml:"password" json:"password"`
+}
+
 type Config struct {
-	file    string
-	Domains []*ConfigDomain `yaml:"domains" json:"domains"`
-	Dns     ConfigDns       `yaml:"dns" json:"dns"`
-	Mail    ConfigMail      `yaml:"mail" json:"mail"`
+	file     string
+	Domains  []*ConfigDomain `yaml:"domains" json:"domains"`
+	Dns      ConfigDns       `yaml:"dns" json:"dns"`
+	Mail     ConfigMail      `yaml:"mail" json:"mail"`
+	InfluxDB ConfigInfluxDB  `yaml:"influxdb" json:"influxdb"`
 }
 
 func (config *Config) GetDomain(guid string) *ConfigDomain {

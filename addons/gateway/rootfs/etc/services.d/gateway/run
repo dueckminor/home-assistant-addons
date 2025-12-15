@@ -1,19 +1,19 @@
 #!/usr/bin/with-contenv bashio
 # ==============================================================================
-# Start the example service
-# s6-overlay docs: https://github.com/just-containers/s6-overlay
+# Start the gateway service
 # ==============================================================================
 
-# Add your code here
+# Read InfluxDB credentials from add-on options
+influx_db_user=$(bashio::config 'influx_db_user')
+influx_db_password=$(bashio::config 'influx_db_password')
+influx_db_database=$(bashio::config 'influx_db_database')
 
-# Declare variables
-declare message
+# Export as environment variables for the gateway
+export INFLUXDB_USERNAME="${influx_db_user}"
+export INFLUXDB_PASSWORD="${influx_db_password}"
+export INFLUXDB_DATABASE="${influx_db_database}"
 
-## Get the 'message' key from the user config options.
-message=$(bashio::config 'message')
+bashio::log.info "Starting Home Assistant Gateway..."
 
-## Print the message the user supplied, defaults to "Hello World..."
-bashio::log.info "${message:="Hello World..."}"
-
-## Run your program
+## Run gateway
 exec /usr/local/bin/gateway

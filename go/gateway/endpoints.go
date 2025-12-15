@@ -103,6 +103,11 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.GET("/addons/running", ep.GET_AddonsDiscovery)
 	r.GET("/addons/:slug", ep.GET_AddonInfo)
 
+	// InfluxDB integration status
+	r.GET("/influxdb/status", ep.GET_InfluxDBStatus)
+	r.GET("/influxdb/config", ep.GET_InfluxDBConfig)
+	r.PUT("/influxdb/config", ep.PUT_InfluxDBConfig)
+
 	// Debug endpoint to inspect Home Assistant headers
 	r.GET("/debug/headers", ep.GET_DebugHeaders)
 }
@@ -628,5 +633,81 @@ func (e *Endpoints) GET_AddonInfo(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"result": "ok",
 		"data":   info,
+	})
+}
+
+// GET_InfluxDBStatus returns the current InfluxDB integration status
+func (e *Endpoints) GET_InfluxDBStatus(c *gin.Context) {
+	if e.Gateway.influxDBConfig == nil || !e.Gateway.influxDBConfig.Found {
+		c.JSON(200, gin.H{
+			"result": "ok",
+			"data": gin.H{
+				"enabled": false,
+				"message": "No InfluxDB add-on detected",
+			},
+		})
+		return
+	}
+
+	// Return sanitized configuration (no password)
+	c.JSON(200, gin.H{
+		"result": "ok",
+		"data": gin.H{
+			"enabled":  true,
+			"name":     e.Gateway.influxDBConfig.Name,
+			"slug":     e.Gateway.influxDBConfig.Slug,
+			"url":      e.Gateway.influxDBConfig.URL,
+			"database": e.Gateway.influxDBConfig.Database,
+			"username": e.Gateway.influxDBConfig.Username,
+			"message":  "InfluxDB integration active",
+		},
+	})
+}
+
+// GET_InfluxDBConfig returns the InfluxDB configuration (credentials)
+func (e *Endpoints) GET_InfluxDBConfig(c *gin.Context) {
+	config := e.Gateway.config.InfluxDB
+	// Mask password for security
+	maskedPassword := ""
+	if config.Password != "" {
+		maskedPassword = "********"
+	}
+
+	c.JSON(200, gin.H{
+		"username": config.Username,
+		"password": maskedPassword,
+	})
+}
+
+// PUT_InfluxDBConfig updates the InfluxDB credentials
+func (e *Endpoints) PUT_InfluxDBConfig(c *gin.Context) {
+	var newConfig ConfigInfluxDB
+	if err := c.BindJSON(&newConfig); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	// Update the configuration
+	e.Gateway.config.InfluxDB = newConfig
+
+	// Also update the active InfluxDB config if detected
+	if e.Gateway.influxDBConfig != nil && e.Gateway.influxDBConfig.Found {
+		e.Gateway.influxDBConfig.Username = newConfig.Username
+		e.Gateway.influxDBConfig.Password = newConfig.Password
+	}
+
+	// Save configuration
+	e.Gateway.config.save()
+
+	// Return masked password
+	maskedPassword := ""
+	if newConfig.Password != "" {
+		maskedPassword = "********"
+	}
+
+	c.JSON(200, gin.H{
+		"username": newConfig.Username,
+		"password": maskedPassword,
+		"message":  "InfluxDB credentials updated successfully",
 	})
 }

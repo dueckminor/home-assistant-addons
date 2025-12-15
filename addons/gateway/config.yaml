@@ -17,3 +17,11 @@ ports:
   53/udp: 53
   80/tcp: 80
   443/tcp: 443
+options:
+  influx_db_user: ""
+  influx_db_password: ""
+  influx_db_database: "homeassistant"
+schema:
+  influx_db_user: str
+  influx_db_password: password
+  influx_db_database: str

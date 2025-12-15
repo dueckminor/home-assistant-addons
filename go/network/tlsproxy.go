@@ -9,69 +9,53 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
-type Serve interface {
-	Serve(conn net.Conn)
-}
 type ServeCtx interface {
-	Serve
 	ServeCtx(ctx context.Context, conn net.Conn)
 }
-
-type serveCtx struct {
-	serve Serve
-}
-
-func (s serveCtx) Serve(conn net.Conn) {
-	s.serve.Serve(conn)
-}
-func (s serveCtx) ServeCtx(ctx context.Context, conn net.Conn) {
-	s.serve.Serve(conn)
-}
-
-type Dial interface {
-	Dial(sni string) (net.Conn, error)
-}
 type DialCtx interface {
-	Dial
 	DialCtx(ctx context.Context, sni string) (net.Conn, error)
 }
 
-type dialCtx struct {
-	dial Dial
+type ProxyDialCtx interface {
+	ProxyDialCtx(ctx context.Context, client net.Conn, sni string) (net.Conn, error)
 }
 
-func (d dialCtx) Dial(sni string) (net.Conn, error) {
-	return d.dial.Dial(sni)
+type wrapDialCtx struct {
+	dialer DialCtx
 }
 
-func (d dialCtx) DialCtx(ctx context.Context, sni string) (net.Conn, error) {
-	return d.dial.Dial(sni)
+func (wd *wrapDialCtx) ProxyDialCtx(ctx context.Context, client net.Conn, sni string) (net.Conn, error) {
+	return wd.dialer.DialCtx(ctx, sni)
 }
 
 type TLSProxy interface {
 	io.Closer
 	SetExternalIp(address string)
 	AddHandler(sni string, handler any)
+	SetMetricCallback(metricCallback MetricCallback)
 	DeleteHandler(sni string)
 	InternalOnly(sni string)
 	AddTLSConfig(sni string, tlsConfig *tls.Config)
+	EnableProxyProtocol(enable bool)
 }
-
 type tlsProxy struct {
-	listener      net.Listener
-	serveHandlers map[string]ServeCtx
-	dialHandlers  map[string]DialCtx
-	tlsConfigs    map[string]*tls.Config
-	internal      map[string]bool
-	externalAddr  net.IP
+	listener       net.Listener
+	serveHandlers  map[string]ServeCtx
+	dialHandlers   map[string]ProxyDialCtx
+	tlsConfigs     map[string]*tls.Config
+	internal       map[string]bool
+	externalAddr   net.IP
+	metricCallback MetricCallback
+	proxyProtocol  bool
 }
 
 func NewTLSProxy(network string, address string) (TLSProxy, error) {
 	tp := &tlsProxy{
 		serveHandlers: make(map[string]ServeCtx),
-		dialHandlers:  make(map[string]DialCtx),
+		dialHandlers:  make(map[string]ProxyDialCtx),
 		tlsConfigs:    make(map[string]*tls.Config),
 		internal:      make(map[string]bool),
 	}
@@ -81,6 +65,14 @@ func NewTLSProxy(network string, address string) (TLSProxy, error) {
 	}
 
 	return tp, nil
+}
+
+func (tp *tlsProxy) EnableProxyProtocol(enable bool) {
+	tp.proxyProtocol = enable
+}
+
+func (tp *tlsProxy) SetMetricCallback(metricCallback MetricCallback) {
+	tp.metricCallback = metricCallback
 }
 
 func (tp *tlsProxy) Close() error {
@@ -106,7 +98,7 @@ func (tp *tlsProxy) start(network string, address string) error {
 			go func() {
 				remoteAddr := conn.RemoteAddr()
 				fmt.Printf("client '%v' connected!\n", remoteAddr)
-				tp.Serve(conn)
+				tp.ServeCtx(context.Background(), conn)
 				fmt.Printf("client '%v' disconnected!\n", remoteAddr)
 			}()
 		}
@@ -120,17 +112,16 @@ func (tp *tlsProxy) SetExternalIp(address string) {
 
 func (tp *tlsProxy) AddHandler(sni string, handler any) {
 	var serveHandler ServeCtx
-	var dialHandler DialCtx
+	var dialHandler ProxyDialCtx
 
 	switch v := handler.(type) {
 	case ServeCtx:
 		serveHandler = v
-	case Serve:
-		serveHandler = serveCtx{serve: v}
-	case DialCtx:
+	case ProxyDialCtx:
 		dialHandler = v
-	case Dial:
-		dialHandler = dialCtx{dial: v}
+	// wrap DialCtx into ProxyDialCtx
+	case DialCtx:
+		dialHandler = &wrapDialCtx{dialer: v}
 	default:
 		return
 	}
@@ -157,7 +148,7 @@ func (tp *tlsProxy) AddTLSConfig(sni string, tlsConfig *tls.Config) {
 	tp.tlsConfigs[sni] = tlsConfig
 }
 
-func (tp *tlsProxy) getHandler(sni string) (serve ServeCtx, dial DialCtx, internal bool) {
+func (tp *tlsProxy) getHandler(sni string) (serve ServeCtx, dial ProxyDialCtx, internal bool) {
 	if !tp.isValidHostname(sni) {
 		return nil, nil, false
 	}
@@ -201,11 +192,6 @@ func (tp *tlsProxy) isValidHostname(sni string) bool {
 //   - redirect the complete connection to a different host without
 //     removing the TLS layer (here the cache is used to repeat the client hello)
 //   - complete the TLS handshake and forward the content to a different host
-
-func (tp *tlsProxy) Serve(conn net.Conn) {
-	tp.ServeCtx(context.Background(), conn)
-}
-
 func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 	clientWrapper := &connWrapper{conn: conn, cacheRead: true}
 
@@ -216,9 +202,20 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 		}
 	}()
 
+	var err error
+	if tp.proxyProtocol {
+		err = clientWrapper.HandleProxyProtocol()
+		if err != nil {
+			fmt.Println("Proxy Protocol Err:", err)
+			return
+		}
+	}
+
+	clientAddr := clientWrapper.RemoteAddr()
+
 	var sni string
 	var serve ServeCtx
-	var dial DialCtx
+	var dial ProxyDialCtx
 	var internal bool
 
 	tlsConn := tls.Server(clientWrapper, &tls.Config{GetConfigForClient: func(clientHelloInfo *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -228,7 +225,7 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 
 		serve, dial, internal = tp.getHandler(sni)
 
-		fmt.Println("Remote:", conn.RemoteAddr())
+		fmt.Println("Remote:", clientAddr)
 		if internal {
 			fmt.Println("Internal!")
 		}
@@ -256,15 +253,33 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 		return tlsConfig, nil
 	}})
 
-	err := tlsConn.Handshake()
+	err = tlsConn.Handshake()
+
+	fmt.Println(tlsConn.RemoteAddr())
 
 	if nil == serve && nil == dial {
 		fmt.Println("ServerName:", sni, "rejected")
+		if tp.metricCallback != nil {
+			tp.metricCallback(Metric{
+				Timestamp:    time.Now(),
+				ClientAddr:   clientAddr.String(),
+				Hostname:     sni,
+				ResponseCode: 666,
+			})
+		}
 		return
 	}
 
 	if err != nil && dial == nil {
 		fmt.Println("Handshake Err:", err)
+		if tp.metricCallback != nil {
+			tp.metricCallback(Metric{
+				Timestamp:    time.Now(),
+				ClientAddr:   clientAddr.String(),
+				Hostname:     sni,
+				ResponseCode: 667,
+			})
+		}
 		return
 	}
 
@@ -280,8 +295,8 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 	tp.handleDialer(ctx, sni, conn, dial, clientWrapper.buff)
 }
 
-func (tp *tlsProxy) handleDialer(ctx context.Context, sni string, conn net.Conn, dial DialCtx, clientHello []byte) {
-	targetConn, err := dial.DialCtx(ctx, sni)
+func (tp *tlsProxy) handleDialer(ctx context.Context, sni string, conn net.Conn, dial ProxyDialCtx, clientHello []byte) {
+	targetConn, err := dial.ProxyDialCtx(ctx, conn, sni)
 	if err != nil {
 		fmt.Println("Dial Err:", err)
 		return
