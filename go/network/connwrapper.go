@@ -66,6 +66,7 @@ func (w *connWrapper) HandleProxyProtocol() error {
 }
 
 func (w *connWrapper) ReadAhead(b []byte) (n int, err error) {
+	fmt.Println("ReadAhead called")
 	if w.conn == nil {
 		return 0, nil
 	}
@@ -82,6 +83,9 @@ func (w *connWrapper) Read(b []byte) (n int, err error) {
 	}
 	if len(w.readAhead) > 0 {
 		n = copy(b, w.readAhead)
+		if w.cacheRead && n > 0 {
+			w.buff = append(w.buff, b[0:n]...)
+		}
 		w.readAhead = w.readAhead[n:]
 		return n, nil
 	}

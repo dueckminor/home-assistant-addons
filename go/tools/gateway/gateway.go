@@ -23,7 +23,7 @@ func init() {
 	flag.StringVar(&data, "data", "/data", "the data dir")
 	flag.StringVar(&distGateway, "dist-gateway", "", "the dist dir for the gateway (or uri)")
 	flag.StringVar(&distAuth, "dist-auth", "", "the dist dir for the auth (or uri)")
-	flag.BoolVar(&debug, "debug", true, "start in debug mode (without authentication)")
+	flag.BoolVar(&debug, "debug", false, "start in debug mode (without authentication)")
 	flag.IntVar(&dnsPort, "dns-port", 53, "the DNS port")
 	flag.IntVar(&httpPort, "http-port", 80, "the HTTP port")
 	flag.IntVar(&httpsPort, "https-port", 443, "the HTTPS port")
