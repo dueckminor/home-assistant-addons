@@ -95,6 +95,10 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 	}
 	sessionVerified := ac.verifySession(c)
 
+	if c.Request.URL.Path == "/flv" && c.Request.Method == "GET" {
+		return
+	}
+
 	if ac.Secret != "" {
 		if !sessionVerified {
 			secret := c.Request.URL.Query().Get("mypi-secret")

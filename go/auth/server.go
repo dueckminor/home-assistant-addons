@@ -64,7 +64,13 @@ type AuthServer struct {
 func (a *AuthServer) Register(r *gin.Engine) {
 
 	store := a.GetSessionStore()
-	r.Use(cors.Default())
+
+	// Configure CORS to allow the 'next' header and credentials
+	config := cors.DefaultConfig()
+	config.AllowAllOrigins = true
+	config.AllowCredentials = true
+	config.AllowHeaders = append(config.AllowHeaders, "next")
+	r.Use(cors.New(config))
 
 	rg := r.Group("")
 	rg.Use(sessions.Sessions("MYPI_AUTH_SESSION", store))
