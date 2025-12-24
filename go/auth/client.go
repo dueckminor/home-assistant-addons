@@ -2,8 +2,6 @@ package auth
 
 import (
 	"crypto"
-	"crypto/rand"
-	"encoding/base32"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,9 +34,6 @@ func (ac *AuthClient) RegisterCallbackHandler(e *gin.Engine) {
 
 func (ac *AuthClient) GetHandler() gin.HandlerFunc {
 	return ac.handleAuth
-}
-func (ac *AuthClient) GetHandlerForAPI() gin.HandlerFunc {
-	return ac.handleAuthForApi
 }
 
 func (ac *AuthClient) GetHandlerIntegratedLogin() gin.HandlerFunc {
@@ -79,16 +74,6 @@ func (ac *AuthClient) verifySession(c *gin.Context) bool {
 	return false
 }
 
-func (ac *AuthClient) handleAuthForApi(c *gin.Context) {
-	ok := ac.verifySession(c)
-	if c.IsAborted() {
-		return
-	}
-	if !ok {
-		c.AbortWithStatus(http.StatusUnauthorized)
-	}
-}
-
 func (ac *AuthClient) handleAuth(c *gin.Context) {
 	if c.IsAborted() {
 		return
@@ -100,50 +85,7 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 	}
 
 	if ac.Secret != "" {
-		if !sessionVerified {
-			secret := c.Request.URL.Query().Get("mypi-secret")
-			if secret == "" {
-				secret = c.Request.URL.Query().Get("secret")
-			}
-			if secret == ac.Secret {
-				session := sessions.Default(c)
-				session.Set("access_token", "anonymous")
-				session.Set("hostname", ginutil.GetHostname(c))
-				err := session.Save()
-				if err != nil {
-					c.AbortWithStatus(http.StatusInternalServerError)
-					return
-				}
-				return
-			}
-		}
-		path := c.Request.URL.Path
-		pattern := "/secret/" + ac.Secret
-		if path == pattern || strings.HasPrefix(path, pattern+"/") {
-			if !sessionVerified {
-				session := sessions.Default(c)
-				session.Set("access_token", "anonymous")
-				session.Set("hostname", ginutil.GetHostname(c))
-				err := session.Save()
-				if err != nil {
-					c.AbortWithStatus(http.StatusInternalServerError)
-					return
-				}
-			}
-			redirect := "/"
-			if path != pattern {
-				redirect = path[len(pattern):]
-			}
-
-			if c.Request.Method == "GET" {
-				c.Header("Location", redirect)
-				c.AbortWithStatus(http.StatusFound)
-				return
-			}
-
-			c.Request.URL.Path = redirect
-			return
-		}
+		sessionVerified = ac.handleSecret(c, sessionVerified)
 	}
 
 	if sessionVerified {
@@ -182,6 +124,54 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 
 	c.Header("Location", redirectToAuthURI.String())
 	c.AbortWithStatus(http.StatusFound)
+}
+
+func (ac *AuthClient) handleSecret(c *gin.Context, sessionVerified bool) bool {
+	if !sessionVerified {
+		secret := c.Request.URL.Query().Get("mypi-secret")
+		if secret == "" {
+			secret = c.Request.URL.Query().Get("secret")
+		}
+		if secret == ac.Secret {
+			session := sessions.Default(c)
+			session.Set("access_token", "anonymous")
+			session.Set("hostname", ginutil.GetHostname(c))
+			err := session.Save()
+			if err != nil {
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return false
+			}
+			return true
+		}
+	}
+
+	path := c.Request.URL.Path
+	pattern := "/secret/" + ac.Secret
+	if path == pattern || strings.HasPrefix(path, pattern+"/") {
+		if !sessionVerified {
+			session := sessions.Default(c)
+			session.Set("access_token", "anonymous")
+			session.Set("hostname", ginutil.GetHostname(c))
+			err := session.Save()
+			if err != nil {
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return false
+			}
+		}
+		redirect := "/"
+		if path != pattern {
+			redirect = path[len(pattern):]
+		}
+
+		if c.Request.Method == "GET" {
+			c.Header("Location", redirect)
+			c.AbortWithStatus(http.StatusFound)
+		} else {
+			c.Request.URL.Path = redirect
+		}
+		return true
+	}
+	return sessionVerified
 }
 
 func (ac *AuthClient) handleLoginCallback(c *gin.Context) {
@@ -271,51 +261,4 @@ func (ac *AuthClient) handleLoginCallback(c *gin.Context) {
 
 	c.Header("Location", path)
 	c.AbortWithStatus(http.StatusFound)
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-type AuthClientLocalSecret struct {
-	LocalSecret string
-}
-
-func (ac *AuthClientLocalSecret) CreateLocalSecret() string {
-	buf := make([]byte, 20)
-	_, err := rand.Read(buf)
-	if err != nil {
-		panic(err)
-	}
-	ac.LocalSecret = base32.StdEncoding.EncodeToString(buf)
-	return ac.LocalSecret
-}
-
-func (ac *AuthClientLocalSecret) GetHandler() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		session := sessions.Default(c)
-
-		q := c.Request.URL.Query()
-		secret := q.Get("local_secret")
-		if secret == ac.LocalSecret {
-			session.Set("local_secret", true)
-			err := session.Save()
-			if err != nil {
-				c.AbortWithStatus(http.StatusInternalServerError)
-				return
-			}
-
-			q.Del("local_secret")
-			c.Request.URL.RawQuery = q.Encode()
-			redirect := c.Request.URL.String()
-			c.Header("Location", redirect)
-			c.AbortWithStatus(http.StatusFound)
-			return
-		}
-
-		if true != session.Get("local_secret") {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
-
-		c.Next()
-	}
 }
