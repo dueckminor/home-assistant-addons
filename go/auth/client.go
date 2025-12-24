@@ -28,36 +28,6 @@ func (ac *AuthClient) RegisterHandler(e *gin.Engine) {
 	e.Use(ac.handleAuth)
 }
 
-func (ac *AuthClient) RegisterCallbackHandler(e *gin.Engine) {
-	e.GET("/login/callback", ac.handleLoginCallback)
-}
-
-func (ac *AuthClient) GetHandler() gin.HandlerFunc {
-	return ac.handleAuth
-}
-
-func (ac *AuthClient) GetHandlerIntegratedLogin() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		path := c.Request.URL.Path
-		prefixWithoutAuth := []string{
-			"/js",
-			"/fonts",
-			"/login",
-			"/logout",
-			"/ws",
-		}
-		for _, prefix := range prefixWithoutAuth {
-			if path == prefix ||
-				strings.HasPrefix(path, prefix+"/") ||
-				strings.HasPrefix(path, prefix+"?") {
-				c.Next()
-				return
-			}
-		}
-		ac.handleAuth(c)
-	}
-}
-
 func (ac *AuthClient) verifySession(c *gin.Context) bool {
 	hostname := ginutil.GetHostname(c)
 
