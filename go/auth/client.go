@@ -120,19 +120,29 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 		path := c.Request.URL.Path
 		pattern := "/secret/" + ac.Secret
 		if path == pattern || strings.HasPrefix(path, pattern+"/") {
-			session := sessions.Default(c)
-			session.Set("access_token", "anonymous")
-			session.Set("hostname", ginutil.GetHostname(c))
-			err := session.Save()
-			if err != nil {
-				c.AbortWithStatus(http.StatusInternalServerError)
+			if !sessionVerified {
+				session := sessions.Default(c)
+				session.Set("access_token", "anonymous")
+				session.Set("hostname", ginutil.GetHostname(c))
+				err := session.Save()
+				if err != nil {
+					c.AbortWithStatus(http.StatusInternalServerError)
+					return
+				}
+			}
+			redirect := "/"
+			if path != pattern {
+				redirect = path[len(pattern):]
+			}
+
+			if c.Request.Method == "GET" {
+				c.Header("Location", redirect)
+				c.AbortWithStatus(http.StatusFound)
 				return
 			}
-			if path == pattern {
-				c.Request.URL.Path = "/"
-			} else {
-				c.Request.URL.Path = path[len(pattern):]
-			}
+
+			c.Request.URL.Path = redirect
+			return
 		}
 	}
 

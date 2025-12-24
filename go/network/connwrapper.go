@@ -66,7 +66,6 @@ func (w *connWrapper) HandleProxyProtocol() error {
 }
 
 func (w *connWrapper) ReadAhead(b []byte) (n int, err error) {
-	fmt.Println("ReadAhead called")
 	if w.conn == nil {
 		return 0, nil
 	}
