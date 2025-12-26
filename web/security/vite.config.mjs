@@ -28,6 +28,10 @@ export default defineConfig({
     excludeHeavyFonts()
   ],
   base: './', // Generate relative paths instead of absolute
+  build: {
+    outDir: '../../go/security/dist',
+    assetsDir: 'assets'
+  },
   define: { 'process.env': {} },
   resolve: {
     alias: {

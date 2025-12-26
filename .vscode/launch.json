@@ -55,8 +55,12 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/go/tools/security/security.go",
+            "preLaunchTask": "serve",
             "args": [
-                "--data-dir=${workspaceFolder}/gen/data/security"
+                "--data=${workspaceFolder}/gen/data/security",
+                "--dist=http://localhost:3002",
+                "--http-port=30080",
+                "--ftp-port=30021"
             ]
         },
 

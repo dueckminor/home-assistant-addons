@@ -1,138 +1,90 @@
 package main
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
+	"context"
 	"flag"
-	"fmt"
 	"log"
-	"log/slog"
-	"math/big"
-	"net"
 	"os"
-	"time"
+	"os/signal"
+	"sync"
+	"syscall"
 
-	"github.com/gonzalop/ftp/server"
+	"github.com/dueckminor/home-assistant-addons/go/ftp"
+	"github.com/dueckminor/home-assistant-addons/go/security"
 )
 
-var data string
-var ftpPort int
-var debug bool
-
-func init() {
-	flag.StringVar(&data, "data", "/data", "the data dir")
-	flag.BoolVar(&debug, "debug", false, "start in debug mode (without authentication)")
-	flag.IntVar(&ftpPort, "ftp-port", 21, "the FTP port")
-	flag.Parse()
-}
-
-var ftpRootDir = "/data/ftp"
-var ftpUser = os.Getenv("FTP_USERNAME")
-var ftpPassword = os.Getenv("FTP_PASSWORD")
-
-func validateUser(user string, pass string, host string) (string, bool, error) {
-	authenticated := (user == ftpUser && pass == ftpPassword)
-
-	if !authenticated {
-		log.Printf("Authentication failed for user: %s", user)
-		return "", false, nil
-	}
-
-	return ftpRootDir, false, nil
-}
-
 func main() {
-	// Ensure the FTP directory exists
-	if err := os.MkdirAll(ftpRootDir, 0755); err != nil {
-		log.Fatalf("Could not create FTP directory: %v", err)
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	log.Printf("FTP server starting, root directory: %s", ftpRootDir)
+	wg := sync.WaitGroup{}
 
-	// Create a driver to serve the local directory
-	driver, err := server.NewFSDriver(ftpRootDir,
-		server.WithDisableAnonymous(true),
-		server.WithAuthenticator(validateUser),
+	// Command line flags
+	var (
+		dataDir    = flag.String("data", "/data", "the data directory")
+		dist       = flag.String("dist", "", "the dist dir for the security (or uri)")
+		ftpPort    = flag.Int("ftp-port", 21, "the FTP port")
+		httpPort   = flag.Int("http-port", 80, "the HTTP port")
+		debug      = flag.Bool("debug", false, "enable debug logging")
+		serverName = flag.String("server-name", "security", "the server name for TLS certificate")
 	)
+	flag.Parse()
+
+	// Get credentials from environment
+	ftpUser := os.Getenv("FTP_USERNAME")
+	ftpPassword := os.Getenv("FTP_PASSWORD")
+
+	// Set default credentials if not provided (for development)
+	if ftpUser == "" {
+		ftpUser = "admin"
+		log.Printf("Warning: Using default FTP username 'admin'")
+	}
+	if ftpPassword == "" {
+		ftpPassword = "admin123"
+		log.Printf("Warning: Using default FTP password")
+	}
+
+	security := security.NewSecurity(*httpPort, *dist, *dataDir)
+	err := security.Start(ctx, &wg)
+
+	// Create FTP server configuration
+	config := &ftp.Config{
+		DataDir:    *dataDir,
+		Port:       *ftpPort,
+		Username:   ftpUser,
+		Password:   ftpPassword,
+		ServerName: *serverName,
+		Debug:      *debug,
+	}
+
+	// Create and start FTP server
+	server, err := ftp.NewServer(config)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Failed to create FTP server: %v", err)
 	}
 
-	// Create logger for FTP server
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	// Setup graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Create TLS config for FTPS support
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{generateSelfSignedCert()},
-		ServerName:         "security",
-		InsecureSkipVerify: true,
-		MinVersion:         tls.VersionTLS12,
-		MaxVersion:         tls.VersionTLS13,
+	// Start server in a goroutine
+	go func() {
+		if err := server.Start(); err != nil {
+			log.Fatalf("FTP server error: %v", err)
+		}
+	}()
+
+	// Wait for shutdown signal
+	sig := <-sigChan
+	log.Printf("Received signal %v, shutting down...", sig)
+	cancel()
+
+	wg.Wait()
+
+	// Stop the server
+	if err := server.Stop(); err != nil {
+		log.Printf("Error stopping server: %v", err)
 	}
 
-	addr := fmt.Sprintf(":%d", ftpPort)
-
-	// Create and start the server
-	srv, err := server.NewServer(addr,
-		server.WithDriver(driver),
-		server.WithLogger(logger),
-		server.WithTLS(tlsConfig),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Starting FTPS server on %s\n", addr)
-	if err := srv.ListenAndServe(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// generateSelfSignedCert creates a self-signed certificate for testing
-func generateSelfSignedCert() tls.Certificate {
-	// Generate a private key
-	privKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		log.Fatalf("Failed to generate private key: %v", err)
-	}
-
-	// Create certificate template
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{
-			CommonName: "security",
-		},
-		NotBefore:   time.Now(),
-		NotAfter:    time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:    x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		// Include both localhost and the actual network IP
-		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1)},
-		DNSNames:              []string{"security"},
-		BasicConstraintsValid: true,
-	}
-
-	// Create the certificate
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privKey.PublicKey, privKey)
-	if err != nil {
-		log.Fatalf("Failed to create certificate: %v", err)
-	}
-
-	// Encode certificate and key to PEM format
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privKey)})
-
-	// Create TLS certificate
-	cert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		log.Fatalf("Failed to create TLS certificate: %v", err)
-	}
-
-	return cert
+	log.Println("Server stopped")
 }
