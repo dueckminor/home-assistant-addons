@@ -1,0 +1,18 @@
+#!/usr/bin/with-contenv bashio
+# ==============================================================================
+# Start the security service
+# s6-overlay docs: https://github.com/just-containers/s6-overlay
+# ==============================================================================
+
+# Read InfluxDB credentials from add-on options
+ftp_user=$(bashio::config 'ftp_user')
+ftp_password=$(bashio::config 'ftp_password')
+
+# Export as environment variables for the gateway
+export FTP_USERNAME="${ftp_user}"
+export FTP_PASSWORD="${ftp_password}"
+
+bashio::log.info "Starting FTPS Security Server..."
+
+## Run your program
+exec /usr/local/bin/security

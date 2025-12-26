@@ -1,0 +1,2 @@
+# Use pre-built multi-arch images from GitHub Container Registry
+image: ghcr.io/dueckminor/home-assistant-addons-security:v0.1.0

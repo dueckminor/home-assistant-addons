@@ -1,0 +1,22 @@
+name: "Home Assistant Security"
+description: "Home Assistant Security addon for Home Assistant"
+version: "0.1.0"
+slug: "home_assistant_security"
+startup: "services"
+init: false
+arch:
+  - aarch64
+  - amd64
+options:
+  ftp_user: ""
+  ftp_password: ""
+
+schema:
+  ftp_user: str
+  ftp_password: str
+
+ports:
+  21/tcp: 21
+
+map:
+  - security_data:/data

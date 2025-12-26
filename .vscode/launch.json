@@ -48,7 +48,17 @@
             "args": [
                 "--data-dir=${workspaceFolder}/gen/data/mqtt-bridge"
             ]
-        }
+        },
+        {
+            "name": "Launch Security",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/go/tools/security/security.go",
+            "args": [
+                "--data-dir=${workspaceFolder}/gen/data/security"
+            ]
+        },
 
     ]
 }
