@@ -3,50 +3,568 @@
     <v-app-bar app color="primary" dark>
       <v-toolbar-title>
         <v-icon class="mr-2">mdi-shield-check</v-icon>
-        Security Configuration
+        Security Camera System
       </v-toolbar-title>
+      
+      <v-spacer></v-spacer>
+      
+      <!-- Day Navigation -->
+      <v-btn
+        variant="text"
+        icon="mdi-chevron-left"
+        @click="previousDay"
+        :disabled="loading"
+      ></v-btn>
+      
+      <v-chip class="mx-2" color="secondary">
+        {{ formatDate(selectedDate) }}
+      </v-chip>
+      
+      <v-btn
+        variant="text"
+        icon="mdi-chevron-right"
+        @click="nextDay"
+        :disabled="loading || isToday"
+      ></v-btn>
+      
+      <v-menu offset-y>
+        <template v-slot:activator="{ props }">
+          <v-btn variant="text" icon="mdi-calendar" v-bind="props" class="ml-2"></v-btn>
+        </template>
+        <v-date-picker
+          v-model="selectedDate"
+          @update:model-value="loadDayFiles"
+        ></v-date-picker>
+      </v-menu>
     </v-app-bar>
 
     <v-main>
-      <v-container>
-        <v-row justify="center">
-          <v-col cols="12" md="8">
-            <v-card>
-              <v-card-title class="text-h5">
-                <v-icon class="mr-2">mdi-cog</v-icon>
-                Security Settings
-              </v-card-title>
-              <v-card-text>
-                <p class="text-body-1 mb-4">
-                  Welcome to the Security Configuration interface. 
-                  This is where you'll be able to configure your security settings.
-                </p>
-                <v-alert type="info" icon="mdi-information">
-                  This UI is currently empty and ready for your custom configuration options.
-                </v-alert>
-              </v-card-text>
-            </v-card>
-          </v-col>
-        </v-row>
-      </v-container>
+      <div class="video-container">
+        <!-- Video Player Section -->
+        <v-card class="video-card ma-4" elevation="2">
+          <v-card-text>
+            <div v-if="selectedVideo" class="video-player-wrapper">
+              <video
+                ref="videoPlayer"
+                :src="selectedVideo.url"
+                controls
+                autoplay
+                muted
+                preload="metadata"
+                class="video-player"
+                @loadedmetadata="onVideoLoaded"
+                @error="onVideoError"
+              >
+                Your browser does not support the video tag.
+              </video>
+              <div class="video-info mt-2">
+                <v-chip color="primary" small>
+                  {{ selectedVideo.name }}
+                </v-chip>
+                <v-chip color="secondary" small class="ml-2">
+                  {{ formatDateTime(selectedVideo.timestamp) }}
+                </v-chip>
+                <v-chip 
+                  v-if="selectedVideo.hasThumbnail && selectedVideo.timeDiffMinutes > 0" 
+                  color="warning" 
+                  small 
+                  class="ml-2"
+                >
+                  Thumbnail ±{{ selectedVideo.timeDiffMinutes }}min
+                </v-chip>
+                <v-chip 
+                  v-else-if="!selectedVideo.hasThumbnail" 
+                  color="info" 
+                  small 
+                  class="ml-2"
+                >
+                  No thumbnail
+                </v-chip>
+              </div>
+            </div>
+            <div v-else class="no-video-placeholder">
+              <v-icon size="64" color="grey lighten-2">mdi-video-off</v-icon>
+              <p class="text-h6 grey--text mt-4">Select a thumbnail from the timeline below</p>
+            </div>
+          </v-card-text>
+        </v-card>
+
+        <!-- Loading indicator -->
+        <v-progress-linear
+          v-if="loading"
+          indeterminate
+          color="primary"
+          class="ma-4"
+        ></v-progress-linear>
+
+        <!-- Timeline Section -->
+        <v-card class="timeline-card ma-4" elevation="2">
+          <v-card-title>
+            <v-icon class="mr-2">mdi-timeline</v-icon>
+            Timeline - {{ formatDate(selectedDate) }}
+            <v-spacer></v-spacer>
+            <v-btn
+              @click="refreshFiles"
+              :loading="loading"
+              color="primary"
+              small
+            >
+              <v-icon small>mdi-refresh</v-icon>
+              Refresh
+            </v-btn>
+          </v-card-title>
+          
+          <v-card-text>
+            <div v-if="thumbnails.length === 0 && !loading" class="no-thumbnails">
+              <v-alert type="info" class="ma-2">
+                No recordings found for {{ formatDate(selectedDate) }}
+              </v-alert>
+            </div>
+            
+            <div v-else class="timeline-container">
+              <div class="timeline-scroll">
+                <div class="thumbnail-grid">
+                  <div
+                    v-for="thumbnail in thumbnails"
+                    :key="thumbnail.videoName"
+                    class="thumbnail-item"
+                    :class="{ 
+                      active: selectedVideo && selectedVideo.name === thumbnail.videoName,
+                      'no-thumbnail': !thumbnail.hasThumbnail
+                    }"
+                    @click="selectVideo(thumbnail)"
+                  >
+                    <div class="thumbnail-wrapper">
+                      <img
+                        v-if="thumbnail.hasThumbnail"
+                        :src="thumbnail.url"
+                        :alt="thumbnail.name"
+                        class="thumbnail-image"
+                        @error="onThumbnailError"
+                      />
+                      <div v-else class="thumbnail-placeholder">
+                        <v-icon size="24" color="grey lighten-1">mdi-video</v-icon>
+                      </div>
+                      <div class="thumbnail-overlay">
+                        <v-icon class="play-icon">mdi-play-circle</v-icon>
+                        <div class="timestamp">{{ formatTime(thumbnail.timestamp) }}</div>
+                        <div v-if="thumbnail.hasThumbnail && thumbnail.timeDiffMinutes > 0" class="time-diff">
+                          ±{{ thumbnail.timeDiffMinutes }}m
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </v-card-text>
+        </v-card>
+      </div>
     </v-main>
   </v-app>
 </template>
 
 <script>
 export default {
-  name: 'App',
+  name: 'SecurityApp',
   data() {
     return {
-      // Add your data properties here
+      selectedDate: new Date().toISOString().substr(0, 10),
+      selectedVideo: null,
+      thumbnails: [],
+      loading: false,
+      baseUrl: window.location.origin,
     }
   },
+  
+  mounted() {
+    this.loadDayFiles()
+    // Add keyboard event listeners
+    window.addEventListener('keydown', this.handleKeydown)
+  },
+  
+  beforeUnmount() {
+    // Clean up event listeners
+    window.removeEventListener('keydown', this.handleKeydown)
+  },
+  
+  computed: {
+    isToday() {
+      const today = new Date().toISOString().substr(0, 10)
+      return this.selectedDate === today
+    }
+  },
+  
   methods: {
-    // Add your methods here
+    previousDay() {
+      const currentDate = new Date(this.selectedDate)
+      currentDate.setDate(currentDate.getDate() - 1)
+      this.selectedDate = currentDate.toISOString().substr(0, 10)
+      this.loadDayFiles()
+    },
+    
+    nextDay() {
+      if (this.isToday) return // Prevent going beyond today
+      
+      const currentDate = new Date(this.selectedDate)
+      currentDate.setDate(currentDate.getDate() + 1)
+      this.selectedDate = currentDate.toISOString().substr(0, 10)
+      this.loadDayFiles()
+    },
+    
+    handleKeydown(event) {
+      // Only handle arrow keys when not typing in an input field
+      if (event.target.tagName.toLowerCase() === 'input') return
+      
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault()
+        this.previousDay()
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault()
+        this.nextDay()
+      }
+    },
+    async loadDayFiles() {
+      this.loading = true
+      try {
+        // Format date for API call (cam1/2025/12/25)
+        const date = new Date(this.selectedDate)
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        
+        const path = `cam1/${year}/${month}/${day}`
+        
+        const response = await fetch(`${this.baseUrl}/api/ftp/${path}`)
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        
+        // Filter JPG and MP4 files separately
+        const jpgFiles = data.files.filter(file => 
+          file.name.toLowerCase().endsWith('.jpg') || 
+          file.name.toLowerCase().endsWith('.jpeg')
+        )
+        
+        const mp4Files = data.files.filter(file => 
+          file.name.toLowerCase().endsWith('.mp4')
+        )
+        
+        // Create video objects with timestamps
+        const videos = mp4Files.map(mp4File => ({
+          name: mp4File.name,
+          path: mp4File.path,
+          url: `${this.baseUrl}/api/files/${mp4File.path}`,
+          timestamp: this.extractTimestampFromFilename(mp4File.name),
+          size: mp4File.size,
+          modTime: new Date(mp4File.modTime)
+        }))
+        
+        // Create thumbnail objects and match them to closest videos
+        this.thumbnails = videos.map(video => {
+          // Find the closest JPG file by timestamp
+          let closestJpg = null
+          let minTimeDiff = Infinity
+          
+          jpgFiles.forEach(jpgFile => {
+            const jpgTimestamp = this.extractTimestampFromFilename(jpgFile.name)
+            const timeDiff = Math.abs(video.timestamp - jpgTimestamp)
+            
+            if (timeDiff < minTimeDiff) {
+              minTimeDiff = timeDiff
+              closestJpg = jpgFile
+            }
+          })
+          
+          return {
+            name: closestJpg ? closestJpg.name : `thumb_${video.name}`,
+            videoName: video.name,
+            videoPath: video.path,
+            url: closestJpg ? `${this.baseUrl}/api/files/${closestJpg.path}` : null,
+            videoUrl: video.url,
+            timestamp: video.timestamp,
+            size: video.size,
+            modTime: video.modTime,
+            hasVideo: true,
+            hasThumbnail: !!closestJpg,
+            timeDiffMinutes: closestJpg ? Math.round(minTimeDiff / (1000 * 60)) : null // Time diff in minutes
+          }
+        })
+        
+        // Sort by timestamp
+        this.thumbnails.sort((a, b) => a.timestamp - b.timestamp)
+        
+        // Auto-select first video if available
+        if (this.thumbnails.length > 0) {
+          this.selectVideo(this.thumbnails[0])
+        } else {
+          this.selectedVideo = null
+        }
+        
+      } catch (error) {
+        console.error('Error loading files:', error)
+        this.thumbnails = []
+        this.selectedVideo = null
+      } finally {
+        this.loading = false
+      }
+    },
+    
+    selectVideo(thumbnail) {
+      this.selectedVideo = {
+        name: thumbnail.videoName,
+        url: thumbnail.videoUrl,
+        thumbnail: thumbnail.url,
+        timestamp: thumbnail.timestamp,
+        hasThumbnail: thumbnail.hasThumbnail,
+        timeDiffMinutes: thumbnail.timeDiffMinutes
+      }
+      
+      // Scroll video into view and autoplay
+      this.$nextTick(() => {
+        if (this.$refs.videoPlayer) {
+          this.$refs.videoPlayer.load()
+          // Attempt autoplay after the video is loaded
+          this.$refs.videoPlayer.addEventListener('loadeddata', () => {
+            this.playVideo()
+          }, { once: true })
+        }
+      })
+    },
+    
+    playVideo() {
+      if (this.$refs.videoPlayer) {
+        const playPromise = this.$refs.videoPlayer.play()
+        
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.warn('Autoplay failed:', error)
+            // Autoplay was prevented, user will need to click play manually
+          })
+        }
+      }
+    },
+    
+    extractTimestampFromFilename(filename) {
+      // Extract timestamp from Reolink filename format: RH94 2_00_20251225210602.jpg
+      const match = filename.match(/(\d{14})\.(jpg|jpeg|mp4)$/i)
+      if (match) {
+        const timestampStr = match[1] // "20251225210602"
+        const year = parseInt(timestampStr.substr(0, 4))
+        const month = parseInt(timestampStr.substr(4, 2)) - 1 // Month is 0-based
+        const day = parseInt(timestampStr.substr(6, 2))
+        const hour = parseInt(timestampStr.substr(8, 2))
+        const minute = parseInt(timestampStr.substr(10, 2))
+        const second = parseInt(timestampStr.substr(12, 2))
+        
+        return new Date(year, month, day, hour, minute, second)
+      }
+      
+      // Fallback to file modification time
+      return new Date()
+    },
+    
+    formatDateTime(date) {
+      return date.toLocaleString()
+    },
+    
+    formatDate(dateStr) {
+      return new Date(dateStr).toLocaleDateString()
+    },
+    
+    formatTime(date) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    },
+    
+    refreshFiles() {
+      this.loadDayFiles()
+    },
+    
+    onVideoLoaded() {
+      console.log('Video loaded successfully')
+      // Additional autoplay attempt when video metadata is loaded
+      this.playVideo()
+    },
+    
+    onVideoError(event) {
+      console.error('Video loading error:', event)
+    },
+    
+    onThumbnailError(event) {
+      console.error('Thumbnail loading error:', event)
+      // Could set a placeholder image here
+    }
   }
 }
 </script>
 
 <style>
-/* Add your custom styles here */
+.video-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+}
+
+.video-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-player-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.video-player {
+  width: 100%;
+  max-height: 60vh;
+  background: #000;
+}
+
+.no-video-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+}
+
+.video-info {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.timeline-card {
+  flex-shrink: 0;
+  max-height: 300px;
+}
+
+.timeline-container {
+  overflow: hidden;
+}
+
+.timeline-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+}
+
+.thumbnail-grid {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.thumbnail-item {
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.thumbnail-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.thumbnail-item.active {
+  border: 2px solid #1976d2;
+  box-shadow: 0 4px 12px rgba(25,118,210,0.4);
+}
+
+.thumbnail-item.no-thumbnail {
+  opacity: 0.8;
+}
+
+.thumbnail-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #f5f5f5, #e0e0e0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #ccc;
+}
+
+.thumbnail-wrapper {
+  position: relative;
+  width: 120px;
+  height: 90px;
+}
+
+.thumbnail-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbnail-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  color: white;
+  padding: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.thumbnail-item:hover .thumbnail-overlay {
+  opacity: 1;
+}
+
+.play-icon {
+  font-size: 20px;
+}
+
+.no-video-icon {
+  font-size: 20px;
+  color: #ff5722;
+}
+
+.timestamp {
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.time-diff {
+  font-size: 9px;
+  color: #ffeb3b;
+  font-weight: bold;
+}
+
+.no-thumbnails {
+  text-align: center;
+  padding: 20px;
+}
+
+/* Scrollbar styling */
+.timeline-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.timeline-scroll::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.timeline-scroll::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.timeline-scroll::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
 </style>
