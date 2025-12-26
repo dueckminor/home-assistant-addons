@@ -44,20 +44,48 @@
         <v-card class="video-card ma-4" elevation="2">
           <v-card-text>
             <div v-if="selectedVideo" class="video-player-wrapper">
-              <video
-                ref="videoPlayer"
-                :src="selectedVideo.url"
-                controls
-                autoplay
-                muted
-                preload="metadata"
-                class="video-player"
-                @loadedmetadata="onVideoLoaded"
-                @error="onVideoError"
-                @ended="onVideoEnded"
-              >
-                Your browser does not support the video tag.
-              </video>
+              <div class="video-container-with-controls">
+                <video
+                  ref="videoPlayer"
+                  :src="selectedVideo.url"
+                  controls
+                  autoplay
+                  muted
+                  preload="metadata"
+                  class="video-player"
+                  @loadedmetadata="onVideoLoaded"
+                  @error="onVideoError"
+                  @ended="onVideoEnded"
+                >
+                  Your browser does not support the video tag.
+                </video>
+                
+                <!-- Video Overlay Controls -->
+                <div 
+                  class="video-overlay-controls" 
+                  :class="{ 'fullscreen-controls': isFullscreen }"
+                  @mousemove="showFullscreenControls"
+                  @mouseleave="hideFullscreenControls"
+                >
+                  <button
+                    v-if="canGoPrevious"
+                    class="video-nav-btn video-nav-prev"
+                    @click="playPreviousVideo"
+                    title="Previous Video (Shift + ←)"
+                  >
+                    <v-icon size="32">mdi-skip-previous</v-icon>
+                  </button>
+                  
+                  <button
+                    v-if="canGoNext"
+                    class="video-nav-btn video-nav-next"
+                    @click="playNextVideo"
+                    title="Next Video (Shift + →)"
+                  >
+                    <v-icon size="32">mdi-skip-next</v-icon>
+                  </button>
+                </div>
+              </div>
               <div class="video-info mt-2">
                 <v-chip color="primary" small>
                   {{ selectedVideo.name }}
@@ -175,6 +203,8 @@ export default {
       thumbnails: [],
       loading: false,
       baseUrl: this.getBaseUrl(),
+      isFullscreen: false,
+      fullscreenControlsTimeout: null,
     }
   },
   
@@ -182,17 +212,41 @@ export default {
     this.loadDayFiles()
     // Add keyboard event listeners
     window.addEventListener('keydown', this.handleKeydown)
+    // Add fullscreen change listeners
+    document.addEventListener('fullscreenchange', this.onFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', this.onFullscreenChange)
+    document.addEventListener('mozfullscreenchange', this.onFullscreenChange)
+    document.addEventListener('msfullscreenchange', this.onFullscreenChange)
   },
   
   beforeUnmount() {
     // Clean up event listeners
     window.removeEventListener('keydown', this.handleKeydown)
+    document.removeEventListener('fullscreenchange', this.onFullscreenChange)
+    document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange)
+    document.removeEventListener('mozfullscreenchange', this.onFullscreenChange)
+    document.removeEventListener('msfullscreenchange', this.onFullscreenChange)
   },
   
   computed: {
     isToday() {
       const today = new Date().toISOString().substr(0, 10)
       return this.selectedDate === today
+    },
+    
+    currentVideoIndex() {
+      if (!this.selectedVideo || this.thumbnails.length === 0) return -1
+      return this.thumbnails.findIndex(thumb => 
+        thumb.videoName === this.selectedVideo.name
+      )
+    },
+    
+    canGoPrevious() {
+      return this.currentVideoIndex > 0
+    },
+    
+    canGoNext() {
+      return this.currentVideoIndex >= 0 && this.currentVideoIndex < this.thumbnails.length - 1
     }
   },
   
@@ -466,6 +520,33 @@ export default {
       }
     },
     
+    onFullscreenChange() {
+      this.isFullscreen = !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      )
+    },
+    
+    showFullscreenControls() {
+      if (this.isFullscreen) {
+        // Clear any existing timeout
+        if (this.fullscreenControlsTimeout) {
+          clearTimeout(this.fullscreenControlsTimeout)
+        }
+      }
+    },
+    
+    hideFullscreenControls() {
+      if (this.isFullscreen) {
+        // Hide controls after a delay in fullscreen
+        this.fullscreenControlsTimeout = setTimeout(() => {
+          // Controls will fade out automatically via CSS
+        }, 3000)
+      }
+    },
+    
     onThumbnailError(event) {
       console.error('Thumbnail loading error:', event)
       // Could set a placeholder image here
@@ -494,11 +575,89 @@ export default {
   position: relative;
 }
 
+.video-container-with-controls {
+  position: relative;
+  width: 100%;
+}
+
 .video-player {
   width: 100%;
   height: 60vh;
   background: #000;
   object-fit: contain;
+}
+
+.video-overlay-controls {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 1000;
+}
+
+.video-container-with-controls:hover .video-overlay-controls,
+.video-overlay-controls.fullscreen-controls {
+  opacity: 1;
+}
+
+/* Fullscreen specific styles */
+video:fullscreen + .video-overlay-controls,
+video:-webkit-full-screen + .video-overlay-controls,
+video:-moz-full-screen + .video-overlay-controls,
+video:-ms-fullscreen + .video-overlay-controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2147483647;
+}
+
+video:fullscreen:hover + .video-overlay-controls,
+video:-webkit-full-screen:hover + .video-overlay-controls,
+video:-moz-full-screen:hover + .video-overlay-controls,
+video:-ms-fullscreen:hover + .video-overlay-controls {
+  opacity: 1;
+}
+
+.video-nav-btn {
+  pointer-events: all;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  border-radius: 50%;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+}
+
+.video-nav-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: scale(1.1);
+}
+
+.video-nav-btn:active {
+  transform: scale(0.95);
+}
+
+.video-nav-prev {
+  margin-left: 20px;
+}
+
+.video-nav-next {
+  margin-right: 20px;
 }
 
 .no-video-placeholder {
