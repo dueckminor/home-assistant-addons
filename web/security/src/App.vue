@@ -54,6 +54,7 @@
                 class="video-player"
                 @loadedmetadata="onVideoLoaded"
                 @error="onVideoError"
+                @ended="onVideoEnded"
               >
                 Your browser does not support the video tag.
               </video>
@@ -173,7 +174,7 @@ export default {
       selectedVideo: null,
       thumbnails: [],
       loading: false,
-      baseUrl: window.location.origin,
+      baseUrl: this.getBaseUrl(),
     }
   },
   
@@ -196,6 +197,20 @@ export default {
   },
   
   methods: {
+    getBaseUrl() {
+      // For Home Assistant ingress, detect if we're running under a hassio_ingress path
+      const path = window.location.pathname
+      const ingressMatch = path.match(/^(\/api\/hassio_ingress\/[^\/]+)/)
+      
+      if (ingressMatch) {
+        // Running under Home Assistant ingress
+        return ingressMatch[1]
+      } else {
+        // Local development or direct access
+        return ''
+      }
+    },
+    
     previousDay() {
       const currentDate = new Date(this.selectedDate)
       currentDate.setDate(currentDate.getDate() - 1)
@@ -218,10 +233,20 @@ export default {
       
       if (event.key === 'ArrowLeft') {
         event.preventDefault()
-        this.previousDay()
+        // Check if Shift is held for video navigation, otherwise day navigation
+        if (event.shiftKey) {
+          this.playPreviousVideo()
+        } else {
+          this.previousDay()
+        }
       } else if (event.key === 'ArrowRight') {
         event.preventDefault()
-        this.nextDay()
+        // Check if Shift is held for video navigation, otherwise day navigation
+        if (event.shiftKey) {
+          this.playNextVideo()
+        } else {
+          this.nextDay()
+        }
       }
     },
     async loadDayFiles() {
@@ -392,6 +417,55 @@ export default {
       console.error('Video loading error:', event)
     },
     
+    onVideoEnded() {
+      console.log('Video ended, looking for next video')
+      this.playNextVideo()
+    },
+    
+    playNextVideo() {
+      if (!this.selectedVideo || this.thumbnails.length === 0) return
+      
+      // Find current video index in thumbnails
+      const currentIndex = this.thumbnails.findIndex(thumb => 
+        thumb.videoName === this.selectedVideo.name
+      )
+      
+      if (currentIndex === -1) return
+      
+      // Get next video (or loop to first if at the end)
+      const nextIndex = currentIndex + 1
+      if (nextIndex < this.thumbnails.length) {
+        // Play next video
+        this.selectVideo(this.thumbnails[nextIndex])
+      } else {
+        // Reached the end of videos
+        console.log('Reached end of video timeline')
+        // Optionally could loop back to first video:
+        // this.selectVideo(this.thumbnails[0])
+      }
+    },
+    
+    playPreviousVideo() {
+      if (!this.selectedVideo || this.thumbnails.length === 0) return
+      
+      // Find current video index in thumbnails
+      const currentIndex = this.thumbnails.findIndex(thumb => 
+        thumb.videoName === this.selectedVideo.name
+      )
+      
+      if (currentIndex === -1) return
+      
+      // Get previous video
+      const prevIndex = currentIndex - 1
+      if (prevIndex >= 0) {
+        // Play previous video
+        this.selectVideo(this.thumbnails[prevIndex])
+      } else {
+        // At the beginning of videos
+        console.log('At beginning of video timeline')
+      }
+    },
+    
     onThumbnailError(event) {
       console.error('Thumbnail loading error:', event)
       // Could set a placeholder image here
@@ -417,12 +491,14 @@ export default {
   display: flex;
   flex-direction: column;
   width: 100%;
+  position: relative;
 }
 
 .video-player {
   width: 100%;
-  max-height: 60vh;
+  height: 60vh;
   background: #000;
+  object-fit: contain;
 }
 
 .no-video-placeholder {

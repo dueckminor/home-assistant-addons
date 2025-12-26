@@ -17,9 +17,9 @@ fi
 mkdir -p gen/addons/security
 rm -rf gen/addons/security/*
 
-# pushd web/security
-# npm run build
-# popd
+pushd web/security
+npm run build
+popd
 
 # Build binaries for all platforms (for platform selector)
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./addons/security/security-amd64 go/tools/security/security.go

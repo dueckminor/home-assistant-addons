@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path"
 	"sync"
 	"syscall"
 
@@ -24,7 +25,7 @@ func main() {
 		dataDir    = flag.String("data", "/data", "the data directory")
 		dist       = flag.String("dist", "", "the dist dir for the security (or uri)")
 		ftpPort    = flag.Int("ftp-port", 21, "the FTP port")
-		httpPort   = flag.Int("http-port", 80, "the HTTP port")
+		httpPort   = flag.Int("http-port", 8080, "the HTTP port")
 		debug      = flag.Bool("debug", false, "enable debug logging")
 		serverName = flag.String("server-name", "security", "the server name for TLS certificate")
 	)
@@ -47,9 +48,11 @@ func main() {
 	security := security.NewSecurity(*httpPort, *dist, *dataDir)
 	err := security.Start(ctx, &wg)
 
+	ftpDir := path.Join(*dataDir, "ftp")
+
 	// Create FTP server configuration
 	config := &ftp.Config{
-		DataDir:    *dataDir,
+		DataDir:    ftpDir,
 		Port:       *ftpPort,
 		Username:   ftpUser,
 		Password:   ftpPassword,

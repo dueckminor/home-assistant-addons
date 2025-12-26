@@ -3,6 +3,8 @@ description: "Home Assistant Security addon for Home Assistant"
 version: "0.1.0"
 slug: "home_assistant_security"
 startup: "services"
+ingress: true
+ingress_port: 8080
 init: false
 arch:
   - aarch64
