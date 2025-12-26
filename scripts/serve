@@ -24,6 +24,12 @@ SERVICES = [
         "path": WORKSPACE_ROOT / "web" / "gateway",
         "command": ["./node_modules/.bin/vite", "serve"],
         "port": 3001
+    },
+    {
+        "name": "security",
+        "path": WORKSPACE_ROOT / "web" / "security", 
+        "command": ["./node_modules/.bin/vite", "serve"],
+        "port": 3002
     }
 ]
 
@@ -50,9 +56,53 @@ def is_process_running(pid):
     except OSError:
         return False
 
+def check_and_install_dependencies(service):
+    """Check if npm dependencies are installed and install them if needed"""
+    service_path = service['path']
+    node_modules = service_path / "node_modules"
+    package_json = service_path / "package.json"
+    
+    # Check if package.json exists
+    if not package_json.exists():
+        raise Exception(f"package.json not found in {service_path}")
+    
+    # Check if node_modules exists and has content
+    needs_install = False
+    if not node_modules.exists():
+        needs_install = True
+        print(f"⚠ node_modules not found for {service['name']}")
+    else:
+        # Check if vite binary exists (main dependency we need)
+        vite_bin = node_modules / ".bin" / "vite"
+        if not vite_bin.exists():
+            needs_install = True
+            print(f"⚠ vite binary not found for {service['name']}")
+    
+    if needs_install:
+        print(f"📦 Installing npm dependencies for {service['name']}...")
+        try:
+            result = subprocess.run(
+                ["npm", "install"],
+                cwd=service_path,
+                check=True,
+                capture_output=True,
+                text=True
+            )
+            print(f"✓ Dependencies installed for {service['name']}")
+        except subprocess.CalledProcessError as e:
+            raise Exception(f"npm install failed: {e.stderr}")
+        except FileNotFoundError:
+            raise Exception("npm not found. Please install Node.js and npm first.")
+
 def start_service(service):
     """Start a single service"""
     print(f"Starting {service['name']} server...")
+    
+    # Check and install dependencies if needed
+    try:
+        check_and_install_dependencies(service)
+    except Exception as e:
+        raise Exception(f"Dependency check failed: {e}")
     
     # Create log files for output
     log_dir = WORKSPACE_ROOT / "gen" / "logs"
