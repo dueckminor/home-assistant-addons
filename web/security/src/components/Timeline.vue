@@ -1,15 +1,27 @@
 <template>
-  <v-card class="timeline-card ma-4" elevation="2">
-    <v-card-text>
-      <div v-if="thumbnails.length === 0 && !loading" class="no-thumbnails">
-        <v-alert type="info" class="ma-2">
-          No recordings found for {{ formatDate(selectedDate) }}
-        </v-alert>
-      </div>
-      
-      <div v-else class="timeline-container">
+  <div class="timeline-container-wrapper">
+    <div v-if="false" class="no-thumbnails">
+      <v-alert type="info" class="ma-2">
+        <v-icon>mdi-video-off</v-icon>
+        No recordings found for {{ formatDate(selectedDate) }}. Use the day navigation buttons (◀◀ ▶▶) to browse other days.
+      </v-alert>
+    </div>
+    
+    <div class="timeline-container">
+      <!-- Timeline with Navigation -->
+      <div class="timeline-with-nav">
+        <!-- Navigation buttons removed - now handled by NavigationControls component -->
+        
         <!-- Main Timeline Bar -->
-        <div class="timeline-bar-container" @click="onTimelineClick">
+        <div 
+          class="timeline-bar-container" 
+          @click="onTimelineClick"
+          @mousemove="onTimelineHover"
+          @mouseleave="hideHoverPreview"
+          @touchstart="onTouchStart"
+          @touchmove="onTouchMove"
+          @touchend="onTouchEnd"
+        >
           <div class="timeline-bar">
             <!-- Hour grid lines -->
             <div 
@@ -30,12 +42,7 @@
               :style="getVideoBlockStyle(video)"
               @click.stop="$emit('select-video', video)"
               :title="`${video.videoName} - ${formatTime(video.timestamp)}`"
-            >
-              <!-- Thumbnail preview on hover -->
-              <div v-if="video.hasThumbnail" class="timeline-preview">
-                <img :src="video.url" :alt="video.name" />
-              </div>
-            </div>
+            ></div>
             
             <!-- Current time indicator -->
             <div
@@ -44,28 +51,68 @@
               :style="getCurrentTimeStyle()"
             ></div>
           </div>
-        </div>
-        
-        <!-- Timeline Header (below timeline) -->
-        <div class="timeline-header">
-          <div class="timeline-hours">
-            <div 
-              v-for="hour in 24" 
-              :key="hour-1" 
-              class="timeline-hour-marker"
-            >
-              {{ String(hour-1).padStart(2, '0') }}
+          
+          <!-- Hover preview thumbnail -->
+          <div 
+            v-if="hoverPreview.visible && hoverPreview.thumbnail"
+            class="timeline-hover-preview"
+            :style="{
+              left: `${hoverPreview.x}px`,
+              top: `${hoverPreview.y}px`
+            }"
+          >
+            <img 
+              v-if="hoverPreview.thumbnail.hasThumbnail"
+              :src="hoverPreview.thumbnail.url" 
+              :alt="hoverPreview.thumbnail.name"
+              class="hover-preview-image"
+            />
+            <div v-else class="hover-preview-placeholder">
+              <div class="placeholder-video-icon">📹</div>
+            </div>
+            <div class="hover-preview-time">
+              {{ formatTime(hoverPreview.thumbnail.timestamp) }}
+            </div>
+          </div>
+          
+          <!-- Timeline Header (below timeline) -->
+          <div class="timeline-header">
+            <div class="timeline-hours">
+              <div 
+                v-for="hour in 24" 
+                :key="hour-1" 
+                class="timeline-hour-marker"
+                :style="{ left: `${((hour - 0.5) / 24) * 100}%` }"
+              >
+                {{ String(hour-1).padStart(2, '0') }}
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </v-card-text>
-  </v-card>
+    </div>
+  </div>
 </template>
 
 <script>
 export default {
   name: 'Timeline',
+  data() {
+    return {
+      hoverPreview: {
+        visible: false,
+        thumbnail: null,
+        x: 0,
+        y: 0
+      },
+      touchState: {
+        startX: 0,
+        startY: 0,
+        hasMoved: false,
+        startTime: 0
+      }
+    }
+  },
   props: {
     selectedVideo: {
       type: Object,
@@ -80,6 +127,14 @@ export default {
       required: true
     },
     loading: {
+      type: Boolean,
+      default: false
+    },
+    canGoPrevious: {
+      type: Boolean,
+      default: false
+    },
+    canGoNext: {
       type: Boolean,
       default: false
     }
@@ -173,6 +228,161 @@ export default {
       }
       
       this.$emit('timeline-click', { percentage, hours, minutes })
+    },
+    
+    onTimelineHover(event) {
+      // Calculate hovered time based on position
+      const rect = event.currentTarget.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const percentage = x / rect.width
+      
+      // Convert to time of day
+      const totalSeconds = percentage * 24 * 3600
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      
+      // Find closest video to this time
+      const targetTime = new Date(this.selectedDate)
+      targetTime.setHours(hours, minutes, 0, 0)
+      
+      let closestVideo = null
+      let minDiff = Infinity
+      
+      this.thumbnails.forEach(video => {
+        const diff = Math.abs(video.timestamp - targetTime.getTime())
+        if (diff < minDiff) {
+          minDiff = diff
+          closestVideo = video
+        }
+      })
+      
+      if (closestVideo) {
+        // Calculate thumbnail position, keeping it within screen bounds
+        const thumbnailWidth = 208; // 200px + 4px padding on each side
+        const containerWidth = rect.width;
+        
+        let thumbnailX = x - (thumbnailWidth / 2); // Center by default
+        
+        // Adjust if thumbnail would go off the left edge
+        if (thumbnailX < 0) {
+          thumbnailX = 0;
+        }
+        // Adjust if thumbnail would go off the right edge
+        else if (thumbnailX + thumbnailWidth > containerWidth) {
+          thumbnailX = containerWidth - thumbnailWidth;
+        }
+        
+        // Position thumbnail above the timeline
+        this.hoverPreview = {
+          visible: true,
+          thumbnail: closestVideo,
+          x: thumbnailX,
+          y: 0 // Let CSS transform handle the vertical positioning
+        }
+      }
+    },
+    
+    hideHoverPreview() {
+      this.hoverPreview.visible = false
+    },
+    
+    onTouchStart(event) {
+      // Track touch start position and time
+      const touch = event.touches[0]
+      this.touchState = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        hasMoved: false,
+        startTime: Date.now()
+      }
+      
+      // Show preview immediately
+      this.handleTouchHover(touch)
+    },
+    
+    onTouchMove(event) {
+      const touch = event.touches[0]
+      const deltaX = Math.abs(touch.clientX - this.touchState.startX)
+      const deltaY = Math.abs(touch.clientY - this.touchState.startY)
+      
+      // Only prevent default if we've actually moved (not just a tap)
+      if (deltaX > 5 || deltaY > 5) {
+        this.touchState.hasMoved = true
+        event.preventDefault() // Prevent scrolling during preview
+        this.handleTouchHover(touch)
+      }
+    },
+    
+    onTouchEnd(event) {
+      const touchDuration = Date.now() - this.touchState.startTime
+      
+      // If it was a quick tap without movement, let the click event handle it
+      if (!this.touchState.hasMoved && touchDuration < 200) {
+        // Hide preview quickly for taps
+        setTimeout(() => {
+          this.hideHoverPreview()
+        }, 100)
+      } else {
+        // Hide preview after delay for moves
+        setTimeout(() => {
+          this.hideHoverPreview()
+        }, 300)
+      }
+      
+      // Reset touch state
+      this.touchState.hasMoved = false
+    },
+    
+    handleTouchHover(touch) {
+      // Calculate touched time based on position (similar to onTimelineHover)
+      const rect = touch.target.closest('.timeline-bar-container').getBoundingClientRect()
+      const x = touch.clientX - rect.left
+      const percentage = x / rect.width
+      
+      // Convert to time of day
+      const totalSeconds = percentage * 24 * 3600
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      
+      // Find closest video to this time
+      const targetTime = new Date(this.selectedDate)
+      targetTime.setHours(hours, minutes, 0, 0)
+      
+      let closestVideo = null
+      let minDiff = Infinity
+      
+      this.thumbnails.forEach(video => {
+        const diff = Math.abs(video.timestamp - targetTime.getTime())
+        if (diff < minDiff) {
+          minDiff = diff
+          closestVideo = video
+        }
+      })
+      
+      if (closestVideo) {
+        // Calculate thumbnail position, keeping it within screen bounds
+        const thumbnailWidth = 208 // 200px + 4px padding on each side
+        const containerWidth = rect.width
+        
+        let thumbnailX = x - (thumbnailWidth / 2) // Center by default
+        
+        // Adjust if thumbnail would go off the left edge
+        if (thumbnailX < 0) {
+          thumbnailX = 0
+        }
+        // Adjust if thumbnail would go off the right edge
+        else if (thumbnailX + thumbnailWidth > containerWidth) {
+          thumbnailX = containerWidth - thumbnailWidth
+        }
+        
+        // Position thumbnail above the timeline
+        this.hoverPreview = {
+          visible: true,
+          thumbnail: closestVideo,
+          x: thumbnailX,
+          y: 0 // Let CSS transform handle the vertical positioning
+        }
+      }
     }
   }
 }
@@ -181,6 +391,7 @@ export default {
 <style scoped>
 .timeline-card {
   position: relative;
+  overflow: visible; /* Allow hover preview to extend outside */
 }
 
 .no-thumbnails {
@@ -190,6 +401,52 @@ export default {
 
 .timeline-container {
   margin-top: 20px;
+}
+
+/* Timeline with navigation layout - simplified */
+.timeline-with-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.timeline-bar-container {
+  order: 1;
+}
+
+.day-nav-btn {
+  opacity: 0.8;
+  border-color: #666 !important;
+}
+
+.day-nav-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* Landscape: buttons inline with timeline */
+@media (orientation: landscape) {
+  .timeline-with-nav {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .timeline-nav-buttons {
+    order: 0; /* Left side on landscape */
+    flex-direction: row; /* Horizontal alignment */
+    gap: 8px;
+  }
+  
+  .timeline-bar-container {
+    order: 1;
+    flex: 1; /* Take remaining space */
+  }
+  
+  .timeline-header {
+    order: 2;
+    margin-left: 0;
+  }
 }
 
 .timeline-header {
@@ -212,31 +469,6 @@ export default {
   white-space: nowrap;
 }
 
-.timeline-hour-marker:nth-child(1) { left: 2.083%; }
-.timeline-hour-marker:nth-child(2) { left: 6.25%; }
-.timeline-hour-marker:nth-child(3) { left: 10.417%; }
-.timeline-hour-marker:nth-child(4) { left: 14.583%; }
-.timeline-hour-marker:nth-child(5) { left: 18.75%; }
-.timeline-hour-marker:nth-child(6) { left: 22.917%; }
-.timeline-hour-marker:nth-child(7) { left: 27.083%; }
-.timeline-hour-marker:nth-child(8) { left: 31.25%; }
-.timeline-hour-marker:nth-child(9) { left: 35.417%; }
-.timeline-hour-marker:nth-child(10) { left: 39.583%; }
-.timeline-hour-marker:nth-child(11) { left: 43.75%; }
-.timeline-hour-marker:nth-child(12) { left: 47.917%; }
-.timeline-hour-marker:nth-child(13) { left: 52.083%; }
-.timeline-hour-marker:nth-child(14) { left: 56.25%; }
-.timeline-hour-marker:nth-child(15) { left: 60.417%; }
-.timeline-hour-marker:nth-child(16) { left: 64.583%; }
-.timeline-hour-marker:nth-child(17) { left: 68.75%; }
-.timeline-hour-marker:nth-child(18) { left: 72.917%; }
-.timeline-hour-marker:nth-child(19) { left: 77.083%; }
-.timeline-hour-marker:nth-child(20) { left: 81.25%; }
-.timeline-hour-marker:nth-child(21) { left: 85.417%; }
-.timeline-hour-marker:nth-child(22) { left: 89.583%; }
-.timeline-hour-marker:nth-child(23) { left: 93.75%; }
-.timeline-hour-marker:nth-child(24) { left: 97.917%; }
-
 /* Hide odd hour labels on small screens to reduce clutter */
 @media (max-width: 768px) {
   .timeline-hour-marker:nth-child(even) {
@@ -247,6 +479,56 @@ export default {
 .timeline-bar-container {
   cursor: pointer;
   user-select: none;
+  position: relative; /* For absolute positioning of hover preview */
+  overflow: visible; /* Allow hover preview to extend outside */
+}
+
+/* Timeline hover preview */
+.timeline-hover-preview {
+  position: absolute;
+  background: white;
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  pointer-events: none;
+  z-index: 1000; /* High z-index to appear above all other elements */
+  border: 2px solid #2196f3;
+  /* Ensure it's not clipped by any parent containers */
+  transform: translateY(-100%); /* Move fully above the hover point */
+  margin-top: -10px; /* Additional spacing above timeline */
+}
+
+.hover-preview-image {
+  width: 200px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+}
+
+.hover-preview-placeholder {
+  width: 200px;
+  height: 150px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+}
+
+.hover-preview-time {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  font-size: 10px;
+  padding: 2px 4px;
+  text-align: center;
+  border-radius: 2px;
+  font-family: monospace;
 }
 
 .timeline-bar {
@@ -255,7 +537,7 @@ export default {
   background: linear-gradient(135deg, #f5f5f5, #e8e8e8);
   border-radius: 8px;
   border: 1px solid #ddd;
-  overflow: hidden;
+  overflow: visible; /* Allow hover preview to extend outside */
 }
 
 .timeline-grid-line {

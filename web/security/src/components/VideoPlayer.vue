@@ -1,36 +1,43 @@
 <template>
-  <v-card class="video-card ma-4" elevation="2">
-    <v-card-text>
-      <div v-if="selectedVideo" class="video-player-wrapper">
-        <div class="video-container-with-controls">
-          <video
-            ref="videoPlayer"
-            :src="selectedVideo.url"
-            autoplay
-            muted
-            playsinline
-            preload="metadata"
-            controlslist="nodownload nofullscreen noremoteplaybook"
-            disablepictureinpicture
-            webkit-playsinline
-            class="video-player"
-            @loadedmetadata="onVideoLoaded"
-            @error="onVideoError"
-            @ended="onVideoEnded"
-            @play="hideControlsQuickly"
-            @touchstart="hideControlsOnTouch"
-            @click="hideControlsOnTouch"
-          >
-            Your browser does not support the video tag.
-          </video>
+  <div class="video-player-container">
+    <div v-if="selectedVideo" class="video-player-wrapper">
+      <div 
+        ref="fullscreenContainer"
+        class="video-container-with-controls"
+        :class="{ 'fullscreen-active': isFullscreen }"
+      >
+        <video
+          ref="videoPlayer"
+          :src="selectedVideo.url"
+          autoplay
+          muted
+          playsinline
+          preload="metadata"
+          controlslist="nodownload nofullscreen noremoteplaybook"
+          disablepictureinpicture
+          webkit-playsinline
+          class="video-player"
+          @loadedmetadata="onVideoLoaded"
+          @error="onVideoError"
+          @ended="onVideoEnded"
+          @play="hideControlsQuickly"
+          @touchstart="handleVideoTouch"
+          @click="handleVideoClick"
+        >
+          Your browser does not support the video tag.
+        </video>
+        
+        <!-- Fullscreen exit hint -->
+        <div v-if="isFullscreen" class="fullscreen-hint">
+          <span>Press ESC or click to exit fullscreen</span>
         </div>
       </div>
-      <div v-else class="no-video-placeholder">
-        <v-icon size="64" color="grey lighten-2">mdi-video-off</v-icon>
-        <p class="text-h6 grey--text mt-4">Select a thumbnail from the timeline below</p>
-      </div>
-    </v-card-text>
-  </v-card>
+    </div>
+    <div v-else class="no-video-placeholder">
+      <v-icon size="64" color="grey lighten-2">mdi-video-off</v-icon>
+      <p class="text-h6 grey--text mt-4">Select a thumbnail from the timeline below</p>
+    </div>
+  </div>
 </template>
 
 <script>
@@ -43,6 +50,37 @@ export default {
     }
   },
   emits: ['video-ended', 'video-loaded', 'video-error'],
+  data() {
+    return {
+      isFullscreen: false
+    }
+  },
+  mounted() {
+    // Listen for fullscreen change events
+    document.addEventListener('fullscreenchange', this.onFullscreenChange)
+    document.addEventListener('webkitfullscreenchange', this.onFullscreenChange)
+    document.addEventListener('mozfullscreenchange', this.onFullscreenChange)
+    document.addEventListener('MSFullscreenChange', this.onFullscreenChange)
+    
+    // iOS-specific video fullscreen events
+    if (this.$refs.videoPlayer) {
+      this.$refs.videoPlayer.addEventListener('webkitbeginfullscreen', this.onVideoFullscreenEnter)
+      this.$refs.videoPlayer.addEventListener('webkitendfullscreen', this.onVideoFullscreenExit)
+    }
+  },
+  beforeUnmount() {
+    // Clean up event listeners
+    document.removeEventListener('fullscreenchange', this.onFullscreenChange)
+    document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange)
+    document.removeEventListener('mozfullscreenchange', this.onFullscreenChange)
+    document.removeEventListener('MSFullscreenChange', this.onFullscreenChange)
+    
+    // Clean up iOS-specific events
+    if (this.$refs.videoPlayer) {
+      this.$refs.videoPlayer.removeEventListener('webkitbeginfullscreen', this.onVideoFullscreenEnter)
+      this.$refs.videoPlayer.removeEventListener('webkitendfullscreen', this.onVideoFullscreenExit)
+    }
+  },
   methods: {
     onVideoLoaded() {
       console.log('Video loaded successfully')
@@ -129,38 +167,162 @@ export default {
             })
         }
       }
+    },
+    
+    handleVideoClick(event) {
+      // Toggle fullscreen on click
+      this.toggleFullscreen()
+      // Also hide controls
+      this.hideControlsOnTouch(event)
+    },
+    
+    handleVideoTouch(event) {
+      // On touch, just hide controls (don't toggle fullscreen to avoid accidental fullscreen)
+      this.hideControlsOnTouch(event)
+    },
+    
+    isIOS() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    },
+    
+    toggleFullscreen() {
+      if (this.isFullscreen) {
+        this.exitFullscreen()
+      } else {
+        this.enterFullscreen()
+      }
+    },
+    
+    enterFullscreen() {
+      // For iOS, use video-specific fullscreen
+      if (this.isIOS() && this.$refs.videoPlayer) {
+        const video = this.$refs.videoPlayer
+        if (video.webkitSupportsFullscreen) {
+          video.webkitEnterFullscreen()
+          return
+        }
+      }
+      
+      // For other browsers, use container fullscreen
+      const element = this.$refs.fullscreenContainer
+      if (element) {
+        if (element.requestFullscreen) {
+          element.requestFullscreen()
+        } else if (element.webkitRequestFullscreen) {
+          element.webkitRequestFullscreen()
+        } else if (element.mozRequestFullScreen) {
+          element.mozRequestFullScreen()
+        } else if (element.msRequestFullscreen) {
+          element.msRequestFullscreen()
+        }
+      }
+    },
+    
+    exitFullscreen() {
+      // For iOS video fullscreen, it exits automatically or via controls
+      if (this.isIOS() && this.$refs.videoPlayer) {
+        const video = this.$refs.videoPlayer
+        if (video.webkitExitFullscreen) {
+          video.webkitExitFullscreen()
+          return
+        }
+      }
+      
+      // For other browsers
+      if (document.exitFullscreen) {
+        document.exitFullscreen()
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen()
+      } else if (document.mozCancelFullScreen) {
+        document.mozCancelFullScreen()
+      } else if (document.msExitFullscreen) {
+        document.msExitFullscreen()
+      }
+    },
+    
+    onFullscreenChange() {
+      // Check if we're in fullscreen mode
+      const fullscreenElement = document.fullscreenElement || 
+                                document.webkitFullscreenElement || 
+                                document.mozFullScreenElement || 
+                                document.msFullscreenElement
+      
+      this.isFullscreen = !!fullscreenElement
+    },
+    
+    onVideoFullscreenEnter() {
+      // iOS video entered fullscreen
+      this.isFullscreen = true
+    },
+    
+    onVideoFullscreenExit() {
+      // iOS video exited fullscreen
+      this.isFullscreen = false
     }
   }
 }
 </script>
 
 <style scoped>
-.video-card {
+.video-player-container {
   position: relative;
   overflow: hidden;
+  width: 100%;
+  height: 100%;
 }
 
 .video-player-wrapper {
   position: relative;
   width: 100%;
+  height: 100%;
   background: #000;
   border-radius: 8px;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .video-container-with-controls {
   position: relative;
   width: 100%;
-  aspect-ratio: 3.56;
-  max-height: 60vh;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Mobile landscape optimization - make video smaller */
+@media (max-height: 500px) and (orientation: landscape) {
+  .video-container-with-controls {
+    max-height: 70vh; /* Use viewport height instead of fixed */
+  }
+  
+  .video-player {
+    max-height: 70vh;
+  }
+}
+
+/* iOS specific mobile adjustments */
+@media (max-width: 768px) {
+  .video-container-with-controls {
+    height: 100%;
+  }
+  
+  .video-player {
+    object-fit: contain; /* Ensure video fits properly */
+  }
 }
 
 .video-player {
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   background: #000;
-  aspect-ratio: 3.56;
-  object-fit: fill;
+  object-fit: contain; /* Maintain aspect ratio */
 }
 
 /* Minimize video controls overlay behavior */
@@ -220,5 +382,59 @@ export default {
   justify-content: center;
   min-height: 300px;
   text-align: center;
+}
+
+/* Landscape mode - reduce placeholder height to save space */
+@media (orientation: landscape) and (max-height: 480px) {
+  .no-video-placeholder {
+    min-height: 120px;
+  }
+}
+
+/* Fullscreen styles */
+.fullscreen-active {
+  background: #000 !important;
+}
+
+.fullscreen-active .video-player {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  object-fit: contain;
+}
+
+.fullscreen-hint {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  z-index: 100;
+  pointer-events: none;
+  animation: fadeInOut 3s ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Fullscreen cursor */
+.video-player {
+  cursor: pointer;
+}
+
+.fullscreen-active .video-player {
+  cursor: none;
+}
+
+.fullscreen-active .video-player:hover {
+  cursor: pointer;
 }
 </style>

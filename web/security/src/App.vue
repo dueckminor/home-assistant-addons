@@ -1,80 +1,53 @@
 <template>
   <v-app>
-    <v-app-bar app color="primary" dark>
-      <v-toolbar-title>
-        <v-icon class="mr-2">mdi-shield-check</v-icon>
-        Security Camera System
-      </v-toolbar-title>
-      
-      <v-spacer></v-spacer>
-      
-      <!-- Day Navigation -->
-      <v-btn
-        variant="text"
-        icon="mdi-chevron-left"
-        @click="previousDay"
-        :disabled="loading"
-      ></v-btn>
-      
-      <v-chip class="mx-2" color="secondary">
-        {{ formatDate(selectedDate) }}
-      </v-chip>
-      
-      <v-btn
-        variant="text"
-        icon="mdi-chevron-right"
-        @click="nextDay"
-        :disabled="loading || isToday"
-      ></v-btn>
-      
-      <v-menu offset-y>
-        <template v-slot:activator="{ props }">
-          <v-btn variant="text" icon="mdi-calendar" v-bind="props" class="ml-2"></v-btn>
-        </template>
-        <v-date-picker
-          v-model="selectedDate"
-          @update:model-value="loadDayFiles"
-        ></v-date-picker>
-      </v-menu>
-    </v-app-bar>
-
-    <v-main>
-      <div class="video-container">
-        <!-- Video Player Component -->
+    <v-main class="app-main">
+      <!-- Video Player Section - Takes remaining space -->
+      <div class="video-section">
         <VideoPlayer 
           :selected-video="selectedVideo"
           @video-ended="playNextVideo"
           @video-loaded="onVideoLoaded"
           @video-error="onVideoError"
         />
-
-        <!-- Thumbnail Navigation Component -->
-        <ThumbnailNavigation
-          :selected-video="selectedVideo"
-          :thumbnails="thumbnails"
-          :can-go-previous="canGoPrevious"
-          :can-go-next="canGoNext"
-          @select-video="selectVideo"
-          @previous-video="playPreviousVideo"
-          @next-video="playNextVideo"
-        />
-
+        
         <!-- Loading indicator -->
         <v-progress-linear
           v-if="loading"
           indeterminate
           color="primary"
-          class="ma-4"
+          class="loading-indicator"
         ></v-progress-linear>
-
+      </div>
+      
+      <!-- Bottom Controls Section -->
+      <div class="bottom-controls">
+        <!-- Navigation Controls -->
+        <NavigationControls
+          :selected-date="selectedDate"
+          :selected-video="selectedVideo"
+          :can-go-previous="canGoPrevious"
+          :can-go-next="canGoNext"
+          @previous-day="goToPreviousDay"
+          @next-day="goToNextDay"
+          @previous-video="playPreviousVideo"
+          @next-video="playNextVideo"
+          @date-selected="onDateSelected"
+        />
+        
         <!-- Timeline Component -->
         <Timeline
           :selected-video="selectedVideo"
           :thumbnails="thumbnails"
           :selected-date="selectedDate"
           :loading="loading"
+          :can-go-previous="canGoPrevious"
+          :can-go-next="canGoNext"
           @select-video="selectVideo"
           @timeline-click="onTimelineClick"
+          @previous-video="playPreviousVideo"
+          @next-video="playNextVideo"
+          @previous-day="goToPreviousDay"
+          @next-day="goToNextDay"
         />
       </div>
     </v-main>
@@ -85,13 +58,15 @@
 import VideoPlayer from './components/VideoPlayer.vue'
 import ThumbnailNavigation from './components/ThumbnailNavigation.vue'
 import Timeline from './components/Timeline.vue'
+import NavigationControls from './components/NavigationControls.vue'
 
 export default {
   name: 'SecurityApp',
   components: {
     VideoPlayer,
     ThumbnailNavigation,
-    Timeline
+    Timeline,
+    NavigationControls
   },
   data() {
     return {
@@ -457,52 +432,196 @@ export default {
     onTimelineClick(event) {
       // Handle timeline click event from Timeline component
       console.log('Timeline clicked:', event)
+    },
+    
+    goToPreviousDay() {
+      const currentDate = new Date(this.selectedDate)
+      currentDate.setDate(currentDate.getDate() - 1)
+      this.selectedDate = currentDate.toISOString().substr(0, 10)
+      this.loadDayFiles()
+    },
+    
+    goToNextDay() {
+      const currentDate = new Date(this.selectedDate)
+      currentDate.setDate(currentDate.getDate() + 1)
+      this.selectedDate = currentDate.toISOString().substr(0, 10)
+      this.loadDayFiles()
+    },
+    
+    onDateSelected(date) {
+      this.selectedDate = date
+      this.loadDayFiles()
     }
   }
 }
 </script>
 
 <style scoped>
-.video-container {
-  max-width: 100%;
+/* Main app layout - column with video at top, controls at bottom */
+.app-main {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh; /* Use dynamic viewport height when available */
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-/* Mobile landscape optimization */
-@media (max-height: 500px) and (orientation: landscape) {
-  /* Hide app bar on small landscape screens */
-  .v-app-bar {
-    display: none !important;
+/* iOS Safari specific height fix */
+@supports (-webkit-touch-callout: none) {
+  .app-main {
+    height: -webkit-fill-available;
+    min-height: -webkit-fill-available;
+  }
+}
+
+.video-section {
+  flex: 1; /* Take remaining space */
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Allow shrinking */
+  position: relative;
+  overflow: hidden; /* Prevent scroll within video section */
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+  .video-section {
+    flex: 1; /* Take available space */
+    min-height: 0; /* Allow shrinking */
   }
   
-  /* Hide timeline card on small landscape screens */
-  :deep(.timeline-card) {
-    display: none !important;
+  @supports (-webkit-touch-callout: none) {
+    .video-section {
+      max-height: calc(-webkit-fill-available - 35vh);
+    }
+  }
+}
+
+.bottom-controls {
+  flex-shrink: 0; /* Don't shrink */
+  background: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid #e0e0e0;
+  padding: 8px;
+  overflow-y: auto; /* Allow scrolling if needed */
+  max-height: 40vh; /* Use viewport height instead of fixed pixels */
+}
+
+/* Compact bottom controls on small screens */
+@media (max-width: 768px) {
+  .bottom-controls {
+    padding: 4px 8px;
+    max-height: 35vh; /* Allow more space but still limit */
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .bottom-controls {
+    padding: 2px 4px;
+    max-height: 25vh; /* Use viewport height for consistency */
+  }
+}
+
+.loading-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+}
+
+/* Responsive design for different screen sizes */
+
+/* Mobile and small screens: Stack controls vertically */
+@media (max-width: 768px) {
+  .bottom-controls {
+    padding: 4px;
   }
   
-  /* Adjust main content to use full screen */
-  .v-main {
-    padding-top: 0 !important;
+  .navigation-container {
+    margin-bottom: 8px;
   }
   
-  /* Make video container take full available height */
-  :deep(.video-card) {
-    margin: 0 !important;
-    height: 100vh;
+  .timeline-container-wrapper {
+    margin-top: 8px;
+  }
+}
+
+/* Ensure timeline is always fully visible */
+@media (max-width: 768px) and (orientation: portrait) {
+  .bottom-controls {
     display: flex;
     flex-direction: column;
+    max-height: none; /* Remove height restriction on portrait mobile */
+    overflow-y: visible;
   }
   
-  /* Optimize video player for full screen landscape */
-  :deep(.video-container-with-controls) {
+  .timeline-container-wrapper {
     flex: 1;
-    max-height: none;
-    height: 100%;
+    min-height: 0;
+  }
+}
+
+/* Landscape mode optimizations */
+@media (orientation: landscape) {
+  /* Make bottom controls more compact in landscape */
+  .bottom-controls {
+    padding: 4px 8px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
   }
   
-  /* Ensure video fills available space */
-  :deep(.video-player) {
-    height: 100%;
-    object-fit: contain; /* Switch back to contain for full screen */
+  /* Navigation takes fixed width, timeline takes remaining space */
+  .navigation-container {
+    flex: 0 0 280px;
+    margin: 0;
+  }
+  
+  .timeline-container-wrapper {
+    flex: 1;
+    margin: 0;
+    min-width: 0; /* Allow shrinking */
+  }
+  
+  /* Make controls more compact */
+  .navigation-container {
+    padding: 8px;
+  }
+  
+  .timeline-container-wrapper {
+    padding: 8px;
+  }
+  
+  :deep(.nav-row) {
+    margin-bottom: 4px !important;
+  }
+  
+  :deep(.nav-display) {
+    padding: 4px 8px !important;
+    min-height: 32px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* Small landscape screens - extra compact layout */
+@media (orientation: landscape) and (max-height: 480px) {
+  .bottom-controls {
+    padding: 2px 4px;
+  }
+  
+  .navigation-container {
+    flex: 0 0 260px;
+    padding: 4px;
+  }
+  
+  .timeline-container-wrapper {
+    padding: 4px;
+  }
+  
+  :deep(.nav-display) {
+    font-size: 11px !important;
+    min-height: 28px !important;
   }
 }
 </style>
