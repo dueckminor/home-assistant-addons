@@ -28,6 +28,14 @@ type DirectoryListing struct {
 	Directories []FileInfo `json:"directories"`
 }
 
+// TODO: add the following endpoints:
+//
+// /api/cameras - List available cameras
+// /api/stream/live/{cameraId} - Live stream endpoint
+// /api/stream/snapshot/{cameraId} - Current snapshot
+//
+// add RTSP to WebRTC conversion for live streaming
+
 func (s *security) setupSecurityEndpoints(r *gin.Engine) {
 	api := r.Group("/api")
 	{
