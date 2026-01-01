@@ -122,12 +122,13 @@ export default {
         {
           title: 'Topic',
           key: 'topic',
-          width: '300px',
+          width: '450px',
           sortable: false
         },
         {
           title: 'Value',
           key: 'value',
+          width: 'auto',
           sortable: false
         }
       ],
@@ -323,6 +324,7 @@ export default {
 
 .value-cell {
   max-width: 400px;
+  font-family: 'Courier New', monospace;
 }
 
 .json-value {
@@ -346,6 +348,7 @@ export default {
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
+  font-family: 'Courier New', monospace;
 }
 
 .mdi-spin {

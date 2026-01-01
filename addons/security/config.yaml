@@ -22,3 +22,6 @@ ports:
 
 map:
   - security_data:/data
+
+backup_exclude:
+  - "/data/ftp"

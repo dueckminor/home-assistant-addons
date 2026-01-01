@@ -126,6 +126,19 @@ func toInflux(mqttConn mqtt.Conn, influxConfig InfluxDbConfig, server *mqttbridg
 	})
 
 	mqttConn.Subscribe("#", func(topic, payload string) {
+		// Track handled topics
+		handledTopics := make(map[string]bool)
+		var handledTopicsMutex sync.Mutex
+
+		// Wrapper function to mark topic as handled
+		markTopicHandled := func(topic string) {
+			handledTopicsMutex.Lock()
+			handledTopics[topic] = true
+			handledTopicsMutex.Unlock()
+		}
+
+		// Subscribe to track all topics
+		mq
 		// Send WebSocket event for all MQTT messages
 		if server != nil {
 			event := mqttbridge.Event{
