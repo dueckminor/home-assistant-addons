@@ -62,29 +62,12 @@ type InfluxDbConfig struct {
 	InfluxDbPassword string `yaml:"influx_db_password"`
 }
 
-type BrigeLegacyConfig struct {
-	MqttConfig     `yaml:",inline"`
-	InfluxDbConfig `yaml:",inline"`
-}
-
 type BrigeConfig struct {
 	MqttConfig                `yaml:",inline"`
 	InfluxDbConfig            `yaml:",inline"`
 	homematic.HomematicConfig `yaml:",inline"`
-	AlphaEssUri               string             `yaml:"alphaess_uri"`
-	Legacy                    *BrigeLegacyConfig `yaml:"legacy"`
+	AlphaEssUri               string `yaml:"alphaess_uri"`
 }
-
-func fromLegacyMqtt(mqttConn mqtt.Conn, legacyConfig MqttConfig, mqttClientId string) {
-	mqttLegacyBroker := mqtt.NewBroker(legacyConfig.MqttURI, legacyConfig.MqttUser, legacyConfig.MqttPassword)
-
-	mqttLegacyConn, err := mqttLegacyBroker.Dial(mqttClientId, "")
-	if err != nil {
-		panic(err)
-	}
-	mqttLegacyConn.Forward("#", mqttConn)
-}
-
 type influxMeasurement struct {
 	config    homeassistant.Config
 	tags      map[string]string
@@ -241,10 +224,6 @@ func main() {
 			mqttConnUi = nil
 		}
 	})
-
-	if theConfig.Legacy != nil && theConfig.Legacy.MqttURI != "" {
-		fromLegacyMqtt(mqttConn, theConfig.Legacy.MqttConfig, mqttClientId)
-	}
 
 	if theConfig.InfluxDbUri != "" {
 		toInflux(mqttConn, theConfig.InfluxDbConfig, s)
