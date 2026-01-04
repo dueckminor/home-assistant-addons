@@ -55,7 +55,29 @@ type Event struct {
 }
 
 func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
-	r.GET("/events", ep.handleWebSocket)
+	r.GET("/topics", ep.getTopics)
+}
+
+func (ep *Endpoints) getTopics(c *gin.Context) {
+	// if stream=true is set, upgrade to websocket
+	if c.Query("stream") == "true" {
+		ep.handleWebSocket(c)
+		return
+	}
+
+	topics := GetTopics()
+	result := make([]Event, 0, len(topics))
+
+	for _, topic := range topics {
+		result = append(result, Event{
+			Source: "mqtt",
+			Time:   topic.Time,
+			Topic:  topic.Name,
+			Value:  topic.Value,
+		})
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 // handleWebSocket upgrades HTTP connection to WebSocket for real-time events

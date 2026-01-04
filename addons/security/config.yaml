@@ -1,6 +1,6 @@
 name: "Home Assistant Security"
 description: "Home Assistant Security addon for Home Assistant"
-version: "0.1.0"
+version: "0.1.6"
 slug: "home_assistant_security"
 startup: "services"
 ingress: true
@@ -20,8 +20,5 @@ schema:
 ports:
   21/tcp: 21
 
-map:
-  - security_data:/data
-
 backup_exclude:
-  - "/data/ftp"
+  - "**/ftp/**/*"

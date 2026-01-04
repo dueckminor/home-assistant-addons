@@ -23,6 +23,10 @@
                   <v-icon start>mdi-network-outline</v-icon>
                   MQTT
                 </v-tab>
+                <v-tab value="esp-logs">
+                  <v-icon start>mdi-console-line</v-icon>
+                  ESP Logs
+                </v-tab>
               </v-tabs>
 
               <v-card-text class="pa-4">
@@ -30,6 +34,11 @@
                   <!-- MQTT Tab -->
                   <v-tabs-window-item value="mqtt" class="w-100">
                     <MqttTab />
+                  </v-tabs-window-item>
+                  
+                  <!-- ESP Logs Tab -->
+                  <v-tabs-window-item value="esp-logs" class="w-100">
+                    <EspLogsTab />
                   </v-tabs-window-item>
                 </v-tabs-window>
               </v-card-text>
@@ -43,11 +52,13 @@
 
 <script>
 import MqttTab from './components/tabs/MqttTab.vue'
+import EspLogsTab from './components/tabs/EspLogsTab.vue'
 
 export default {
   name: 'App',
   components: {
-    MqttTab
+    MqttTab,
+    EspLogsTab
   },
   data() {
     return {

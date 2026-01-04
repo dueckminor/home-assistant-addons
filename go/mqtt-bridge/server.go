@@ -43,6 +43,17 @@ func NewServer(adminPort int, distAdmin string) *Server {
 	api := r.Group("/api")
 	ep.setupEndpoints(api)
 
+	AddHandler(func(topic Topic) {
+		ep.SendEvent(
+			Event{
+				Source: "mqtt",
+				Time:   topic.Time,
+				Topic:  topic.Name,
+				Value:  topic.Value,
+			},
+		)
+	})
+
 	// Start the event broadcaster
 	ep.StartEventBroadcaster()
 
@@ -55,24 +66,6 @@ func (s *Server) SetMqttConn(mqttConn mqtt.Conn) {
 
 func (s *Server) GetEndpoints() *Endpoints {
 	return s.endpoints
-}
-
-func (s *Server) SendEvent(event Event) {
-	if s.endpoints != nil {
-		s.endpoints.SendEvent(event)
-	}
-}
-
-func (s *Server) SetOnFirstClientConnected(callback OnFirstClientConnectedFunc) {
-	if s.endpoints != nil {
-		s.endpoints.SetOnFirstClientConnected(callback)
-	}
-}
-
-func (s *Server) SetOnLastClientDisconnected(callback OnLastClientDisconnectedFunc) {
-	if s.endpoints != nil {
-		s.endpoints.SetOnLastClientDisconnected(callback)
-	}
 }
 
 func (s *Server) Listen() (err error) {

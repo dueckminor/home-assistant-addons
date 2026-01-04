@@ -1,6 +1,7 @@
 package mqtt
 
 import (
+	"context"
 	"crypto/tls"
 	"io"
 	"strings"
@@ -22,6 +23,7 @@ type Conn interface {
 	Publish(topic string, payload string)
 	PublishRetain(topic string, payload string)
 	Subscribe(topic string, cb func(topic string, payload string))
+	SubscribeCtx(ctx context.Context, topic string, cb func(topic string, payload string))
 	Forward(topic string, target Conn)
 }
 
@@ -74,6 +76,14 @@ func (c *conn) Subscribe(topic string, cb func(topic string, payload string)) {
 	c.client.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
 		cb(msg.Topic(), string(msg.Payload()))
 	})
+}
+
+func (c *conn) SubscribeCtx(ctx context.Context, topic string, cb func(topic string, payload string)) {
+	c.client.Subscribe(topic, 0, func(client mqtt.Client, msg mqtt.Message) {
+		cb(msg.Topic(), string(msg.Payload()))
+	})
+	<-ctx.Done()
+	c.client.Unsubscribe(topic)
 }
 
 func (c *conn) Forward(topic string, target Conn) {

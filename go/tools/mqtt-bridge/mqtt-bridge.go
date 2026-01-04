@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
 	mqttbridge "github.com/dueckminor/home-assistant-addons/go/mqtt-bridge"
@@ -127,28 +126,8 @@ func toInflux(mqttConn mqtt.Conn, influxConfig InfluxDbConfig, server *mqttbridg
 
 	mqttConn.Subscribe("#", func(topic, payload string) {
 		// Track handled topics
-		handledTopics := make(map[string]bool)
-		var handledTopicsMutex sync.Mutex
-
-		// Wrapper function to mark topic as handled
-		markTopicHandled := func(topic string) {
-			handledTopicsMutex.Lock()
-			handledTopics[topic] = true
-			handledTopicsMutex.Unlock()
-		}
 
 		// Subscribe to track all topics
-		mq
-		// Send WebSocket event for all MQTT messages
-		if server != nil {
-			event := mqttbridge.Event{
-				Source: "mqtt",
-				Time:   time.Now(),
-				Topic:  topic,
-				Value:  payload,
-			}
-			server.SendEvent(event)
-		}
 
 		if a, ok := availabilityTopics[topic]; ok {
 			fmt.Println("availability_topic:", topic)
@@ -208,35 +187,13 @@ func main() {
 		panic(err)
 	}
 
+	go mqttbridge.Listen(ctx, mqttConn)
+
 	automation.GetRegistry().EnableMqtt(mqttBroker)
 
 	// Create server first so we can pass it to other functions
 	s := mqttbridge.NewServer(adminPort, distAdmin)
 	s.SetMqttConn(mqttConn)
-
-	var mqttConnUi mqtt.Conn
-	// Set up WebSocket client lifecycle callbacks
-	s.SetOnFirstClientConnected(func() {
-		mqttConnUi, err = mqttBroker.Dial(mqttClientId+"-ui", "")
-		if err != nil {
-			return
-		}
-		mqttConn.Subscribe("#", func(topic, payload string) {
-			s.SendEvent(mqttbridge.Event{
-				Source: "mqtt",
-				Time:   time.Now(),
-				Topic:  topic,
-				Value:  payload,
-			})
-		})
-	})
-
-	s.SetOnLastClientDisconnected(func() {
-		if mqttConnUi != nil {
-			mqttConnUi.Close()
-			mqttConnUi = nil
-		}
-	})
 
 	if theConfig.InfluxDbUri != "" {
 		toInflux(mqttConn, theConfig.InfluxDbConfig, s)
