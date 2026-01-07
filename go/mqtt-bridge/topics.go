@@ -2,7 +2,6 @@ package mqttbridge
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -63,7 +62,6 @@ func Listen(ctx context.Context, mqttConn mqtt.Conn) {
 	addOneTopic := func(topic Topic) {
 		// this function is called with topicsMu locked
 		name := topic.Name
-		fmt.Println("Adding topic:", name)
 		topicR, exists := topics[name]
 		if !exists {
 			topicR = &topicRef{topic: &topic}
@@ -133,7 +131,6 @@ func Listen(ctx context.Context, mqttConn mqtt.Conn) {
 	}()
 
 	mqttConn.SubscribeCtx(ctx, "#", func(topic string, payload string) {
-		fmt.Println("Topic: ", topic, payload)
 		newTopics <- Topic{
 			Name:  topic,
 			Value: payload,

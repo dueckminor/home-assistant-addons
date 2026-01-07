@@ -2,9 +2,11 @@ package mqttbridge
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
+	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
 )
 
 type Measurement struct {
@@ -15,8 +17,20 @@ type Measurement struct {
 	Tags              map[string]string
 }
 
+var influx influxdb.Client
+
+func EnableInflux(influxClient influxdb.Client) {
+	influx = influxClient
+}
+
 func (m *Measurement) onChange() {
-	fmt.Println(m.StateTopic.Get().Name, m.StateTopic.Get().Value)
+	state := m.StateTopic.Get().Value
+	fmt.Println(m.Tags["device"], m.Tags["entity_id"], state, m.Config.UnitOfMeasurement)
+
+	if influx != nil {
+		value, _ := strconv.ParseFloat(state, 64)
+		influx.SendMetric(m.Config.UnitOfMeasurement, value, m.Tags)
+	}
 }
 
 var (

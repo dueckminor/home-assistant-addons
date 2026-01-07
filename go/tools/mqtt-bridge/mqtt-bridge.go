@@ -7,8 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 
@@ -79,85 +77,12 @@ type influxAvailability struct {
 	available    bool
 }
 
-func toInflux(mqttConn mqtt.Conn, influxConfig InfluxDbConfig, server *mqttbridge.Server) {
-
+func toInflux(influxConfig InfluxDbConfig) {
 	influx, err := influxdb.NewClient(influxConfig.InfluxDbUri, "ha", influxConfig.InfluxDbUser, influxConfig.InfluxDbPassword)
 	if err != nil {
 		panic(err)
 	}
-
-	uniqueIds := make(map[string]*influxMeasurement)
-	availabilityTopics := make(map[string]*influxAvailability)
-	stateTopics := make(map[string]*influxMeasurement)
-
-	mqttConn.Subscribe("homeassistant/sensor/#", func(topic, payload string) {
-		if strings.HasSuffix(topic, "/config") {
-			var config homeassistant.Config
-			config.Unmarshal([]byte(payload))
-			measurement := uniqueIds[config.UniqueId]
-			if measurement == nil {
-				measurement = &influxMeasurement{
-					config: config,
-					tags:   make(map[string]string),
-				}
-
-				topicParts := strings.Split(topic, "/")
-
-				measurement.tags["device_class"] = config.DeviceClass
-				measurement.tags["domain"] = "sensor"
-				measurement.tags["device"] = topicParts[len(topicParts)-3]
-				measurement.tags["entity_id"] = config.Name
-
-				a := availabilityTopics[config.AvailabilityTopic]
-				if a == nil {
-					a = &influxAvailability{
-						measurements: make(map[string]*influxMeasurement),
-					}
-					availabilityTopics[config.AvailabilityTopic] = a
-				}
-				measurement.available = a
-
-				uniqueIds[config.UniqueId] = measurement
-				stateTopics[config.StateTopic] = measurement
-				a.measurements[config.UniqueId] = measurement
-			}
-		}
-	})
-
-	mqttConn.Subscribe("#", func(topic, payload string) {
-		// Track handled topics
-
-		// Subscribe to track all topics
-
-		if a, ok := availabilityTopics[topic]; ok {
-			fmt.Println("availability_topic:", topic)
-			available := payload == "online"
-			if a.available == available {
-				return
-			}
-			a.available = available
-			if !available {
-				return
-			}
-			for _, m := range a.measurements {
-				if m.state != "" {
-					fmt.Println(m.tags["device"], m.tags["entity_id"], m.state, m.config.UnitOfMeasurement)
-					value, _ := strconv.ParseFloat(m.state, 64)
-					influx.SendMetric(m.config.UnitOfMeasurement, value, m.tags)
-				}
-			}
-			return
-		}
-		if m, ok := stateTopics[topic]; ok {
-			m.state = payload
-			if m.available.available {
-				fmt.Println(m.tags["device"], m.tags["entity_id"], m.state, m.config.UnitOfMeasurement)
-				value, _ := strconv.ParseFloat(m.state, 64)
-				influx.SendMetric(m.config.UnitOfMeasurement, value, m.tags)
-			}
-			return
-		}
-	})
+	mqttbridge.EnableInflux(influx)
 }
 
 func main() {
@@ -199,7 +124,7 @@ func main() {
 	s.SetMqttConn(mqttConn)
 
 	if theConfig.InfluxDbUri != "" {
-		toInflux(mqttConn, theConfig.InfluxDbConfig, s)
+		toInflux(theConfig.InfluxDbConfig)
 	}
 
 	if theConfig.AlphaEssUri != "" {
