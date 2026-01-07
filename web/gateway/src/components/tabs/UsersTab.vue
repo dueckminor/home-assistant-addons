@@ -320,7 +320,7 @@
 </template>
 
 <script>
-import { apiRequest, apiGet } from '../../utils/api.js'
+import { apiRequest, apiGet } from '../../../../shared/utils/homeassistant.js'
 
 export default {
   name: 'UsersTab',

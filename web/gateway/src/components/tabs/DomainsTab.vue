@@ -420,7 +420,7 @@
 </template>
 
 <script>
-import { apiGet, apiRequest } from '../../utils/api.js'
+import { apiGet, apiRequest } from '../../../../shared/utils/homeassistant.js'
 import RouteWizard from '../dialogs/RouteWizard.vue'
 import DomainWizard from '../dialogs/DomainWizard.vue'
 

@@ -59,6 +59,7 @@ import VideoPlayer from './components/VideoPlayer.vue'
 import ThumbnailNavigation from './components/ThumbnailNavigation.vue'
 import Timeline from './components/Timeline.vue'
 import NavigationControls from './components/NavigationControls.vue'
+import { getBaseUrl } from '../../shared/utils/homeassistant.js'
 
 export default {
   name: 'SecurityApp',
@@ -74,7 +75,7 @@ export default {
       selectedVideo: null,
       thumbnails: [],
       loading: false,
-      baseUrl: this.getBaseUrl(),
+      baseUrl: getBaseUrl(),
       isOrientationChanging: false,
       currentOrientation: window.orientation || 0,
     }
@@ -119,22 +120,6 @@ export default {
   },
   
   methods: {
-    getBaseUrl() {
-      // Detect if we're running in Home Assistant with ingress
-      if (window.location.pathname.includes('/api/hassio_ingress/')) {
-        // Extract the ingress path
-        const pathParts = window.location.pathname.split('/')
-        const ingressIndex = pathParts.indexOf('api')
-        if (ingressIndex >= 0 && pathParts[ingressIndex + 1] === 'hassio_ingress') {
-          const ingressPath = pathParts.slice(0, ingressIndex + 3).join('/')
-          return window.location.origin + ingressPath
-        }
-      }
-      
-      // Fallback to current origin
-      return window.location.origin
-    },
-    
     formatDate(dateString) {
       const date = new Date(dateString)
       return date.toLocaleDateString('en-US', {

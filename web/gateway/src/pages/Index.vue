@@ -91,7 +91,7 @@ import DnsTab from '../components/tabs/DnsTab.vue'
 import DomainsTab from '../components/tabs/DomainsTab.vue'
 import UsersTab from '../components/tabs/UsersTab.vue'
 import MailTab from '../components/tabs/MailTab.vue'
-import { apiRequest, apiGet, apiPost } from '../utils/api.js'
+import { apiRequest, apiGet, apiPost } from '../../../shared/utils/homeassistant.js'
 
 export default {
   name: 'Index',
