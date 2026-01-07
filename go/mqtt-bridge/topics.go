@@ -133,6 +133,7 @@ func Listen(ctx context.Context, mqttConn mqtt.Conn) {
 	}()
 
 	mqttConn.SubscribeCtx(ctx, "#", func(topic string, payload string) {
+		fmt.Println("Topic: ", topic, payload)
 		newTopics <- Topic{
 			Name:  topic,
 			Value: payload,

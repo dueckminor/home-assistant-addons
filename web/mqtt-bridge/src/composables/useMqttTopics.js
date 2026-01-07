@@ -10,6 +10,23 @@ const maxReconnectAttempts = 5
 let reconnectInterval = null
 let lastRestLoadTime = null
 
+// Get the base URL for API calls, handling Home Assistant ingress
+function getBaseUrl() {
+  // Detect if we're running in Home Assistant with ingress
+  if (window.location.pathname.includes('/api/hassio_ingress/')) {
+    // Extract the ingress path
+    const pathParts = window.location.pathname.split('/')
+    const ingressIndex = pathParts.indexOf('api')
+    if (ingressIndex >= 0 && pathParts[ingressIndex + 1] === 'hassio_ingress') {
+      const ingressPath = pathParts.slice(0, ingressIndex + 3).join('/')
+      return window.location.origin + ingressPath
+    }
+  }
+  
+  // Fallback to current origin
+  return window.location.origin
+}
+
 export function useMqttTopics() {
   const sortedTopics = computed(() => {
     return [...topics.value].sort((a, b) => a.topic.localeCompare(b.topic))
@@ -34,7 +51,8 @@ export function useMqttTopics() {
   async function loadTopics() {
     loading.value = true
     try {
-      const response = await fetch('/api/topics')
+      const baseUrl = getBaseUrl()
+      const response = await fetch(`${baseUrl}/api/topics`)
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -68,8 +86,11 @@ export function useMqttTopics() {
     
     // Determine WebSocket URL
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host
-    const wsUrl = `${protocol}//${host}/api/topics?stream=true`
+    const baseUrl = getBaseUrl()
+    // Extract host from base URL (remove protocol and origin prefix if present)
+    const baseUrlObj = new URL(baseUrl, window.location.origin)
+    const wsPath = baseUrlObj.pathname === '/' ? '' : baseUrlObj.pathname
+    const wsUrl = `${protocol}//${window.location.host}${wsPath}/api/topics?stream=true`
 
     try {
       websocket.value = new WebSocket(wsUrl)

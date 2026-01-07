@@ -31,7 +31,7 @@ var theConfig BrigeConfig
 
 func init() {
 	flag.StringVar(&dataDir, "data-dir", "/data", "the data dir")
-	flag.IntVar(&adminPort, "admin-port", 0, "the port for the admin-ui")
+	flag.IntVar(&adminPort, "admin-port", 8080, "the port for the admin-ui")
 	flag.StringVar(&distAdmin, "dist-admin", "", "the URL for the admin-ui")
 	flag.Parse()
 
@@ -181,6 +181,9 @@ func main() {
 
 	mqttClientId := "mqtt-bridge-" + id
 
+	fmt.Println("MQTT URI:", theConfig.MqttURI)
+	fmt.Println("MQTT Client ID:", mqttClientId)
+
 	mqttBroker := mqtt.NewBroker(theConfig.MqttURI, theConfig.MqttUser, theConfig.MqttPassword)
 	mqttConn, err := mqttBroker.Dial(mqttClientId, "")
 	if err != nil {
@@ -226,4 +229,6 @@ func main() {
 	}()
 
 	wg.Wait()
+
+	fmt.Println("DONE!!!")
 }

@@ -69,13 +69,16 @@ func (s *Server) GetEndpoints() *Endpoints {
 }
 
 func (s *Server) Listen() (err error) {
+	fmt.Println("Listen: ", s.httpServer.Addr)
 	s.listener, err = net.Listen("tcp", s.httpServer.Addr)
 	return err
 }
 
 func (s *Server) Serve(ctx context.Context) {
+	fmt.Println("Serve...")
 	go func() {
 		<-ctx.Done()
+		fmt.Println("Serve done...")
 		s.httpServer.Shutdown(context.Background())
 	}()
 	s.httpServer.Serve(s.listener)
