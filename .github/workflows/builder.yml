@@ -9,57 +9,12 @@ on:
       - main
 
 jobs:
-  detect-changes:
-    runs-on: ubuntu-latest
-    name: Detect changed addons
-    outputs:
-      changed_addons: ${{ steps.changes.outputs.addons }}
-      has_changes: ${{ steps.changes.outputs.has_changes }}
-      go_changed: ${{ steps.changes.outputs.go_changed }}
-      web_changed: ${{ steps.changes.outputs.web_changed }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Get changed files
-        id: changed_files
-        uses: tj-actions/changed-files@v47
-        with:
-          files: |
-            addons/**
-            go/**
-            web/**
-
-      - name: Analyze changes
-        id: changes
-        run: |
-          # Always test both addons for comprehensive validation
-          echo 'addons=["gateway", "mqtt-bridge", "security"]' >> $GITHUB_OUTPUT
-          echo 'has_changes=true' >> $GITHUB_OUTPUT
-          
-          # Check if Go or web files changed
-          if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -q "^go/"; then
-            echo 'go_changed=true' >> $GITHUB_OUTPUT
-          else
-            echo 'go_changed=false' >> $GITHUB_OUTPUT
-          fi
-          
-          if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -q "^web/"; then
-            echo 'web_changed=true' >> $GITHUB_OUTPUT
-          else
-            echo 'web_changed=false' >> $GITHUB_OUTPUT
-          fi
-
   test-build:
     runs-on: ubuntu-latest
     name: Test build ${{ matrix.addon }}
-    needs: detect-changes
-    if: needs.detect-changes.outputs.has_changes == 'true'
     strategy:
       matrix:
-        addon: ${{ fromJson(needs.detect-changes.outputs.changed_addons) }}
+        addon: ["gateway", "mqtt-bridge", "security"]
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
