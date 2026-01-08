@@ -19,9 +19,13 @@ fi
 mkdir -p "${ROOT_DIR}/gen/addons/mqtt-bridge"
 rm -rf "${ROOT_DIR}/gen/addons/mqtt-bridge/"*
 
+pushd web/mqtt-bridge
+npm run build
+popd
+
 # Build binaries for all platforms (for platform selector)
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o gen/addons/mqtt-bridge/mqtt-bridge-amd64 go/tools/mqtt-bridge/mqtt-bridge.go
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o gen/addons/mqtt-bridge/mqtt-bridge-arm64 go/tools/mqtt-bridge/mqtt-bridge.go
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./addons/mqtt-bridge/mqtt-bridge-amd64 go/tools/mqtt-bridge/mqtt-bridge.go
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o ./addons/mqtt-bridge/mqtt-bridge-arm64 go/tools/mqtt-bridge/mqtt-bridge.go
 
 cp -a ./addons/mqtt-bridge/* gen/addons/mqtt-bridge/
 

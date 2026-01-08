@@ -7,12 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
+	mqttbridge "github.com/dueckminor/home-assistant-addons/go/mqtt-bridge"
 	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
 	"github.com/dueckminor/home-assistant-addons/go/services/automation"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
@@ -23,11 +22,15 @@ import (
 )
 
 var dataDir string
+var adminPort int
+var distAdmin string
 
 var theConfig BrigeConfig
 
 func init() {
 	flag.StringVar(&dataDir, "data-dir", "/data", "the data dir")
+	flag.IntVar(&adminPort, "admin-port", 8080, "the port for the admin-ui")
+	flag.StringVar(&distAdmin, "dist-admin", "", "the URL for the admin-ui")
 	flag.Parse()
 
 	configFile := path.Join(dataDir, "options.json")
@@ -56,29 +59,12 @@ type InfluxDbConfig struct {
 	InfluxDbPassword string `yaml:"influx_db_password"`
 }
 
-type BrigeLegacyConfig struct {
-	MqttConfig     `yaml:",inline"`
-	InfluxDbConfig `yaml:",inline"`
-}
-
 type BrigeConfig struct {
 	MqttConfig                `yaml:",inline"`
 	InfluxDbConfig            `yaml:",inline"`
 	homematic.HomematicConfig `yaml:",inline"`
-	AlphaEssUri               string             `yaml:"alphaess_uri"`
-	Legacy                    *BrigeLegacyConfig `yaml:"legacy"`
+	AlphaEssUri               string `yaml:"alphaess_uri"`
 }
-
-func fromLegacyMqtt(mqttConn mqtt.Conn, legacyConfig MqttConfig, mqttClientId string) {
-	mqttLegacyBroker := mqtt.NewBroker(legacyConfig.MqttURI, legacyConfig.MqttUser, legacyConfig.MqttPassword)
-
-	mqttLegacyConn, err := mqttLegacyBroker.Dial(mqttClientId, "")
-	if err != nil {
-		panic(err)
-	}
-	mqttLegacyConn.Forward("#", mqttConn)
-}
-
 type influxMeasurement struct {
 	config    homeassistant.Config
 	tags      map[string]string
@@ -91,81 +77,12 @@ type influxAvailability struct {
 	available    bool
 }
 
-func toInflux(mqttConn mqtt.Conn, influxConfig InfluxDbConfig) {
-
+func toInflux(influxConfig InfluxDbConfig) {
 	influx, err := influxdb.NewClient(influxConfig.InfluxDbUri, "ha", influxConfig.InfluxDbUser, influxConfig.InfluxDbPassword)
 	if err != nil {
 		panic(err)
 	}
-
-	uniqueIds := make(map[string]*influxMeasurement)
-	availabilityTopics := make(map[string]*influxAvailability)
-	stateTopics := make(map[string]*influxMeasurement)
-
-	mqttConn.Subscribe("homeassistant/sensor/#", func(topic, payload string) {
-		if strings.HasSuffix(topic, "/config") {
-			var config homeassistant.Config
-			config.Unmarshal([]byte(payload))
-			measurement := uniqueIds[config.UniqueId]
-			if measurement == nil {
-				measurement = &influxMeasurement{
-					config: config,
-					tags:   make(map[string]string),
-				}
-
-				topicParts := strings.Split(topic, "/")
-
-				measurement.tags["device_class"] = config.DeviceClass
-				measurement.tags["domain"] = "sensor"
-				measurement.tags["device"] = topicParts[len(topicParts)-3]
-				measurement.tags["entity_id"] = config.Name
-
-				a := availabilityTopics[config.AvailabilityTopic]
-				if a == nil {
-					a = &influxAvailability{
-						measurements: make(map[string]*influxMeasurement),
-					}
-					availabilityTopics[config.AvailabilityTopic] = a
-				}
-				measurement.available = a
-
-				uniqueIds[config.UniqueId] = measurement
-				stateTopics[config.StateTopic] = measurement
-				a.measurements[config.UniqueId] = measurement
-			}
-		}
-	})
-
-	mqttConn.Subscribe("#", func(topic, payload string) {
-		if a, ok := availabilityTopics[topic]; ok {
-			fmt.Println("availability_topic:", topic)
-			available := payload == "online"
-			if a.available == available {
-				return
-			}
-			a.available = available
-			if !available {
-				return
-			}
-			for _, m := range a.measurements {
-				if m.state != "" {
-					fmt.Println(m.tags["device"], m.tags["entity_id"], m.state, m.config.UnitOfMeasurement)
-					value, _ := strconv.ParseFloat(m.state, 64)
-					influx.SendMetric(m.config.UnitOfMeasurement, value, m.tags)
-				}
-			}
-			return
-		}
-		if m, ok := stateTopics[topic]; ok {
-			m.state = payload
-			if m.available.available {
-				fmt.Println(m.tags["device"], m.tags["entity_id"], m.state, m.config.UnitOfMeasurement)
-				value, _ := strconv.ParseFloat(m.state, 64)
-				influx.SendMetric(m.config.UnitOfMeasurement, value, m.tags)
-			}
-			return
-		}
-	})
+	mqttbridge.EnableInflux(influx)
 }
 
 func main() {
@@ -189,20 +106,25 @@ func main() {
 
 	mqttClientId := "mqtt-bridge-" + id
 
+	fmt.Println("MQTT URI:", theConfig.MqttURI)
+	fmt.Println("MQTT Client ID:", mqttClientId)
+
 	mqttBroker := mqtt.NewBroker(theConfig.MqttURI, theConfig.MqttUser, theConfig.MqttPassword)
 	mqttConn, err := mqttBroker.Dial(mqttClientId, "")
 	if err != nil {
 		panic(err)
 	}
 
+	go mqttbridge.Listen(ctx, mqttConn)
+
 	automation.GetRegistry().EnableMqtt(mqttBroker)
 
-	if theConfig.Legacy != nil && theConfig.Legacy.MqttURI != "" {
-		fromLegacyMqtt(mqttConn, theConfig.Legacy.MqttConfig, mqttClientId)
-	}
+	// Create server first so we can pass it to other functions
+	s := mqttbridge.NewServer(adminPort, distAdmin)
+	s.SetMqttConn(mqttConn)
 
 	if theConfig.InfluxDbUri != "" {
-		toInflux(mqttConn, theConfig.InfluxDbConfig)
+		toInflux(theConfig.InfluxDbConfig)
 	}
 
 	if theConfig.AlphaEssUri != "" {
@@ -214,6 +136,17 @@ func main() {
 		homematic.StartMqttBridge(theConfig.HomematicConfig)
 	}
 
+	err = s.Listen()
+	if err != nil {
+		panic(err)
+	}
+
+	wg.Add(1)
+	go func() {
+		s.Serve(ctx)
+		wg.Done()
+	}()
+
 	wg.Add(1)
 	go func() {
 		<-ctx.Done()
@@ -221,4 +154,6 @@ func main() {
 	}()
 
 	wg.Wait()
+
+	fmt.Println("DONE!!!")
 }

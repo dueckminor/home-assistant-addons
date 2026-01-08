@@ -297,7 +297,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { apiGet, apiPut, apiPost } from '@/utils/api.js'
+import { apiGet, apiPut, apiPost } from '../../../../shared/utils/homeassistant.js'
 
 // Form ref
 const mailForm = ref(null)

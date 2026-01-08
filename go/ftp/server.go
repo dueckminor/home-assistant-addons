@@ -46,7 +46,7 @@ func NewServer(config *Config) (*Server, error) {
 }
 
 // validateUser validates FTP credentials
-func (s *Server) validateUser(user string, pass string, host string) (string, bool, error) {
+func (s *Server) validateUser(user string, pass string, host string, remoteIP net.IP) (string, bool, error) {
 	authenticated := (user == s.config.Username && pass == s.config.Password)
 
 	if !authenticated {

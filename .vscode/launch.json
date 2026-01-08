@@ -40,16 +40,6 @@
             ],
         },
         {
-            "name": "Launch MQTT-Bridge",
-            "type": "go",
-            "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceFolder}/go/tools/mqtt-bridge/mqtt-bridge.go",
-            "args": [
-                "--data-dir=${workspaceFolder}/gen/data/mqtt-bridge"
-            ]
-        },
-        {
             "name": "Launch Security",
             "type": "go",
             "request": "launch",
@@ -61,6 +51,18 @@
                 "--dist=http://localhost:3002",
                 "--http-port=30080",
                 "--ftp-port=30021"
+            ]
+        },
+        {
+            "name": "Launch MQTT-Bridge",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/go/tools/mqtt-bridge/mqtt-bridge.go",
+            "args": [
+                "--data-dir=${workspaceFolder}/gen/data/mqtt-bridge/config",
+                "--admin-port=31080",
+                "--dist-admin=http://localhost:3003"
             ]
         },
 
