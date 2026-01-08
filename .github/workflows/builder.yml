@@ -74,3 +74,17 @@ jobs:
           fi
           
           echo "✅ Addon configuration is valid"
+
+  # Summary job for branch protection - fails if any test-build job failed
+  ci-success:
+    needs: test-build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          if [ "${{ needs.test-build.result }}" != "success" ]; then
+            echo "❌ One or more test builds failed"
+            exit 1
+          fi
+          echo "✅ All tests passed"
