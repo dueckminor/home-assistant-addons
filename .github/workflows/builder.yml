@@ -9,12 +9,28 @@ on:
       - main
 
 jobs:
+  discover-addons:
+    runs-on: ubuntu-latest
+    outputs:
+      addons: ${{ steps.list-addons.outputs.addons }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      
+      - name: List addons
+        id: list-addons
+        run: |
+          addons=$(ls -d addons/*/ | xargs -n 1 basename | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "addons=$addons" >> $GITHUB_OUTPUT
+          echo "Found addons: $addons"
+
   test-build:
+    needs: discover-addons
     runs-on: ubuntu-latest
     name: Test build ${{ matrix.addon }}
     strategy:
       matrix:
-        addon: ["gateway", "mqtt-bridge", "security"]
+        addon: ${{ fromJson(needs.discover-addons.outputs.addons) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
