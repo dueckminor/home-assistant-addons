@@ -9,24 +9,25 @@ def build_web(component_name: str, fast: bool = False) -> None:
 
     web_path = os.path.join(root_dir, "web", component_name)
 
-    print(f"🌐 Building web frontend for '{component_name}'...")
-    print(f"   📂 Path: {web_path}")
+    print(f"🌐 Building web frontend for '{component_name}'...", flush=True)
+    print(f"   📂 Path: {web_path}", flush=True)
 
     if fast:
         dist_path = os.path.join(root_dir, "go", component_name, "dist", "index.html")
         if os.path.isfile(dist_path):
             print(
-                f"   ⚡ Fast build enabled and assets already exist at '{dist_path}', skipping build."
+                f"   ⚡ Fast build enabled and assets already exist at '{dist_path}', skipping build.",
+                flush=True,
             )
             return
 
-    print(f"   📦 Installing dependencies...")
+    print(f"   📦 Installing dependencies...", flush=True)
     subprocess.run(["npm", "install"], cwd=web_path, check=True)
 
-    print(f"   🔨 Building production bundle...")
+    print(f"   🔨 Building production bundle...", flush=True)
     subprocess.run(["npm", "run", "build"], cwd=web_path, check=True)
 
-    print(f"   ✅ Web frontend build complete!")
+    print(f"   ✅ Web frontend build complete!", flush=True)
 
 
 def build_go(component_name: str) -> None:
@@ -43,9 +44,9 @@ def build_go(component_name: str) -> None:
         "arm64": "linux/arm64",
     }
 
-    print(f"🔧 Building Go backend for '{component_name}'...")
-    print(f"   📂 Source: {go_file}")
-    print(f"   📂 Output: {output_dir}")
+    print(f"🔧 Building Go backend for '{component_name}'...", flush=True)
+    print(f"   📂 Source: {go_file}", flush=True)
+    print(f"   📂 Output: {output_dir}", flush=True)
 
     for arch, goos_goarch in architectures.items():
         output_file = os.path.join(output_dir, f"{component_name}-{arch}")
@@ -53,11 +54,11 @@ def build_go(component_name: str) -> None:
         env["CGO_ENABLED"] = "0"
         env["GOOS"], env["GOARCH"] = goos_goarch.split("/")
 
-        print(f"   🏗️  Building for {arch} ({goos_goarch})...")
+        print(f"   🏗️  Building for {arch} ({goos_goarch})...", flush=True)
         subprocess.run(["go", "build", "-o", output_file, go_file], env=env, check=True)
-        print(f"      ✓ {os.path.basename(output_file)}")
+        print(f"      ✓ {os.path.basename(output_file)}", flush=True)
 
-    print(f"   ✅ Go backend build complete!")
+    print(f"   ✅ Go backend build complete!", flush=True)
 
 
 def prepare_local(component_name: str) -> None:
