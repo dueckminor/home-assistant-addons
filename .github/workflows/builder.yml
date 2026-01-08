@@ -9,28 +9,39 @@ on:
       - main
 
 jobs:
-  discover-addons:
+  detect-changed-addons:
     runs-on: ubuntu-latest
+    name: Detect changed addons
     outputs:
       addons: ${{ steps.list-addons.outputs.addons }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Get changed files
+        id: changed_files
+        uses: tj-actions/changed-files@v47
+        with:
+          files: |
+            addons/**
+            go/**
+            web/**
       
       - name: List addons
         id: list-addons
         run: |
+          echo "Changed files: ${{ steps.changed_files.outputs.all_changed_files }}"
           addons=$(ls -d addons/*/ | xargs -n 1 basename | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "addons=$addons" >> $GITHUB_OUTPUT
           echo "Found addons: $addons"
 
   test-build:
-    needs: discover-addons
+    needs: detect-changed-addons
     runs-on: ubuntu-latest
     name: Test build ${{ matrix.addon }}
     strategy:
       matrix:
-        addon: ${{ fromJson(needs.discover-addons.outputs.addons) }}
+        addon: ${{ fromJson(needs.detect-changed-addons.outputs.addons) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
