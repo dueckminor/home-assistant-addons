@@ -23,6 +23,8 @@ jobs:
         uses: tj-actions/changed-files@v47
         with:
           files: |
+            go.mod
+            go.sum
             addons/**
             go/**
             web/**
@@ -35,13 +37,37 @@ jobs:
           # Get all available addons
           all_addons=$(ls -d addons/*/ | xargs -n 1 basename)
           
+          # Check if Go-related files changed (affects all addons)
+          go_changed=false
+          if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "(^go/|go\.mod|go\.sum)"; then
+            echo "⚠️  Go files or dependencies changed - will build all addons"
+            go_changed=true
+          fi
+          
           # Filter addons based on changed files
           changed_addons=""
           for addon in $all_addons; do
-            # Check if any files in addons/<addon>/, go/<addon>/, or web/<addon>/ have changed
-            if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "(addons|go|web)/${addon}/"; then
+            # Build all addons if Go files changed
+            if [ "$go_changed" = true ]; then
               changed_addons="${changed_addons}${addon}"$'\n'
-              echo "  ✓ ${addon} has changes"
+              echo "  ✓ ${addon} (Go changes affect all)"
+              continue
+            fi
+            
+            # Check if any files in addons/<addon>/, go/tools/<addon>/, or web/<addon>/ have changed
+            if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "addons/${addon}/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes in addons/"
+            elif echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "go/tools/${addon}/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes in go/tools/"
+            elif echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "web/${addon}/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes in web/"
+            # Special case: gateway also depends on web/auth
+            elif [ "$addon" = "gateway" ] && echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -q "web/auth/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes in web/auth/"
             else
               echo "  - ${addon} has no changes (skipped)"
             fi
