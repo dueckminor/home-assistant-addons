@@ -36,7 +36,7 @@ jobs:
         id: changes
         run: |
           # Always test both addons for comprehensive validation
-          echo 'addons=["gateway", "mqtt-bridge"]' >> $GITHUB_OUTPUT
+          echo 'addons=["gateway", "mqtt-bridge", "security"]' >> $GITHUB_OUTPUT
           echo 'has_changes=true' >> $GITHUB_OUTPUT
           
           # Check if Go or web files changed
@@ -70,7 +70,6 @@ jobs:
           go-version: '1.25'
 
       - name: Set up Node.js
-        if: matrix.addon == 'gateway' || matrix.addon == 'mqtt-bridge'
         uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -78,29 +77,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build web assets
-        if: matrix.addon == 'gateway' || matrix.addon == 'mqtt-bridge'
+      - name: Build
         run: |
-          echo "Building web assets for ${{matrix.addon}}..."
-          if [ ${{matrix.addon}} == 'gateway' ]; then
-            pushd web/auth
-            npm ci
-            npm run build
-            popd
-          fi
-          pushd web/${{matrix.addon}}
-          npm ci
-          npm run build
-          popd
-
-      - name: Build binaries for all platforms
-        run: |
-          echo "Building ${{ matrix.addon }} binaries for all platforms..."
-          # Build AMD64 binary
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-amd64 ./go/tools/${{ matrix.addon }}/
-          
-          # Build ARM64 binary  
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-arm64 ./go/tools/${{ matrix.addon }}/
+          ./scripts/build "${{matrix.addon}}"
 
       - name: Test multi-arch Docker build
         run: |
