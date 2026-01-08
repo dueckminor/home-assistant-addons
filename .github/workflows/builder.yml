@@ -31,9 +31,32 @@ jobs:
         id: list-addons
         run: |
           echo "Changed files: ${{ steps.changed_files.outputs.all_changed_files }}"
-          addons=$(ls -d addons/*/ | xargs -n 1 basename | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          
+          # Get all available addons
+          all_addons=$(ls -d addons/*/ | xargs -n 1 basename)
+          
+          # Filter addons based on changed files
+          changed_addons=""
+          for addon in $all_addons; do
+            # Check if any files in addons/<addon>/, go/<addon>/, or web/<addon>/ have changed
+            if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "(addons|go|web)/${addon}/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes"
+            else
+              echo "  - ${addon} has no changes (skipped)"
+            fi
+          done
+          
+          # Convert to JSON array
+          if [ -z "$changed_addons" ]; then
+            echo "No addons have changes, but will include all for safety on main branch"
+            addons=$(echo "$all_addons" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          else
+            addons=$(echo "$changed_addons" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          fi
+          
           echo "addons=$addons" >> $GITHUB_OUTPUT
-          echo "Found addons: $addons"
+          echo "Changed addons to build: $addons"
 
   test-build:
     needs: detect-changed-addons
