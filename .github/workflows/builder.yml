@@ -9,57 +9,88 @@ on:
       - main
 
 jobs:
-  detect-changes:
+  detect-changed-addons:
     runs-on: ubuntu-latest
     name: Detect changed addons
     outputs:
-      changed_addons: ${{ steps.changes.outputs.addons }}
-      has_changes: ${{ steps.changes.outputs.has_changes }}
-      go_changed: ${{ steps.changes.outputs.go_changed }}
-      web_changed: ${{ steps.changes.outputs.web_changed }}
+      addons: ${{ steps.list-addons.outputs.addons }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Get changed files
         id: changed_files
         uses: tj-actions/changed-files@v47
         with:
           files: |
+            go.mod
+            go.sum
             addons/**
             go/**
             web/**
-
-      - name: Analyze changes
-        id: changes
+      
+      - name: List addons
+        id: list-addons
         run: |
-          # Always test both addons for comprehensive validation
-          echo 'addons=["gateway", "mqtt-bridge"]' >> $GITHUB_OUTPUT
-          echo 'has_changes=true' >> $GITHUB_OUTPUT
+          echo "Changed files: ${{ steps.changed_files.outputs.all_changed_files }}"
           
-          # Check if Go or web files changed
-          if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -q "^go/"; then
-            echo 'go_changed=true' >> $GITHUB_OUTPUT
-          else
-            echo 'go_changed=false' >> $GITHUB_OUTPUT
+          # Get all available addons
+          all_addons=$(ls -d addons/*/ | xargs -n 1 basename)
+          
+          # Check if Go-related files changed (affects all addons)
+          go_changed=false
+          if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "(^go/|go\.mod|go\.sum)"; then
+            echo "⚠️  Go files or dependencies changed - will build all addons"
+            go_changed=true
           fi
           
-          if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -q "^web/"; then
-            echo 'web_changed=true' >> $GITHUB_OUTPUT
+          # Filter addons based on changed files
+          changed_addons=""
+          for addon in $all_addons; do
+            # Build all addons if Go files changed
+            if [ "$go_changed" = true ]; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} (Go changes affect all)"
+              continue
+            fi
+            
+            # Check if any files in addons/<addon>/, go/tools/<addon>/, or web/<addon>/ have changed
+            if echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "addons/${addon}/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes in addons/"
+            elif echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "go/tools/${addon}/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes in go/tools/"
+            elif echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -qE "web/${addon}/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes in web/"
+            # Special case: gateway also depends on web/auth
+            elif [ "$addon" = "gateway" ] && echo "${{ steps.changed_files.outputs.all_changed_files }}" | grep -q "web/auth/"; then
+              changed_addons="${changed_addons}${addon}"$'\n'
+              echo "  ✓ ${addon} has changes in web/auth/"
+            else
+              echo "  - ${addon} has no changes (skipped)"
+            fi
+          done
+          
+          # Convert to JSON array
+          if [ -z "$changed_addons" ]; then
+            echo "No addons have changes, but will include all for safety on main branch"
+            addons=$(echo "$all_addons" | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
-            echo 'web_changed=false' >> $GITHUB_OUTPUT
+            addons=$(echo "$changed_addons" | jq -R -s -c 'split("\n") | map(select(length > 0))')
           fi
+          
+          echo "addons=$addons" >> $GITHUB_OUTPUT
+          echo "Changed addons to build: $addons"
 
   test-build:
+    needs: detect-changed-addons
     runs-on: ubuntu-latest
     name: Test build ${{ matrix.addon }}
-    needs: detect-changes
-    if: needs.detect-changes.outputs.has_changes == 'true'
     strategy:
       matrix:
-        addon: ${{ fromJson(needs.detect-changes.outputs.changed_addons) }}
+        addon: ${{ fromJson(needs.detect-changed-addons.outputs.addons) }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
@@ -70,7 +101,6 @@ jobs:
           go-version: '1.25'
 
       - name: Set up Node.js
-        if: matrix.addon == 'gateway' || matrix.addon == 'mqtt-bridge'
         uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -78,29 +108,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build web assets
-        if: matrix.addon == 'gateway' || matrix.addon == 'mqtt-bridge'
+      - name: Build
         run: |
-          echo "Building web assets for ${{matrix.addon}}..."
-          if [ ${{matrix.addon}} == 'gateway' ]; then
-            pushd web/auth
-            npm ci
-            npm run build
-            popd
-          fi
-          pushd web/${{matrix.addon}}
-          npm ci
-          npm run build
-          popd
-
-      - name: Build binaries for all platforms
-        run: |
-          echo "Building ${{ matrix.addon }} binaries for all platforms..."
-          # Build AMD64 binary
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-amd64 ./go/tools/${{ matrix.addon }}/
-          
-          # Build ARM64 binary  
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o addons/${{ matrix.addon }}/${{ matrix.addon }}-arm64 ./go/tools/${{ matrix.addon }}/
+          ./scripts/build "${{matrix.addon}}"
 
       - name: Test multi-arch Docker build
         run: |
@@ -124,3 +134,19 @@ jobs:
           fi
           
           echo "✅ Addon configuration is valid"
+
+  # Summary job for branch protection - fails if any test-build job failed
+  ci-success:
+    needs: test-build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          result="${{ needs.test-build.result }}"
+          if [ "$result" = "success" ] || [ "$result" = "skipped" ]; then
+            echo "✅ All tests passed (result: $result)"
+          else
+            echo "❌ One or more test builds failed (result: $result)"
+            exit 1
+          fi

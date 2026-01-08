@@ -1,23 +1,28 @@
-#!/bin/bash
-# Build script for local development with multi-arch binaries
+#!/usr/bin/env python3
 
-set -eou pipefail
+import os
+import sys
+import argparse
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts/lib"))
+)
 
-if [[ "${1:-}" == "--fast" ]]; then
-    if [[ -f "${ROOT_DIR}/go/auth/dist/index.html" ]] && [[ -f "${ROOT_DIR}/go/gateway/dist/index.html" ]]; then
-        echo "Fast build, skipping web assets..."
-        exit 0
-    fi
-fi
+from ha_addons.build import build_web
 
-echo "Building web assets..."
 
-pushd "${ROOT_DIR}/web/auth"
-npm run build
-popd
+def main():
+    parser = argparse.ArgumentParser(
+        description="Prepare web embed assets for all components."
+    )
+    parser.add_argument(
+        "--fast", action="store_true", help="Skip building if assets already exist."
+    )
+    args = parser.parse_args()
 
-pushd "${ROOT_DIR}/web/gateway"
-npm run build
-popd
+    for component in ["auth", "gateway", "security", "mqtt-bridge"]:
+        build_web(component, fast=args.fast)
+
+
+if __name__ == "__main__":
+    main()
