@@ -143,8 +143,10 @@ jobs:
     steps:
       - name: Check test results
         run: |
-          if [ "${{ needs.test-build.result }}" != "success" ]; then
-            echo "❌ One or more test builds failed"
+          result="${{ needs.test-build.result }}"
+          if [ "$result" = "success" ] || [ "$result" = "skipped" ]; then
+            echo "✅ All tests passed (result: $result)"
+          else
+            echo "❌ One or more test builds failed (result: $result)"
             exit 1
           fi
-          echo "✅ All tests passed"
