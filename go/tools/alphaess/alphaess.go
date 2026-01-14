@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"embed"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path"
@@ -11,25 +14,27 @@ import (
 	"syscall"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
-	mqttbridge "github.com/dueckminor/home-assistant-addons/go/mqtt-bridge"
+	"github.com/dueckminor/home-assistant-addons/go/ginutil"
+	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
 	"github.com/dueckminor/home-assistant-addons/go/services/automation"
-	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
-	"github.com/dueckminor/home-assistant-addons/go/services/homematic"
-	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
+	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 )
 
+//go:embed dist/*
+var distFS embed.FS
+
 var dataDir string
 var adminPort int
-var distAdmin string
+var distDir string
 
-var theConfig BrigeConfig
+var theConfig AlphaEssConfig
 
 func init() {
 	flag.StringVar(&dataDir, "data-dir", "/data", "the data dir")
 	flag.IntVar(&adminPort, "admin-port", 8080, "the port for the admin-ui")
-	flag.StringVar(&distAdmin, "dist-admin", "", "the URL for the admin-ui")
+	flag.StringVar(&distDir, "dist", "", "the URL for the admin-ui")
 	flag.Parse()
 
 	configFile := path.Join(dataDir, "options.json")
@@ -52,35 +57,9 @@ type MqttConfig struct {
 	MqttPassword string `yaml:"mqtt_password"`
 }
 
-type InfluxDbConfig struct {
-	InfluxDbUri      string `yaml:"influx_db_uri"`
-	InfluxDbUser     string `yaml:"influx_db_user"`
-	InfluxDbPassword string `yaml:"influx_db_password"`
-}
-
-type BrigeConfig struct {
-	MqttConfig                `yaml:",inline"`
-	InfluxDbConfig            `yaml:",inline"`
-	homematic.HomematicConfig `yaml:",inline"`
-}
-type influxMeasurement struct {
-	config    homeassistant.Config
-	tags      map[string]string
-	available *influxAvailability
-	state     string
-}
-
-type influxAvailability struct {
-	measurements map[string]*influxMeasurement
-	available    bool
-}
-
-func toInflux(influxConfig InfluxDbConfig) {
-	influx, err := influxdb.NewClient(influxConfig.InfluxDbUri, "ha", influxConfig.InfluxDbUser, influxConfig.InfluxDbPassword)
-	if err != nil {
-		panic(err)
-	}
-	mqttbridge.EnableInflux(influx)
+type AlphaEssConfig struct {
+	MqttConfig  `yaml:",inline"`
+	AlphaEssUri string `yaml:"alphaess_uri"`
 }
 
 func main() {
@@ -102,43 +81,73 @@ func main() {
 		panic(err)
 	}
 
-	mqttClientId := "mqtt-bridge-" + id
+	mqttClientId := "alphaess-" + id
 
 	fmt.Println("MQTT URI:", theConfig.MqttURI)
 	fmt.Println("MQTT Client ID:", mqttClientId)
+	fmt.Println("AlphaESS URI:", theConfig.AlphaEssUri)
+
+	if theConfig.AlphaEssUri == "" {
+		fmt.Println("AlphaESS URI not configured, exiting...")
+		return
+	}
 
 	mqttBroker := mqtt.NewBroker(theConfig.MqttURI, theConfig.MqttUser, theConfig.MqttPassword)
 	mqttConn, err := mqttBroker.Dial(mqttClientId, "")
 	if err != nil {
 		panic(err)
 	}
-
-	go mqttbridge.Listen(ctx, mqttConn)
+	defer mqttConn.Close()
 
 	automation.GetRegistry().EnableMqtt(mqttBroker)
+	automation.GetRegistry().EnableHomeAssistant()
 
-	// Create server first so we can pass it to other functions
-	s := mqttbridge.NewServer(adminPort, distAdmin)
-	s.SetMqttConn(mqttConn)
+	// Setup web server
+	r := gin.Default()
 
-	if theConfig.InfluxDbUri != "" {
-		toInflux(theConfig.InfluxDbConfig)
+	if distDir != "" {
+		ginutil.ServeFromUri(r, distDir)
+	} else {
+		ginutil.ServeEmbedFS(r, distFS, "dist")
 	}
 
-	if theConfig.HomematicUri != "" {
-		homematic.StartMqttBridge(theConfig.HomematicConfig)
+	// API endpoints
+	api := r.Group("/api")
+	api.GET("/status", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"connected":         true,
+			"mqttConnected":     true,
+			"alphaessConnected": true,
+			"mqttUri":           theConfig.MqttURI,
+			"alphaessUri":       theConfig.AlphaEssUri,
+		})
+	})
+
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", adminPort),
+		Handler: r,
 	}
 
-	err = s.Listen()
+	listener, err := net.Listen("tcp", httpServer.Addr)
 	if err != nil {
 		panic(err)
 	}
 
+	fmt.Println("Web server listening on:", httpServer.Addr)
+
+	// Start web server
 	wg.Add(1)
 	go func() {
-		s.Serve(ctx)
-		wg.Done()
+		defer wg.Done()
+		go func() {
+			<-ctx.Done()
+			httpServer.Shutdown(context.Background())
+		}()
+		httpServer.Serve(listener)
 	}()
+
+	// Start AlphaESS integration
+	alphaess.Run(theConfig.AlphaEssUri)
 
 	wg.Add(1)
 	go func() {
@@ -148,5 +157,5 @@ func main() {
 
 	wg.Wait()
 
-	fmt.Println("DONE!!!")
+	fmt.Println("AlphaESS addon stopped.")
 }

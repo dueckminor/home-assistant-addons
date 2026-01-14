@@ -65,6 +65,17 @@
                 "--dist-admin=http://localhost:3003"
             ]
         },
-
+        {
+            "name": "Launch AlphaESS",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/go/tools/alphaess/alphaess.go",
+            "args": [
+                "--data-dir=${workspaceFolder}/gen/data/alphaess/config",
+                "--admin-port=32080",
+                "--dist=http://localhost:3004"
+            ]
+        },
     ]
 }

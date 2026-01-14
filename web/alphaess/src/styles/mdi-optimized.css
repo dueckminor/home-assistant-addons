@@ -1,0 +1,2 @@
+/* Optimized MDI CSS - only imports WOFF2 fonts to reduce bundle size */
+@import '@mdi/font/css/materialdesignicons.min.css';

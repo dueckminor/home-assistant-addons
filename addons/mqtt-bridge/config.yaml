@@ -21,7 +21,6 @@ options:
   influx_db_uri: "http://a0d7b954-influxdb:8086"
   influx_db_user: ""
   influx_db_password: ""
-  alphaess_uri: ""
   homematic_uri: ""
   homematic_user: ""
   homematic_password: ""
@@ -33,7 +32,6 @@ schema:
   influx_db_uri: str
   influx_db_user: str
   influx_db_password: str
-  alphaess_uri: str
   homematic_uri: str
   homematic_user: str
   homematic_password: str
