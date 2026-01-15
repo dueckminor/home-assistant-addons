@@ -1,6 +1,6 @@
 module github.com/dueckminor/home-assistant-addons
 
-go 1.24.0
+go 1.25
 
 toolchain go1.25.5
 
@@ -12,7 +12,7 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/goccy/go-yaml v1.19.2
 	github.com/golang-jwt/jwt v3.2.2+incompatible
-	github.com/gonzalop/ftp v1.4.0
+	github.com/gonzalop/ftp v1.5.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/influxdata/influxdb1-client v0.0.0-20220302092344-a9ab5670611c
