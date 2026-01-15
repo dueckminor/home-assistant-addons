@@ -80,6 +80,20 @@ build_from:
         )
     print(f"   ✅ Local build configuration generated!")
 
+    # copy all (but not build.yml) files from root_dir/addons/component_name to gen_dir
+    src_dir = os.path.join(root_dir, "addons", component_name)
+    print(f"📋 Copying addon files from '{src_dir}' to '{gen_dir}'...")
+    for item in os.listdir(src_dir):
+        if item == "build.yml":
+            continue
+        src_path = os.path.join(src_dir, item)
+        dest_path = os.path.join(gen_dir, item)
+        if os.path.isdir(src_path):
+            subprocess.run(["cp", "-r", src_path, dest_path], check=True)
+        else:
+            subprocess.run(["cp", src_path, dest_path], check=True)
+    print(f"   ✅ Addon files copied!")
+
 
 def upload(component_name: str, homeassistant: str = "") -> None:
     """Upload built addon to Home Assistant instance."""
@@ -102,31 +116,26 @@ def upload(component_name: str, homeassistant: str = "") -> None:
         ["tar", "czf", "-", "."], cwd=gen_dir, stdout=subprocess.PIPE
     )
 
-    if homeassistant == "localhost":
-        ssh_command = [
-            "bash",
-            "-c",
-            f"""
-            rm -rf /addons/dueckminor_{component_name}/ &&
-            mkdir /addons/dueckminor_{component_name} &&
-            cd /addons/dueckminor_{component_name} &&
-            tar xzvf -
-            """,
-        ]
-    else:
-        ssh_command = [
-            "ssh",
-            f"hassio@{homeassistant}",
-            f"""
-            sudo rm -rf /addons/dueckminor_{component_name}/ &&
-            sudo mkdir /addons/dueckminor_{component_name} &&
-            cd /addons/dueckminor_{component_name} &&
-            sudo tar xzvf - &&
-            sudo chown -R root:root .
-            """,
-        ]
+    component_install_dir = "/addons/dueckminor_" + component_name
 
-    subprocess.run(ssh_command, stdin=tar_process.stdout, check=True)
+    if homeassistant == "localhost":
+        cmd = ["bash", "-c"]
+        sudo = ""
+    else:
+        cmd = ["ssh", f"hassio@{homeassistant}"]
+        sudo = "sudo "
+
+    cmd.append(
+        f"""
+            {sudo}rm -rf {component_install_dir}/ &&
+            {sudo}mkdir {component_install_dir} &&
+            cd {component_install_dir} &&
+            {sudo}tar xzvf - &&
+            {sudo}chown -R root:root .
+            """
+    )
+
+    subprocess.run(cmd, stdin=tar_process.stdout, check=True)
     tar_process.stdout.close()
     tar_process.wait()
 

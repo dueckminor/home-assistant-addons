@@ -1,7 +1,7 @@
-name: "AlphaESS MQTT Bridge"
+name: "AlphaESS for Home Assistant"
 description: "AlphaESS solar inverter and battery MQTT integration"
-version: "0.1.0"
-slug: "alphaess_mqtt"
+version: "0.1.1"
+slug: "alphaess"
 startup: "services"
 init: false
 ingress: true
@@ -25,6 +25,3 @@ schema:
   mqtt_user: str
   mqtt_password: str
   alphaess_uri: str
-
-ports:
-  8080/tcp: 8080
