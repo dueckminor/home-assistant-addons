@@ -8,7 +8,7 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts/lib"))
 )
 
-from ha_addons.build import build_web
+from ha_addons.build import get_components, build_web
 
 
 def main():
@@ -18,10 +18,18 @@ def main():
     parser.add_argument(
         "--fast", action="store_true", help="Skip building if assets already exist."
     )
+    parser.add_argument(
+        "component",
+        nargs="?",
+        default=None,
+        help="Component name to install (optional)",
+    )
     args = parser.parse_args()
 
-    for component in ["auth", "gateway", "security", "mqtt-bridge"]:
-        build_web(component, fast=args.fast)
+    component_names = get_components(args.component)
+
+    for component_name in component_names:
+        build_web(component_name, fast=args.fast)
 
 
 if __name__ == "__main__":

@@ -2,18 +2,15 @@ package mqttbridge
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"net"
 	"net/http"
 
+	"github.com/dueckminor/home-assistant-addons/go/embed/mqtt_bridge_dist"
 	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
 	"github.com/gin-gonic/gin"
 )
-
-//go:embed dist/*
-var distFS embed.FS
 
 type Server struct {
 	httpServer *http.Server
@@ -35,7 +32,7 @@ func NewServer(adminPort int, distAdmin string) *Server {
 	if distAdmin != "" {
 		ginutil.ServeFromUri(r, distAdmin)
 	} else {
-		ginutil.ServeEmbedFS(r, distFS, "dist")
+		ginutil.ServeEmbedFS(r, mqtt_bridge_dist.FS, "dist")
 	}
 
 	ep := NewEndpoints(s)

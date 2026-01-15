@@ -7,12 +7,15 @@ import argparse
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts/lib"))
 )
-from ha_addons.build import build
+from ha_addons.build import get_components, build
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Install addons with web embed assets."
+    )
+    parser.add_argument(
+        "--fast", action="store_true", help="Skip building if assets already exist."
     )
     parser.add_argument(
         "component",
@@ -22,15 +25,17 @@ def main():
     )
     args = parser.parse_args()
 
-    component_names = ["gateway", "security", "mqtt-bridge"]
-    if args.component:
-        component_names = [args.component]
+    component_names = get_components(args.component)
 
     for component_name in component_names:
         additional_web_components = []
         if component_name == "gateway":
             additional_web_components = ["auth"]
-        build(component_name, additional_web_components=additional_web_components)
+        build(
+            component_name,
+            additional_web_components=additional_web_components,
+            fast=args.fast,
+        )
 
 
 if __name__ == "__main__":

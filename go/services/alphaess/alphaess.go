@@ -203,6 +203,18 @@ func (s *scanner) modbusConnect() (err error) {
 	return nil
 }
 
+func (s *scanner) modbusClose() (err error) {
+	if !s.clientMustClose {
+		return nil
+	}
+	err = s.client.Close()
+	s.clientMustClose = false
+	if err != nil {
+		fmt.Println("failed to close modbus client:", err)
+	}
+	return err
+}
+
 func Run(uri string) (err error) {
 	s := &scanner{}
 
@@ -217,9 +229,21 @@ func Run(uri string) (err error) {
 	s.init()
 
 	go func() {
+		err = s.node.Connect()
+		if err != nil {
+			fmt.Println("node connect failed: ", err)
+			return
+		}
+		defer func() {
+			err = s.node.Disconnect()
+			if err != nil {
+				fmt.Println("failed to disconnect:", err)
+			}
+		}()
+
 		for {
 			s.handleModbus()
-			time.Sleep(time.Minute)
+			time.Sleep(time.Minute * 1)
 		}
 	}()
 
@@ -227,89 +251,96 @@ func Run(uri string) (err error) {
 }
 
 func (s *scanner) handleModbus() {
+
 	defer func() {
-		if s.clientMustClose {
-			err := s.client.Close()
-			s.clientMustClose = false
-			if err != nil {
-				fmt.Println("failed to close modbus client:", err)
-			}
-		}
-		err := s.node.Disconnect()
-		if err != nil {
-			fmt.Println("failed to disconnect:", err)
-		}
 		if r := recover(); r != nil {
 			fmt.Println("crash in handleModbus")
 		}
 	}()
 
+	err := s.fetchValues()
+	if err != nil {
+		fmt.Println("fetchValues failed: ", err)
+		return
+	}
+
+	s.fixSolarProduction()
+
+	for _, sensor := range s.sensors {
+		sensor.SetState(sensor.Current)
+	}
+
+	s.sensorSolarProduction.Current -= s.correctionSolarProduction
+}
+
+func (s *scanner) fetchValues() error {
 	err := s.modbusConnect()
 	if err != nil {
 		fmt.Println("modbusConnect failed: ", err)
-		return
+		return err
 	}
 
-	err = s.node.Connect()
-	if err != nil {
-		fmt.Println("node connect failed: ", err)
-		return
-	}
-
-	for {
-		for _, sensor := range s.sensors {
-			var value int64
-			if sensor.Words == 1 {
-				var value16 uint16
-				value16, err = s.client.ReadRegister(sensor.Addr, modbus.HOLDING_REGISTER)
-				if sensor.Signed {
-					value = int64(int16(value16))
-				} else {
-					value = int64(value16)
-				}
-			} else if sensor.Words == 2 {
-				var value32 uint32
-				value32, err = s.client.ReadUint32(sensor.Addr, modbus.HOLDING_REGISTER)
-				if sensor.Signed {
-					value = int64(int32(value32))
-				} else {
-					value = int64(value32)
-				}
-			}
-			if err != nil {
-				fmt.Println(err)
-			}
-			sensor.Last = sensor.Current
-			sensor.Current = float64(value) * sensor.Scale
+	defer func() {
+		err = s.modbusClose()
+		if err != nil {
+			fmt.Println("failed to close modbus client:", err)
 		}
+	}()
 
-		if s.sensorSolarProduction.Current == s.sensorSolarProduction.Last {
-			if s.sensorToGrid.Current > s.sensorToGrid.Last {
-				fmt.Println("increasing solar production correction")
-				s.correctionSolarProduction +=
-					(s.sensorToGrid.Current - s.sensorToGrid.Last)
-				fmt.Println("new solar production correction:", s.correctionSolarProduction)
-			}
-		} else if s.correctionSolarProduction > 0 {
-			if s.sensorSolarProduction.Current >= s.sensorSolarProduction.Last {
-				fmt.Println("reseting solar production correction")
-				s.correctionSolarProduction = 0
+	for _, sensor := range s.sensors {
+		var value int64
+		if sensor.Words == 1 {
+			var value16 uint16
+			value16, err = s.client.ReadRegister(sensor.Addr, modbus.HOLDING_REGISTER)
+			if sensor.Signed {
+				value = int64(int16(value16))
 			} else {
-				fmt.Println("reducing solar production correction")
-				s.correctionSolarProduction = s.sensorSolarProduction.Last - s.sensorSolarProduction.Current
-				fmt.Println("new solar production correction:", s.correctionSolarProduction)
+				value = int64(value16)
+			}
+		} else if sensor.Words == 2 {
+			var value32 uint32
+			value32, err = s.client.ReadUint32(sensor.Addr, modbus.HOLDING_REGISTER)
+			if sensor.Signed {
+				value = int64(int32(value32))
+			} else {
+				value = int64(value32)
 			}
 		}
-
-		s.sensorSolarProduction.Current += s.correctionSolarProduction
-
-		for _, sensor := range s.sensors {
-			sensor.SetState(sensor.Current)
+		if err != nil {
+			fmt.Println(err)
 		}
+		sensor.Last = sensor.Current
+		sensor.Current = float64(value) * sensor.Scale
+	}
+	return nil
+}
 
-		s.sensorSolarProduction.Current -= s.correctionSolarProduction
+func (s *scanner) fixSolarProduction() {
+	// the solar production value get reported less frequently than the to-grid
+	// value. So we apply a correction offset to keep the solar production
+	// value in sync with the to-grid value.
+	// Otherwise home-assistant doesn't know where the to-grid power is coming from.
 
-		time.Sleep(time.Minute)
+	if s.sensorSolarProduction.Current == s.sensorSolarProduction.Last {
+		// solar production didn't change
+		if s.sensorToGrid.Current > s.sensorToGrid.Last {
+			// but to-grid increased, so we need to increase our correction
+			fmt.Println("increasing solar production correction")
+			s.correctionSolarProduction +=
+				(s.sensorToGrid.Current - s.sensorToGrid.Last)
+			fmt.Println("new solar production correction:", s.correctionSolarProduction)
+		}
+	} else if s.correctionSolarProduction > 0 {
+		// solar production changed and we have a correction applied
+		if s.sensorSolarProduction.Current >= s.sensorSolarProduction.Last {
+			fmt.Println("reseting solar production correction")
+			s.correctionSolarProduction = 0
+		} else {
+			fmt.Println("reducing solar production correction")
+			s.correctionSolarProduction = s.sensorSolarProduction.Last - s.sensorSolarProduction.Current
+			fmt.Println("new solar production correction:", s.correctionSolarProduction)
+		}
 	}
 
+	s.sensorSolarProduction.Current += s.correctionSolarProduction
 }

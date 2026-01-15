@@ -29,15 +29,25 @@ export default defineConfig({
   ],
   base: './', // Generate relative paths instead of absolute
   build: {
-    outDir: '../../go/embed/gateway_dist/dist',
+    outDir: '../../go/embed/alphaess_dist/dist',
     assetsDir: 'assets'
   },
-  server: {
-    port: 3001
-  },
+  define: { 'process.env': {} },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
-    }
+    },
+    extensions: [
+      '.js',
+      '.json',
+      '.jsx',
+      '.mjs',
+      '.ts',
+      '.tsx',
+      '.vue',
+    ],
+  },
+  server: {
+    port: 3004
   }
 })

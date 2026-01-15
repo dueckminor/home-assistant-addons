@@ -1,7 +1,19 @@
 import subprocess
 import os
+from typing import Optional
 
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+
+def get_components(component_selector: Optional[str] = None) -> list[str]:
+    """Get the list of components to build."""
+    all_components = ["auth", "gateway", "security", "mqtt-bridge", "alphaess"]
+    if component_selector:
+        if component_selector in all_components:
+            return [component_selector]
+        else:
+            raise ValueError(f"Unknown component: {component_selector}")
+    return all_components
 
 
 def build_web(component_name: str, fast: bool = False) -> None:
@@ -13,7 +25,14 @@ def build_web(component_name: str, fast: bool = False) -> None:
     print(f"   📂 Path: {web_path}", flush=True)
 
     if fast:
-        dist_path = os.path.join(root_dir, "go", component_name, "dist", "index.html")
+        dist_path = os.path.join(
+            root_dir,
+            "go",
+            "embed",
+            component_name.replace("-", "_") + "_dist",
+            "dist",
+            "index.html",
+        )
         if os.path.isfile(dist_path):
             print(
                 f"   ⚡ Fast build enabled and assets already exist at '{dist_path}', skipping build.",
@@ -80,6 +99,20 @@ build_from:
         )
     print(f"   ✅ Local build configuration generated!")
 
+    # copy all (but not build.yml) files from root_dir/addons/component_name to gen_dir
+    src_dir = os.path.join(root_dir, "addons", component_name)
+    print(f"📋 Copying addon files from '{src_dir}' to '{gen_dir}'...")
+    for item in os.listdir(src_dir):
+        if item == "build.yml":
+            continue
+        src_path = os.path.join(src_dir, item)
+        dest_path = os.path.join(gen_dir, item)
+        if os.path.isdir(src_path):
+            subprocess.run(["cp", "-r", src_path, dest_path], check=True)
+        else:
+            subprocess.run(["cp", src_path, dest_path], check=True)
+    print(f"   ✅ Addon files copied!")
+
 
 def upload(component_name: str, homeassistant: str = "") -> None:
     """Upload built addon to Home Assistant instance."""
@@ -102,31 +135,26 @@ def upload(component_name: str, homeassistant: str = "") -> None:
         ["tar", "czf", "-", "."], cwd=gen_dir, stdout=subprocess.PIPE
     )
 
-    if homeassistant == "localhost":
-        ssh_command = [
-            "bash",
-            "-c",
-            f"""
-            rm -rf /addons/dueckminor_{component_name}/ &&
-            mkdir /addons/dueckminor_{component_name} &&
-            cd /addons/dueckminor_{component_name} &&
-            tar xzvf -
-            """,
-        ]
-    else:
-        ssh_command = [
-            "ssh",
-            f"hassio@{homeassistant}",
-            f"""
-            sudo rm -rf /addons/dueckminor_{component_name}/ &&
-            sudo mkdir /addons/dueckminor_{component_name} &&
-            cd /addons/dueckminor_{component_name} &&
-            sudo tar xzvf - &&
-            sudo chown -R root:root .
-            """,
-        ]
+    component_install_dir = "/addons/dueckminor_" + component_name
 
-    subprocess.run(ssh_command, stdin=tar_process.stdout, check=True)
+    if homeassistant == "localhost":
+        cmd = ["bash", "-c"]
+        sudo = ""
+    else:
+        cmd = ["ssh", f"hassio@{homeassistant}"]
+        sudo = "sudo "
+
+    cmd.append(
+        f"""
+            {sudo}rm -rf {component_install_dir}/ &&
+            {sudo}mkdir {component_install_dir} &&
+            cd {component_install_dir} &&
+            {sudo}tar xzvf - &&
+            {sudo}chown -R root:root .
+            """
+    )
+
+    subprocess.run(cmd, stdin=tar_process.stdout, check=True)
     tar_process.stdout.close()
     tar_process.wait()
 
@@ -134,12 +162,14 @@ def upload(component_name: str, homeassistant: str = "") -> None:
 
 
 def build(
-    component_name: str, homeassistant: str = "", additional_web_components: list = []
+    component_name: str,
+    additional_web_components: list = [],
+    fast: bool = False,
 ) -> None:
     """Build the addon components."""
     for web_component in additional_web_components:
-        build_web(web_component)
-    build_web(component_name)
+        build_web(web_component, fast=fast)
+    build_web(component_name, fast=fast)
     build_go(component_name)
 
 

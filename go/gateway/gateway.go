@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/acme"
 	"github.com/dueckminor/home-assistant-addons/go/auth"
 	"github.com/dueckminor/home-assistant-addons/go/dns"
+	"github.com/dueckminor/home-assistant-addons/go/embed/gateway_dist"
 	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/pki"
@@ -23,9 +23,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
-
-//go:embed dist/*
-var distFS embed.FS
 
 func NewGateway(dataDir string, distGateway string, distAuth string) (g *Gateway, err error) {
 
@@ -643,7 +640,7 @@ func (g *Gateway) StartUI(ctx context.Context, port int) error {
 	if g.distGateway != "" {
 		ginutil.ServeFromUri(r, g.distGateway)
 	} else {
-		ginutil.ServeEmbedFS(r, distFS, "dist")
+		ginutil.ServeEmbedFS(r, gateway_dist.FS, "dist")
 	}
 
 	ep := Endpoints{Gateway: g}

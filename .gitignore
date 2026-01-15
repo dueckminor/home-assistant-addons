@@ -4,6 +4,10 @@ gen
 # Files generated during debugging of Go projects
 __debug_*
 
+# Python cache files
+__pycache__
+*.pyc
+
 # Files required for docker build will be copied to the addons/* directory
 addons/*/dist
 addons/*/*-amd64

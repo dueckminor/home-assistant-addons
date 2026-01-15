@@ -18,7 +18,7 @@ export default defineConfig({
   ],
   base: './', // Generate relative paths instead of absolute
   build: {
-    outDir: '../../go/auth/dist',
+    outDir: '../../go/embed/auth_dist/dist',
     assetsDir: 'assets'
   },
   server: {

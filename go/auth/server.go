@@ -2,7 +2,6 @@ package auth
 
 import (
 	"crypto"
-	"embed"
 	"encoding/base64"
 	"net"
 	"net/http"
@@ -14,15 +13,14 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 	"github.com/dueckminor/home-assistant-addons/go/smtp"
 
+	"github.com/dueckminor/home-assistant-addons/go/embed/auth_dist"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 )
-
-//go:embed dist/*
-var distFS embed.FS
 
 func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer, err error) {
 	a = new(AuthServer)
@@ -42,7 +40,7 @@ func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer
 	if distDir != "" {
 		ginutil.ServeFromUri(r, distDir)
 	} else {
-		ginutil.ServeEmbedFS(r, distFS, "dist")
+		ginutil.ServeEmbedFS(r, auth_dist.FS, "dist")
 	}
 
 	a.Register(r)
