@@ -29,7 +29,7 @@ export default defineConfig({
   ],
   base: './', // Generate relative paths instead of absolute
   build: {
-    outDir: '../../go/gateway/dist',
+    outDir: '../../go/embed/gateway_dist/dist',
     assetsDir: 'assets'
   },
   server: {

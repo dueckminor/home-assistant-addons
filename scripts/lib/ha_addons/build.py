@@ -1,7 +1,19 @@
 import subprocess
 import os
+from typing import Optional
 
 root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+
+def get_components(component_selector: Optional[str] = None) -> list[str]:
+    """Get the list of components to build."""
+    all_components = ["auth", "gateway", "security", "mqtt-bridge", "alphaess"]
+    if component_selector:
+        if component_selector in all_components:
+            return [component_selector]
+        else:
+            raise ValueError(f"Unknown component: {component_selector}")
+    return all_components
 
 
 def build_web(component_name: str, fast: bool = False) -> None:
@@ -13,7 +25,14 @@ def build_web(component_name: str, fast: bool = False) -> None:
     print(f"   📂 Path: {web_path}", flush=True)
 
     if fast:
-        dist_path = os.path.join(root_dir, "go", component_name, "dist", "index.html")
+        dist_path = os.path.join(
+            root_dir,
+            "go",
+            "embed",
+            component_name.replace("-", "_") + "_dist",
+            "dist",
+            "index.html",
+        )
         if os.path.isfile(dist_path):
             print(
                 f"   ⚡ Fast build enabled and assets already exist at '{dist_path}', skipping build.",
@@ -143,12 +162,14 @@ def upload(component_name: str, homeassistant: str = "") -> None:
 
 
 def build(
-    component_name: str, homeassistant: str = "", additional_web_components: list = []
+    component_name: str,
+    additional_web_components: list = [],
+    fast: bool = False,
 ) -> None:
     """Build the addon components."""
     for web_component in additional_web_components:
-        build_web(web_component)
-    build_web(component_name)
+        build_web(web_component, fast=fast)
+    build_web(component_name, fast=fast)
     build_go(component_name)
 
 

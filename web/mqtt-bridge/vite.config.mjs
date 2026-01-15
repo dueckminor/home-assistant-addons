@@ -20,7 +20,7 @@ export default defineConfig({
   plugins: [vue(), excludeHeavyFonts()],
   base: './',
   build: {
-    outDir: '../../go/mqtt-bridge/dist',
+    outDir: '../../go/embed/mqtt_bridge_dist/dist',
     assetsDir: 'assets'
   },
   server: {

@@ -29,7 +29,7 @@ export default defineConfig({
   ],
   base: './', // Generate relative paths instead of absolute
   build: {
-    outDir: '../../go/security/dist',
+    outDir: '../../go/embed/security_dist/dist',
     assetsDir: 'assets'
   },
   define: { 'process.env': {} },

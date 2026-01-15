@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"embed"
 	"flag"
 	"fmt"
 	"net"
@@ -14,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
+	"github.com/dueckminor/home-assistant-addons/go/embed/alphaess_dist"
 	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
 	"github.com/dueckminor/home-assistant-addons/go/services/automation"
@@ -21,9 +21,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 )
-
-//go:embed dist/*
-var distFS embed.FS
 
 var dataDir string
 var adminPort int
@@ -87,6 +84,8 @@ func main() {
 	fmt.Println("MQTT Client ID:", mqttClientId)
 	fmt.Println("AlphaESS URI:", theConfig.AlphaEssUri)
 
+	// /homeassistant/home-assistant_v2.db
+
 	if theConfig.AlphaEssUri == "" {
 		fmt.Println("AlphaESS URI not configured, exiting...")
 		return
@@ -108,7 +107,7 @@ func main() {
 	if distDir != "" {
 		ginutil.ServeFromUri(r, distDir)
 	} else {
-		ginutil.ServeEmbedFS(r, distFS, "dist")
+		ginutil.ServeEmbedFS(r, alphaess_dist.FS, "dist")
 	}
 
 	// API endpoints

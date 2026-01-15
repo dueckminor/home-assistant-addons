@@ -2,17 +2,14 @@ package security
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"net/http"
 	"sync"
 
+	"github.com/dueckminor/home-assistant-addons/go/embed/security_dist"
 	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 	"github.com/gin-gonic/gin"
 )
-
-//go:embed dist/*
-var distFS embed.FS
 
 type Security interface {
 	Start(ctx context.Context, wg *sync.WaitGroup) error
@@ -49,7 +46,7 @@ func (s *security) Start(ctx context.Context, wg *sync.WaitGroup) error {
 	if s.dist != "" {
 		ginutil.ServeFromUri(r, s.dist)
 	} else {
-		ginutil.ServeEmbedFS(r, distFS, "dist")
+		ginutil.ServeEmbedFS(r, security_dist.FS, "dist")
 	}
 
 	s.setupSecurityEndpoints(r)
