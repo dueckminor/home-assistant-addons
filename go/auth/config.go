@@ -5,8 +5,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/dueckminor/home-assistant-addons/go/crypto"
-	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
 
 	"gopkg.in/yaml.v3"
 )

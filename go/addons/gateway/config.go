@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dueckminor/home-assistant-addons/go/pki"
+	"github.com/dueckminor/home-assistant-addons/go/utils/pki"
 	"github.com/goccy/go-yaml"
 	"github.com/google/uuid"
 )

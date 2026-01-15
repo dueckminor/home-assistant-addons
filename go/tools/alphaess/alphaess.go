@@ -12,12 +12,12 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
 	"github.com/dueckminor/home-assistant-addons/go/embed/alphaess_dist"
-	"github.com/dueckminor/home-assistant-addons/go/ginutil"
 	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
 	"github.com/dueckminor/home-assistant-addons/go/services/automation"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
+	"github.com/dueckminor/home-assistant-addons/go/utils/ginutil"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
 )

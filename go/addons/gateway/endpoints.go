@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/auth"
-	"github.com/dueckminor/home-assistant-addons/go/dns"
+	"github.com/dueckminor/home-assistant-addons/go/services/dns"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
-	"github.com/dueckminor/home-assistant-addons/go/smtp"
+	"github.com/dueckminor/home-assistant-addons/go/services/smtp"
 	"github.com/gin-gonic/gin"
 )
 

@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/dueckminor/home-assistant-addons/go/crypto"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto"
 )
 
 type CA interface {

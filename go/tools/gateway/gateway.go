@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/dueckminor/home-assistant-addons/go/gateway"
+	"github.com/dueckminor/home-assistant-addons/go/addons/gateway"
 )
 
 var data string

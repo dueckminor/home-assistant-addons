@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
 )
 
 // I use a naming scheme inspired by Home Assistant. Nodes and objects.

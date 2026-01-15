@@ -10,8 +10,8 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/dueckminor/home-assistant-addons/go/ftp"
-	"github.com/dueckminor/home-assistant-addons/go/security"
+	"github.com/dueckminor/home-assistant-addons/go/addons/security"
+	"github.com/dueckminor/home-assistant-addons/go/services/ftp"
 )
 
 func main() {

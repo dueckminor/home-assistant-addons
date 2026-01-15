@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dueckminor/home-assistant-addons/go/xmlrpc"
+	"github.com/dueckminor/home-assistant-addons/go/services/homematic/xmlrpc"
 )
 
 type HttpHandler struct {
