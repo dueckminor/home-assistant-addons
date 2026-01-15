@@ -3,7 +3,7 @@ package homematic
 import (
 	"strings"
 
-	"github.com/dueckminor/home-assistant-addons/go/xmlrpc"
+	"github.com/dueckminor/home-assistant-addons/go/services/homematic/xmlrpc"
 	"golang.org/x/net/html/charset"
 )
 

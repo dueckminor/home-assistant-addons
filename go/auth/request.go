@@ -3,7 +3,7 @@ package auth
 import (
 	"time"
 
-	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
 )
 
 type AuthRequest struct {

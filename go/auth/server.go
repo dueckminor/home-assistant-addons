@@ -9,9 +9,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
-	"github.com/dueckminor/home-assistant-addons/go/ginutil"
-	"github.com/dueckminor/home-assistant-addons/go/smtp"
+	"github.com/dueckminor/home-assistant-addons/go/services/smtp"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
+	"github.com/dueckminor/home-assistant-addons/go/utils/ginutil"
 
 	"github.com/dueckminor/home-assistant-addons/go/embed/auth_dist"
 

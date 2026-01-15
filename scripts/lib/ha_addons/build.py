@@ -7,7 +7,7 @@ root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "
 
 def get_components(component_selector: Optional[str] = None) -> list[str]:
     """Get the list of components to build."""
-    all_components = ["auth", "gateway", "security", "mqtt-bridge", "alphaess"]
+    all_components = ["gateway", "security", "mqtt-bridge", "alphaess"]
     if component_selector:
         if component_selector in all_components:
             return [component_selector]

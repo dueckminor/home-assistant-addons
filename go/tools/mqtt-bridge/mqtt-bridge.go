@@ -10,13 +10,13 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/dueckminor/home-assistant-addons/go/crypto/rand"
-	mqttbridge "github.com/dueckminor/home-assistant-addons/go/mqtt-bridge"
+	"github.com/dueckminor/home-assistant-addons/go/addons/mqttbridge"
 	"github.com/dueckminor/home-assistant-addons/go/services/automation"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
 	"github.com/dueckminor/home-assistant-addons/go/services/homematic"
 	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
 	"gopkg.in/yaml.v3"
 )
 

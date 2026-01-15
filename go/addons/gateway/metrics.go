@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dueckminor/home-assistant-addons/go/network"
 	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
+	"github.com/dueckminor/home-assistant-addons/go/utils/network"
 )
 
 // GeoLocation stores geographical information for an IP address

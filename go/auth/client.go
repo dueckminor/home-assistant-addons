@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/dueckminor/home-assistant-addons/go/ginutil"
+	"github.com/dueckminor/home-assistant-addons/go/utils/ginutil"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"

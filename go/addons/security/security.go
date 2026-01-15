@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/dueckminor/home-assistant-addons/go/embed/security_dist"
-	"github.com/dueckminor/home-assistant-addons/go/ginutil"
+	"github.com/dueckminor/home-assistant-addons/go/utils/ginutil"
 	"github.com/gin-gonic/gin"
 )
 

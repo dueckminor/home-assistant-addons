@@ -7,7 +7,7 @@ import (
 	"path"
 	"time"
 
-	"github.com/dueckminor/home-assistant-addons/go/crypto"
+	"github.com/dueckminor/home-assistant-addons/go/utils/crypto"
 	"golang.org/x/crypto/acme"
 )
 
