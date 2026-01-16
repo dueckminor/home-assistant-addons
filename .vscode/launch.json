@@ -73,6 +73,7 @@
             "program": "${workspaceFolder}/go/tools/alphaess/alphaess.go",
             "args": [
                 "--data-dir=${workspaceFolder}/gen/data/alphaess/config",
+                "--config-dir=${workspaceFolder}/gen/data/alphaess/homeassistant",
                 "--admin-port=32080",
                 "--dist=http://localhost:3004"
             ]

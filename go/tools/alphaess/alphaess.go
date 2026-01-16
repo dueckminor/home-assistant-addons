@@ -12,11 +12,8 @@ import (
 	"sync"
 	"syscall"
 
+	addon "github.com/dueckminor/home-assistant-addons/go/addons/alphaess"
 	"github.com/dueckminor/home-assistant-addons/go/embed/alphaess_dist"
-	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
-	"github.com/dueckminor/home-assistant-addons/go/services/automation"
-	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
-	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
 	"github.com/dueckminor/home-assistant-addons/go/utils/ginutil"
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
@@ -25,11 +22,13 @@ import (
 var dataDir string
 var adminPort int
 var distDir string
+var configDir string
 
-var theConfig AlphaEssConfig
+var theConfig addon.AlphaEssConfig
 
 func init() {
 	flag.StringVar(&dataDir, "data-dir", "/data", "the data dir")
+	flag.StringVar(&configDir, "config-dir", "/homeassistant", "the config dir")
 	flag.IntVar(&adminPort, "admin-port", 8080, "the port for the admin-ui")
 	flag.StringVar(&distDir, "dist", "", "the URL for the admin-ui")
 	flag.Parse()
@@ -48,17 +47,6 @@ func init() {
 	}
 }
 
-type MqttConfig struct {
-	MqttURI      string `yaml:"mqtt_uri"`
-	MqttUser     string `yaml:"mqtt_user"`
-	MqttPassword string `yaml:"mqtt_password"`
-}
-
-type AlphaEssConfig struct {
-	MqttConfig  `yaml:",inline"`
-	AlphaEssUri string `yaml:"alphaess_uri"`
-}
-
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	wg := sync.WaitGroup{}
@@ -73,33 +61,10 @@ func main() {
 		cancel()
 	}()
 
-	id, err := rand.GetString(10)
-	if err != nil {
-		panic(err)
-	}
-
-	mqttClientId := "alphaess-" + id
-
-	fmt.Println("MQTT URI:", theConfig.MqttURI)
-	fmt.Println("MQTT Client ID:", mqttClientId)
-	fmt.Println("AlphaESS URI:", theConfig.AlphaEssUri)
-
-	// /homeassistant/home-assistant_v2.db
-
-	if theConfig.AlphaEssUri == "" {
-		fmt.Println("AlphaESS URI not configured, exiting...")
-		return
-	}
-
-	mqttBroker := mqtt.NewBroker(theConfig.MqttURI, theConfig.MqttUser, theConfig.MqttPassword)
-	mqttConn, err := mqttBroker.Dial(mqttClientId, "")
-	if err != nil {
-		panic(err)
-	}
-	defer mqttConn.Close()
-
-	automation.GetRegistry().EnableMqtt(mqttBroker)
-	automation.GetRegistry().EnableHomeAssistant()
+	alphaEssAddon := addon.NewAddon(addon.AlphaEssAddonConfig{
+		AlphaEssConfig:         theConfig,
+		HomeAssistantConfigDir: configDir,
+	})
 
 	// Setup web server
 	r := gin.Default()
@@ -110,17 +75,10 @@ func main() {
 		ginutil.ServeEmbedFS(r, alphaess_dist.FS, "dist")
 	}
 
-	// API endpoints
 	api := r.Group("/api")
-	api.GET("/status", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"connected":         true,
-			"mqttConnected":     true,
-			"alphaessConnected": true,
-			"mqttUri":           theConfig.MqttURI,
-			"alphaessUri":       theConfig.AlphaEssUri,
-		})
-	})
+
+	endpoints := alphaEssAddon.Endpoints()
+	endpoints.SetupEndpoints(api)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", adminPort),
@@ -144,9 +102,6 @@ func main() {
 		}()
 		httpServer.Serve(listener)
 	}()
-
-	// Start AlphaESS integration
-	alphaess.Run(theConfig.AlphaEssUri)
 
 	wg.Add(1)
 	go func() {
