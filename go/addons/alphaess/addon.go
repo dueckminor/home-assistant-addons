@@ -56,15 +56,17 @@ func NewAddon(config AlphaEssAddonConfig) addons.Addon {
 		return nil
 	}
 
-	mqttBroker := mqtt.NewBroker(config.MqttURI, config.MqttUser, config.MqttPassword)
-	mqttConn, err := mqttBroker.Dial(mqttClientId, "")
-	if err != nil {
-		panic(err)
-	}
-	defer mqttConn.Close()
+	if config.MqttURI != "" {
+		mqttBroker := mqtt.NewBroker(config.MqttURI, config.MqttUser, config.MqttPassword)
+		mqttConn, err := mqttBroker.Dial(mqttClientId, "")
+		if err != nil {
+			panic(err)
+		}
+		defer mqttConn.Close()
 
-	automation.GetRegistry().EnableMqtt(mqttBroker)
-	automation.GetRegistry().EnableHomeAssistant()
+		automation.GetRegistry().EnableMqtt(mqttBroker)
+		automation.GetRegistry().EnableHomeAssistant()
+	}
 
 	// Start AlphaESS integration
 	alphaess.Run(config.AlphaEssUri)

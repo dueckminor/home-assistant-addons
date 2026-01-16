@@ -118,8 +118,8 @@ func (s *scanner) sensor1W(addr uint16, name string) *sensor {
 		Sensor: s.node.CreateSensor(automation.MakeSensorTemplate(name).
 			SetIcon(automation.Icon_W).
 			SetUnit(automation.Unit_W).SetPrecision(0).
-			SetStateClass(automation.StateClass_Total).
-			SetDeviceClass(automation.DeviceClass_Energy)),
+			SetStateClass(automation.StateClass_Measurement).
+			SetDeviceClass(automation.DeviceClass_Power)),
 		Addr:   addr,
 		Signed: true,
 		Words:  2,
@@ -135,7 +135,7 @@ func (s *scanner) sensor1V(addr uint16, name string) *sensor {
 			SetIcon(automation.Icon_V).
 			SetUnit(automation.Unit_V).SetPrecision(0).
 			SetStateClass(automation.StateClass_Measurement).
-			SetDeviceClass(automation.DeviceClass_Energy)),
+			SetDeviceClass(automation.DeviceClass_Voltage)),
 		Addr:  addr,
 		Words: 1,
 		Scale: 1,
@@ -150,7 +150,7 @@ func (s *scanner) sensor100mV(addr uint16, name string) *sensor {
 			SetIcon(automation.Icon_V).
 			SetUnit(automation.Unit_V).SetPrecision(1).
 			SetStateClass(automation.StateClass_Measurement).
-			SetDeviceClass(automation.DeviceClass_Energy)),
+			SetDeviceClass(automation.DeviceClass_Voltage)),
 		Addr:  addr,
 		Words: 1,
 		Scale: 0.1,
@@ -165,7 +165,7 @@ func (s *scanner) sensor100mA(addr uint16, name string) *sensor {
 			SetIcon(automation.Icon_A).
 			SetUnit(automation.Unit_A).SetPrecision(1).
 			SetStateClass(automation.StateClass_Measurement).
-			SetDeviceClass(automation.DeviceClass_Energy)),
+			SetDeviceClass(automation.DeviceClass_Current)),
 		Addr:   addr,
 		Signed: true,
 		Words:  1,
@@ -181,7 +181,7 @@ func (s *scanner) sensorPercent(addr uint16, name string) *sensor {
 			SetIcon(automation.Icon_Battery).
 			SetUnit(automation.Unit_Percent).SetPrecision(1).
 			SetStateClass(automation.StateClass_Measurement).
-			SetDeviceClass(automation.DeviceClass_Energy)),
+			SetDeviceClass(automation.DeviceClass_Battery)),
 		Addr:  addr,
 		Words: 1,
 		Scale: 0.1,
