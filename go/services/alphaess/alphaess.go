@@ -71,7 +71,7 @@ func (s *scanner) init() {
 	s.sensor100Wh(0x0120, "battery_charge")
 	s.sensor100Wh(0x0122, "battery_discharge")
 	s.sensor100Wh(0x0124, "battery_charge_from_grid")
-	s.sensor1W(0x0126, "battery_power")
+	s.sensor1W2byte(0x0126, "battery_power")
 
 	s.sensor10Wh(0x0720, "inverter_total_pv_energy")
 
@@ -123,6 +123,22 @@ func (s *scanner) sensor1W(addr uint16, name string) *sensor {
 		Addr:   addr,
 		Signed: true,
 		Words:  2,
+		Scale:  1,
+	}
+	s.sensors = append(s.sensors, sensor)
+	return sensor
+}
+
+func (s *scanner) sensor1W2byte(addr uint16, name string) *sensor {
+	sensor := &sensor{
+		Sensor: s.node.CreateSensor(automation.MakeSensorTemplate(name).
+			SetIcon(automation.Icon_W).
+			SetUnit(automation.Unit_W).SetPrecision(0).
+			SetStateClass(automation.StateClass_Measurement).
+			SetDeviceClass(automation.DeviceClass_Power)),
+		Addr:   addr,
+		Signed: true,
+		Words:  1,
 		Scale:  1,
 	}
 	s.sensors = append(s.sensors, sensor)
