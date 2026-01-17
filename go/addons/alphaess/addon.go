@@ -3,6 +3,7 @@ package alphaess
 import (
 	"fmt"
 	"path"
+	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/addons"
 	"github.com/dueckminor/home-assistant-addons/go/services/alphaess"
@@ -28,12 +29,22 @@ type AlphaEssAddonConfig struct {
 	HomeAssistantConfigDir string
 }
 
-type Addon struct {
-	config AlphaEssConfig
-	db     sqlite.Database
+type addon struct {
+	config  AlphaEssConfig
+	scanner alphaess.Scanner
+	db      sqlite.Database
 }
 
-func NewAddon(config AlphaEssAddonConfig) addons.Addon {
+type MeasurementFilter = alphaess.MeasurementFilter
+type Measurement = alphaess.Measurement
+
+type Addon interface {
+	addons.Addon
+	GetMeasurements(filter MeasurementFilter) []Measurement
+	GetGaps(filter MeasurementFilter) []Measurement
+}
+
+func NewAddon(config AlphaEssAddonConfig) Addon {
 	id, err := rand.GetString(10)
 	if err != nil {
 		panic(err)
@@ -69,14 +80,118 @@ func NewAddon(config AlphaEssAddonConfig) addons.Addon {
 	}
 
 	// Start AlphaESS integration
-	alphaess.Run(config.AlphaEssUri)
+	scanner, err := alphaess.Run(config.AlphaEssUri)
+	if err != nil {
+		panic(err)
+	}
 
-	return &Addon{
-		config: config.AlphaEssConfig,
-		db:     db,
+	return &addon{
+		config:  config.AlphaEssConfig,
+		scanner: scanner,
+		db:      db,
 	}
 }
 
-func (a *Addon) Endpoints() addons.Endpoints {
+func (a *addon) Endpoints() addons.Endpoints {
 	return NewEndpoints(a)
+}
+
+func (a *addon) getMeasurementsFromDB(filter MeasurementFilter) []Measurement {
+	result := a.scanner.GetMeasurementInfos(filter)
+
+	for i := range result {
+		query := "SELECT start_ts, state FROM statistics\n"
+		query += "WHERE metadata_id = (SELECT id FROM statistics_meta WHERE statistic_id=?)\n"
+		params := []any{"sensor.alpha_ess_" + result[i].Name}
+
+		if !filter.Before.IsZero() {
+			query += "AND start_ts < ?\n"
+			params = append(params, float64(filter.Before.Unix()))
+		}
+		if !filter.NotBefore.IsZero() {
+			query += "AND start_ts >= ?\n"
+			params = append(params, float64(filter.NotBefore.Unix()))
+		}
+		if !filter.After.IsZero() {
+			query += "AND start_ts > ?\n"
+			params = append(params, float64(filter.After.Unix()))
+		}
+		if !filter.NotAfter.IsZero() {
+			query += "AND start_ts <= ?\n"
+			params = append(params, float64(filter.NotAfter.Unix()))
+		}
+
+		query += "ORDER BY start_ts ASC\n"
+
+		rows, err := a.db.Query(query, params...)
+		if err != nil {
+			fmt.Println("Error querying measurements:", err)
+			continue
+		}
+
+		for rows.Next() {
+			var ts float64
+			var state float64
+			err := rows.Scan(&ts, &state)
+			if err != nil {
+				fmt.Println("Error scanning measurement row:", err)
+				continue
+			}
+			timestamp := time.Unix(int64(ts), 0)
+			result[i].Values = append(result[i].Values, alphaess.MeasurementValue{
+				Time:  timestamp.UTC(),
+				Value: state,
+			})
+		}
+	}
+
+	return result
+}
+
+func (a *addon) GetMeasurements(filter MeasurementFilter) []Measurement {
+	if filter.TimeSpecified() {
+		return a.getMeasurementsFromDB(filter)
+	}
+	return a.scanner.GetMeasurements(filter)
+}
+
+func (a *addon) GetGaps(filter MeasurementFilter) []Measurement {
+	result := a.getMeasurementsFromDB(filter)
+
+	for i := range result {
+		result[i].Values = a.findGaps(result[i].Values)
+	}
+
+	return result
+}
+
+func (a *addon) findGaps(values []alphaess.MeasurementValue) []alphaess.MeasurementValue {
+	// Define a gap as a period longer than one hour without measurements
+	const gapThreshold = 1*time.Hour + 30*time.Minute
+
+	var gaps []alphaess.MeasurementValue
+	if len(values) < 2 {
+		return gaps
+	}
+
+	for i := 1; i < len(values); i++ {
+		prev := values[i-1]
+		curr := values[i]
+
+		if curr.Time.Sub(prev.Time) > gapThreshold {
+			// add gap for each full hour between prev and curr
+			gapStart := prev.Time.Add(1 * time.Hour)
+			// set minute, second, nanosecond to zero
+			gapStart = time.Date(gapStart.Year(), gapStart.Month(), gapStart.Day(), gapStart.Hour(), 0, 0, 0, gapStart.Location())
+			for gapStart.Before(curr.Time) {
+				gaps = append(gaps, alphaess.MeasurementValue{
+					Time:  gapStart,
+					Value: 0,
+				})
+				gapStart = gapStart.Add(1 * time.Hour)
+			}
+		}
+	}
+
+	return gaps
 }

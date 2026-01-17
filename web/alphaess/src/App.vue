@@ -100,11 +100,11 @@
               </v-card-text>
             </v-card>
 
-            <!-- Sensors Table -->
-            <v-card>
+            <!-- Power Chart -->
+            <v-card class="mb-4">
               <v-card-title>
-                <v-icon class="me-2">mdi-format-list-bulleted</v-icon>
-                All Sensors
+                <v-icon class="me-2">mdi-chart-line</v-icon>
+                Power Flow - Today
                 <v-spacer></v-spacer>
                 <v-btn
                   color="primary"
@@ -116,29 +116,13 @@
                   Refresh
                 </v-btn>
               </v-card-title>
-              <v-data-table
-                :headers="sensorHeaders"
-                :items="sensors"
-                :loading="loading"
-                item-value="name"
-                class="elevation-1"
-              >
-                <template v-slot:item.value="{ item }">
-                  <span class="font-weight-bold">{{ item.value }}</span>
-                </template>
-                <template v-slot:item.lastUpdate="{ item }">
-                  {{ formatTime(item.lastUpdate) }}
-                </template>
-                <template v-slot:item.status="{ item }">
-                  <v-chip
-                    :color="item.status === 'online' ? 'success' : 'error'"
-                    size="small"
-                  >
-                    {{ item.status }}
-                  </v-chip>
-                </template>
-              </v-data-table>
+              <v-card-text>
+                <PowerChart :measurements="chartMeasurements" />
+              </v-card-text>
             </v-card>
+
+            <!-- Data Gaps -->
+            <GapsView />
           </v-col>
         </v-row>
       </v-container>
@@ -147,14 +131,18 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import MetricCard from './components/MetricCard.vue'
-import { apiGet } from './utils/api'
+import PowerChart from './components/PowerChart.vue'
+import GapsView from './components/GapsView.vue'
+import { apiGet } from '../../shared/utils/homeassistant.js'
 
 export default {
   name: 'App',
   components: {
-    MetricCard
+    MetricCard,
+    PowerChart,
+    GapsView
   },
   setup() {
     const loading = ref(false)
@@ -173,7 +161,7 @@ export default {
         key: 'solarProduction',
         title: 'Solar Production',
         value: '0',
-        unit: 'kW',
+        unit: 'W',
         icon: 'mdi-solar-power',
         color: 'orange'
       },
@@ -189,7 +177,7 @@ export default {
         key: 'gridPower',
         title: 'Grid Power',
         value: '0',
-        unit: 'kW',
+        unit: 'W',
         icon: 'mdi-transmission-tower',
         color: 'blue'
       },
@@ -197,78 +185,111 @@ export default {
         key: 'batteryPower',
         title: 'Battery Power',
         value: '0',
-        unit: 'kW',
+        unit: 'W',
         icon: 'mdi-battery-charging',
         color: 'purple'
       }
     ])
     
-    const sensors = ref([])
+    const allMeasurements = ref([])
     
-    const sensorHeaders = [
-      { title: 'Sensor Name', key: 'name', sortable: true },
-      { title: 'Value', key: 'value', sortable: false },
-      { title: 'Unit', key: 'unit', sortable: false },
-      { title: 'Status', key: 'status', sortable: true },
-      { title: 'Last Update', key: 'lastUpdate', sortable: true }
+    const keyMeasurements = [
+      'from_grid',
+      'battery_charge_from_grid',
+      'to_grid',
+      'solar_production',
+      'battery_discharge',
+      'battery_charge',
+      'battery_soc'
     ]
+    
+    const chartMeasurements = computed(() => {
+      return allMeasurements.value.filter(m => keyMeasurements.includes(m.name))
+    })
     
     let refreshInterval = null
     
     const refreshData = async () => {
       loading.value = true
       try {
-        // Simulate API calls - replace with actual API endpoints
-        // const status = await apiGet('status')
-        // const sensorData = await apiGet('sensors')
-        
-        // Mock data for demo
+        // Fetch status from API
+        const status = await apiGet('status')
         connectionStatus.value = {
-          connected: true,
-          mqttConnected: true,
-          alphaessConnected: true,
-          mqttUri: 'tcp://core-mosquitto:1883',
-          alphaessUri: 'tcp://192.168.1.100:502',
+          connected: status.connected,
+          mqttConnected: status.mqttConnected,
+          alphaessConnected: status.alphaessConnected,
+          mqttUri: status.mqttUri,
+          alphaessUri: status.alphaessUri,
           lastUpdate: new Date(),
-          sensorCount: 24
+          sensorCount: 0
         }
         
-        sensors.value = [
-          {
-            name: 'solar_production',
-            value: '3.2',
-            unit: 'kW',
-            status: 'online',
-            lastUpdate: new Date()
-          },
-          {
-            name: 'battery_soc',
-            value: '85',
-            unit: '%',
-            status: 'online',
-            lastUpdate: new Date()
-          },
-          {
-            name: 'grid_active_power',
-            value: '1.5',
-            unit: 'kW',
-            status: 'online',
-            lastUpdate: new Date()
-          },
-          {
-            name: 'battery_power',
-            value: '-0.8',
-            unit: 'kW',
-            status: 'online',
-            lastUpdate: new Date()
-          }
-        ]
+        // Get start of today
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const notBefore = today.toISOString()
         
-        // Update metrics
-        metrics.value[0].value = '3.2'
-        metrics.value[1].value = '85'
-        metrics.value[2].value = '1.5'
-        metrics.value[3].value = '-0.8'
+        // Fetch measurements from API for today
+        const keyMeasurementsQuery = `names=${keyMeasurements.join(',')}`
+        const measurements = await apiGet(`measurements?${keyMeasurementsQuery}&not_before=${encodeURIComponent(notBefore)}`)
+        allMeasurements.value = measurements
+        
+        // Fetch current measurements with previous for metrics
+        const currentMeasurements = await apiGet('measurements?previous=true')
+        
+        connectionStatus.value.sensorCount = measurements.length
+        
+        // Helper to calculate power from accumulated energy (Wh to W)
+        const calculatePower = (measurement) => {
+          if (!measurement || !measurement.values || measurement.values.length < 2) {
+            return measurement?.values?.[0]?.value || 0
+          }
+          const current = measurement.values[0]
+          const previous = measurement.values[1]
+          
+          if (!current || !previous || !current.time || !previous.time) {
+            return current?.value || 0
+          }
+          
+          const energyDiff = current.value - previous.value // Wh
+          const timeDiff = (new Date(current.time) - new Date(previous.time)) / 1000 / 3600 // hours
+          
+          if (timeDiff <= 0) return 0
+          
+          return energyDiff / timeDiff // W
+        }
+        
+        // Helper to get latest value from measurement
+        const getValue = (measurement) => {
+          if (!measurement || !measurement.values || measurement.values.length === 0) {
+            return 0
+          }
+          return measurement.values[0].value || 0
+        }
+        
+        // Update metrics from current measurements
+        const findMeasurement = (name) => currentMeasurements.find(m => m.name === name)
+        
+        const solarProduction = findMeasurement('solar_production') || findMeasurement('ppv')
+        if (solarProduction) {
+          const power = calculatePower(solarProduction)
+          metrics.value[0].value = power.toFixed(0)
+        }
+        
+        const batterySoc = findMeasurement('battery_soc') || findMeasurement('soc')
+        if (batterySoc) {
+          metrics.value[1].value = getValue(batterySoc).toFixed(0)
+        }
+        
+        const gridPower = findMeasurement('grid_active_power') || findMeasurement('pgrid')
+        if (gridPower) {
+          metrics.value[2].value = getValue(gridPower).toFixed(0)
+        }
+        
+        const batteryPower = findMeasurement('battery_power') || findMeasurement('pbat')
+        if (batteryPower) {
+          metrics.value[3].value = getValue(batteryPower).toFixed(0)
+        }
         
       } catch (error) {
         console.error('Failed to refresh data:', error)
@@ -299,8 +320,7 @@ export default {
       loading,
       connectionStatus,
       metrics,
-      sensors,
-      sensorHeaders,
+      chartMeasurements,
       refreshData,
       formatTime
     }
