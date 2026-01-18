@@ -100,15 +100,48 @@ export default {
 
       const sortedTimes = Array.from(allTimes).sort((a, b) => a - b)
 
+      // Detect gaps (missing hours) and calculate gap-filled times with mean values
+      const gapFilledTimes = new Set()
+      const expectedInterval = 3600000 // 1 hour in milliseconds
+      
+      for (let i = 1; i < sortedTimes.length; i++) {
+        const timeDiff = sortedTimes[i] - sortedTimes[i - 1]
+        
+        if (timeDiff > expectedInterval * 1.5) { // Gap detected
+          const missingHours = Math.round(timeDiff / expectedInterval) - 1
+          const prevData = powerData[sortedTimes[i - 1]]
+          const nextData = powerData[sortedTimes[i]]
+          
+          for (let h = 1; h <= missingHours; h++) {
+            const gapTime = sortedTimes[i - 1] + (h * expectedInterval)
+            gapFilledTimes.add(gapTime)
+            allTimes.add(gapTime)
+            
+            // Calculate mean values for the gap
+            powerData[gapTime] = {}
+            const metrics = ['solar_production', 'to_grid', 'from_grid', 'battery_charge', 
+                           'battery_discharge', 'battery_charge_from_grid', 'battery_soc']
+            
+            metrics.forEach(metric => {
+              const prevVal = prevData[metric] || 0
+              const nextVal = nextData[metric] || 0
+              powerData[gapTime][metric] = (prevVal + nextVal) / 2
+            })
+          }
+        }
+      }
+      
+      const allTimesSorted = Array.from(allTimes).sort((a, b) => a - b)
+
       // Fill in missing values with 0 for proper stacking
-      sortedTimes.forEach(time => {
+      allTimesSorted.forEach(time => {
         if (!powerData[time]) {
           powerData[time] = {}
         }
       })
 
       // Calculate net solar production for each time point
-      sortedTimes.forEach(time => {
+      allTimesSorted.forEach(time => {
         const point = powerData[time]
         const solar = point.solar_production || 0
         const toGrid = point.to_grid || 0
@@ -123,11 +156,14 @@ export default {
         { name: 'from_grid', label: 'From Grid', color: 'from_grid' }
       ]
       
+      // Regular bars (full width)
       aboveAxisOrder.forEach(item => {
-        const data = sortedTimes.map(time => ({
-          x: new Date(parseInt(time)),
-          y: powerData[time][item.name] || 0
-        }))
+        const data = allTimesSorted
+          .filter(time => !gapFilledTimes.has(time))
+          .map(time => ({
+            x: new Date(parseInt(time)),
+            y: powerData[time][item.name] || 0
+          }))
         
         datasets.push({
           label: item.label,
@@ -137,8 +173,36 @@ export default {
           borderWidth: 0,
           stack: 'power',
           yAxisID: 'y',
-          type: 'bar'
+          type: 'bar',
+          barPercentage: 0.9,
+          categoryPercentage: 0.95
         })
+      })
+      
+      // Gap-filled bars (narrower)
+      aboveAxisOrder.forEach(item => {
+        const data = allTimesSorted
+          .filter(time => gapFilledTimes.has(time))
+          .map(time => ({
+            x: new Date(parseInt(time)),
+            y: powerData[time][item.name] || 0
+          }))
+        
+        if (data.length > 0) {
+          datasets.push({
+            label: item.label + ' (Filled)',
+            data: data,
+            borderColor: colors[item.color].border,
+            backgroundColor: colors[item.color].border, // More transparent for filled
+            borderWidth: 1,
+            borderColor: colors[item.color].border,
+            stack: 'power',
+            yAxisID: 'y',
+            type: 'bar',
+            barPercentage: 0.4,
+            categoryPercentage: 0.95
+          })
+        }
       })
 
       // Below axis (unused power) - stacked, solar-related nearest to axis
@@ -148,11 +212,14 @@ export default {
         { name: 'battery_charge_from_grid', label: 'Battery Charge From Grid', color: 'battery_charge_from_grid' }
       ]
       
+      // Regular bars (full width)
       belowAxisOrder.forEach(item => {
-        const data = sortedTimes.map(time => ({
-          x: new Date(parseInt(time)),
-          y: -(powerData[time][item.name] || 0)
-        }))
+        const data = allTimesSorted
+          .filter(time => !gapFilledTimes.has(time))
+          .map(time => ({
+            x: new Date(parseInt(time)),
+            y: -(powerData[time][item.name] || 0)
+          }))
         
         datasets.push({
           label: item.label,
@@ -162,12 +229,39 @@ export default {
           borderWidth: 0,
           stack: 'power',
           yAxisID: 'y',
-          type: 'bar'
+          type: 'bar',
+          barPercentage: 0.9,
+          categoryPercentage: 0.95
         })
+      })
+      
+      // Gap-filled bars (narrower)
+      belowAxisOrder.forEach(item => {
+        const data = allTimesSorted
+          .filter(time => gapFilledTimes.has(time))
+          .map(time => ({
+            x: new Date(parseInt(time)),
+            y: -(powerData[time][item.name] || 0)
+          }))
+        
+        if (data.length > 0) {
+          datasets.push({
+            label: item.label + ' (Filled)',
+            data: data,
+            borderColor: colors[item.color].border,
+            backgroundColor: colors[item.color].border, // More transparent for filled
+            borderWidth: 1,
+            stack: 'power',
+            yAxisID: 'y',
+            type: 'bar',
+            barPercentage: 0.4,
+            categoryPercentage: 0.95
+          })
+        }
       })
 
       // Add battery SOC in background (not stacked, separate axis)
-      const socData = sortedTimes
+      const socData = allTimesSorted
         .filter(time => powerData[time].battery_soc !== undefined)
         .map(time => ({
           x: new Date(parseInt(time)),
