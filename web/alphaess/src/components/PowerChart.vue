@@ -15,7 +15,8 @@ import {
   Title,
   Tooltip,
   Legend,
-  TimeScale
+  TimeScale,
+  Filler
 } from 'chart.js'
 import 'chartjs-adapter-date-fns'
 
@@ -27,7 +28,8 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  TimeScale
+  TimeScale,
+  Filler
 )
 
 export default {
@@ -45,63 +47,150 @@ export default {
     chartData() {
       const datasets = []
       const colors = {
-        'solar_production': { border: '#FF9800', bg: 'rgba(255, 152, 0, 0.1)' },
-        'to_grid': { border: '#4CAF50', bg: 'rgba(76, 175, 80, 0.1)' },
-        'from_grid': { border: '#2196F3', bg: 'rgba(33, 150, 243, 0.1)' },
-        'battery_charge': { border: '#9C27B0', bg: 'rgba(156, 39, 176, 0.1)' },
-        'battery_discharge': { border: '#E91E63', bg: 'rgba(233, 30, 99, 0.1)' },
-        'battery_charge_from_grid': { border: '#00BCD4', bg: 'rgba(0, 188, 212, 0.1)' },
-        'battery_soc': { border: '#8BC34A', bg: 'rgba(139, 195, 74, 0.1)' }
+        'solar_production': { border: 'rgba(255, 193, 7, 0.5)', bg: 'rgba(255, 193, 7, 0.8)' },
+        'solar_net': { border: 'rgba(255, 213, 79, 0.5)', bg: 'rgba(255, 213, 79, 0.8)' },
+        'to_grid': { border: 'rgba(255, 179, 0, 0.5)', bg: 'rgba(255, 179, 0, 0.8)' },
+        'battery_charge': { border: 'rgba(255, 167, 38, 0.5)', bg: 'rgba(255, 167, 38, 0.8)' },
+        'from_grid': { border: 'rgba(244, 67, 54, 0.5)', bg: 'rgba(244, 67, 54, 0.8)' },
+        'battery_discharge': { border: 'rgba(76, 175, 80, 0.5)', bg: 'rgba(76, 175, 80, 0.8)' },
+        'battery_charge_from_grid': { border: 'rgba(156, 39, 176, 0.5)', bg: 'rgba(156, 39, 176, 0.8)' },
+        'battery_soc': { border: 'rgba(139, 195, 74, 0.05)', bg: 'rgba(139, 195, 74, 0.2)' }
       }
 
+      // Convert all measurements to power data indexed by time
+      const powerData = {}
+      const allTimes = new Set()
+      
       this.measurements.forEach(m => {
-        if (colors[m.name] && m.values && m.values.length > 0) {
-          const data = []
-          
-          // For accumulated energy (Wh), calculate power from consecutive values
-          if (m.unit === 'Wh') {
-            for (let i = 1; i < m.values.length; i++) {
-              const current = m.values[i]
-              const previous = m.values[i - 1]
+        if (m.values && m.values.length > 0 && m.unit === 'Wh') {
+          for (let i = 1; i < m.values.length; i++) {
+            const current = m.values[i]
+            const previous = m.values[i - 1]
+            
+            if (current && previous && current.time && previous.time) {
+              const energyDiff = current.value - previous.value
+              const timeDiff = (new Date(current.time) - new Date(previous.time)) / 1000 / 3600
               
-              if (current && previous && current.time && previous.time) {
-                const energyDiff = current.value - previous.value
-                const timeDiff = (new Date(current.time) - new Date(previous.time)) / 1000 / 3600
+              if (timeDiff > 0) {
+                const power = energyDiff / timeDiff
+                const time = new Date(current.time).getTime()
+                allTimes.add(time)
                 
-                if (timeDiff > 0) {
-                  const power = energyDiff / timeDiff
-                  data.push({
-                    x: new Date(current.time),
-                    y: power
-                  })
+                if (!powerData[time]) {
+                  powerData[time] = {}
                 }
+                powerData[time][m.name] = power
               }
             }
-          } else {
-            // For direct measurements (like SOC %), use values directly
-            m.values.forEach(v => {
-              data.push({
-                x: new Date(v.time),
-                y: v.value
-              })
-            })
           }
-
-          if (data.length > 0) {
-            datasets.push({
-              label: this.formatLabel(m.name),
-              data: data,
-              borderColor: colors[m.name].border,
-              backgroundColor: colors[m.name].bg,
-              borderWidth: 2,
-              tension: 0.3,
-              fill: true,
-              pointRadius: 0,
-              yAxisID: m.name === 'battery_soc' ? 'y1' : 'y'
-            })
-          }
+        } else if (m.name === 'battery_soc' && m.values && m.values.length > 0) {
+          // Handle SOC separately (not Wh)
+          m.values.forEach(v => {
+            const time = new Date(v.time).getTime()
+            allTimes.add(time)
+            if (!powerData[time]) {
+              powerData[time] = {}
+            }
+            powerData[time][m.name] = v.value
+          })
         }
       })
+
+      const sortedTimes = Array.from(allTimes).sort((a, b) => a - b)
+
+      // Fill in missing values with 0 for proper stacking
+      sortedTimes.forEach(time => {
+        if (!powerData[time]) {
+          powerData[time] = {}
+        }
+      })
+
+      // Calculate net solar production for each time point
+      sortedTimes.forEach(time => {
+        const point = powerData[time]
+        const solar = point.solar_production || 0
+        const toGrid = point.to_grid || 0
+        const batteryCharge = point.battery_charge || 0
+        powerData[time].solar_net = Math.max(0, solar - toGrid - batteryCharge)
+      })
+
+      // Above axis (consumed power) - stacked, solar nearest to axis
+      const aboveAxisOrder = [
+        { name: 'solar_net', label: 'Solar Production (Net)', color: 'solar_net' },
+        { name: 'battery_discharge', label: 'Battery Discharge', color: 'battery_discharge' },
+        { name: 'from_grid', label: 'From Grid', color: 'from_grid' }
+      ]
+      
+      aboveAxisOrder.forEach(item => {
+        const data = sortedTimes.map(time => ({
+          x: new Date(parseInt(time)),
+          y: powerData[time][item.name] || 0
+        }))
+        
+        datasets.push({
+          label: item.label,
+          data: data,
+          borderColor: colors[item.color].border,
+          backgroundColor: colors[item.color].bg,
+          borderWidth: 1,
+          tension: 0,
+          fill: 'origin',
+          pointRadius: 0,
+          stack: 'consumed',
+          yAxisID: 'y'
+        })
+      })
+
+      // Below axis (unused power) - stacked, solar-related nearest to axis
+      const belowAxisOrder = [
+        { name: 'to_grid', label: 'To Grid', color: 'to_grid' },
+        { name: 'battery_charge', label: 'Battery Charge', color: 'battery_charge' },
+        { name: 'battery_charge_from_grid', label: 'Battery Charge From Grid', color: 'battery_charge_from_grid' }
+      ]
+      
+      belowAxisOrder.forEach(item => {
+        const data = sortedTimes.map(time => ({
+          x: new Date(parseInt(time)),
+          y: -(powerData[time][item.name] || 0)
+        }))
+        
+        datasets.push({
+          label: item.label,
+          data: data,
+          borderColor: colors[item.color].border,
+          backgroundColor: colors[item.color].bg,
+          borderWidth: 1,
+          tension: 0,
+          fill: 'origin',
+          pointRadius: 0,
+          stack: 'unused',
+          yAxisID: 'y'
+        })
+      })
+
+      // Add battery SOC in background (not stacked, separate axis)
+      const socData = sortedTimes
+        .filter(time => powerData[time].battery_soc !== undefined)
+        .map(time => ({
+          x: new Date(parseInt(time)),
+          y: powerData[time].battery_soc
+        }))
+      
+      if (socData.length > 0) {
+        // Add SOC as first dataset (background)
+        datasets.unshift({
+          label: 'Battery SOC',
+          data: socData,
+          borderColor: colors.battery_soc.border,
+          backgroundColor: colors.battery_soc.bg,
+          borderWidth: 1,
+          tension: 0.3,
+          fill: true,
+          pointRadius: 0,
+          yAxisID: 'y1',
+          order: -1  // Draw first (background)
+        })
+      }
 
       return { datasets }
     },
@@ -122,7 +211,7 @@ export default {
             callbacks: {
               label: (context) => {
                 const label = context.dataset.label || ''
-                const value = context.parsed.y.toFixed(0)
+                const value = Math.abs(context.parsed.y).toFixed(0)
                 const unit = context.dataset.yAxisID === 'y1' ? '%' : 'W'
                 return `${label}: ${value} ${unit}`
               }
@@ -141,7 +230,8 @@ export default {
             title: {
               display: true,
               text: 'Time'
-            }
+            },
+            stacked: true
           },
           y: {
             type: 'linear',
@@ -149,6 +239,12 @@ export default {
             title: {
               display: true,
               text: 'Power (W)'
+            },
+            stacked: true,
+            ticks: {
+              callback: function(value) {
+                return Math.abs(value).toFixed(0)
+              }
             }
           },
           y1: {

@@ -104,17 +104,54 @@
             <v-card class="mb-4">
               <v-card-title>
                 <v-icon class="me-2">mdi-chart-line</v-icon>
-                Power Flow - Today
+                Power Flow
                 <v-spacer></v-spacer>
-                <v-btn
-                  color="primary"
-                  variant="outlined"
-                  @click="refreshData"
-                  :loading="loading"
-                >
-                  <v-icon start>mdi-refresh</v-icon>
-                  Refresh
-                </v-btn>
+                <div class="d-flex align-center ga-2">
+                  <v-btn
+                    icon="mdi-chevron-left"
+                    size="small"
+                    variant="text"
+                    @click="previousDay"
+                    :disabled="loading"
+                  ></v-btn>
+                  <v-menu
+                    v-model="datePickerMenu"
+                    :close-on-content-click="false"
+                    location="bottom"
+                  >
+                    <template v-slot:activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        variant="outlined"
+                        :disabled="loading"
+                      >
+                        <v-icon start>mdi-calendar</v-icon>
+                        {{ formatDate(selectedDate) }}
+                      </v-btn>
+                    </template>
+                    <v-date-picker
+                      v-model="selectedDate"
+                      @update:model-value="onDateSelected"
+                      :max="today"
+                    ></v-date-picker>
+                  </v-menu>
+                  <v-btn
+                    icon="mdi-chevron-right"
+                    size="small"
+                    variant="text"
+                    @click="nextDay"
+                    :disabled="loading || isToday"
+                  ></v-btn>
+                  <v-btn
+                    color="primary"
+                    variant="outlined"
+                    @click="refreshData"
+                    :loading="loading"
+                  >
+                    <v-icon start>mdi-refresh</v-icon>
+                    Refresh
+                  </v-btn>
+                </div>
               </v-card-title>
               <v-card-text>
                 <PowerChart :measurements="chartMeasurements" />
@@ -146,6 +183,11 @@ export default {
   },
   setup() {
     const loading = ref(false)
+    const selectedDate = ref(new Date())
+    const datePickerMenu = ref(false)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
     const connectionStatus = ref({
       connected: false,
       mqttConnected: false,
@@ -224,14 +266,19 @@ export default {
           sensorCount: 0
         }
         
-        // Get start of today
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const notBefore = today.toISOString()
+        // Get start of selected day
+        const startOfDay = new Date(selectedDate.value)
+        startOfDay.setHours(0, 0, 0, 0)
+        const notBefore = startOfDay.toISOString()
         
-        // Fetch measurements from API for today
+        // Get end of selected day
+        const endOfDay = new Date(selectedDate.value)
+        endOfDay.setHours(23, 59, 59, 999)
+        const before = endOfDay.toISOString()
+        
+        // Fetch measurements from API for selected day
         const keyMeasurementsQuery = `names=${keyMeasurements.join(',')}`
-        const measurements = await apiGet(`measurements?${keyMeasurementsQuery}&not_before=${encodeURIComponent(notBefore)}`)
+        const measurements = await apiGet(`measurements?${keyMeasurementsQuery}&not_before=${encodeURIComponent(notBefore)}&before=${encodeURIComponent(before)}`)
         allMeasurements.value = measurements
         
         // Fetch current measurements with previous for metrics
@@ -304,6 +351,57 @@ export default {
       return new Date(date).toLocaleString()
     }
     
+    const formatDate = (date) => {
+      const d = new Date(date)
+      const todayDate = new Date()
+      todayDate.setHours(0, 0, 0, 0)
+      const compareDate = new Date(d)
+      compareDate.setHours(0, 0, 0, 0)
+      
+      if (compareDate.getTime() === todayDate.getTime()) {
+        return 'Today'
+      }
+      
+      const yesterday = new Date(todayDate)
+      yesterday.setDate(yesterday.getDate() - 1)
+      if (compareDate.getTime() === yesterday.getTime()) {
+        return 'Yesterday'
+      }
+      
+      return d.toLocaleDateString()
+    }
+    
+    const isToday = computed(() => {
+      const todayDate = new Date()
+      todayDate.setHours(0, 0, 0, 0)
+      const selected = new Date(selectedDate.value)
+      selected.setHours(0, 0, 0, 0)
+      return selected.getTime() === todayDate.getTime()
+    })
+    
+    const previousDay = () => {
+      const newDate = new Date(selectedDate.value)
+      newDate.setDate(newDate.getDate() - 1)
+      selectedDate.value = newDate
+      refreshData()
+    }
+    
+    const nextDay = () => {
+      const newDate = new Date(selectedDate.value)
+      newDate.setDate(newDate.getDate() + 1)
+      const todayDate = new Date()
+      todayDate.setHours(0, 0, 0, 0)
+      if (newDate <= todayDate) {
+        selectedDate.value = newDate
+        refreshData()
+      }
+    }
+    
+    const onDateSelected = () => {
+      datePickerMenu.value = false
+      refreshData()
+    }
+    
     onMounted(() => {
       refreshData()
       // Refresh every 30 seconds
@@ -321,8 +419,16 @@ export default {
       connectionStatus,
       metrics,
       chartMeasurements,
+      selectedDate,
+      datePickerMenu,
+      today,
+      isToday,
       refreshData,
-      formatTime
+      formatTime,
+      formatDate,
+      previousDay,
+      nextDay,
+      onDateSelected
     }
   }
 }

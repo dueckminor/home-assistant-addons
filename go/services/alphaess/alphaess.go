@@ -367,7 +367,7 @@ func (s *scanner) handleModbus() {
 	s.fixSolarProduction()
 
 	for _, sensor := range s.sensors {
-		sensor.SetState(sensor.Current)
+		sensor.SetState(sensor.Current.Value)
 	}
 
 	s.sensorSolarProduction.Current.Value -= s.correctionSolarProduction
