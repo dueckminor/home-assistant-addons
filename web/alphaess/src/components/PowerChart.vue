@@ -1,16 +1,17 @@
 <template>
   <div style="position: relative; height: 400px;">
-    <Line :data="chartData" :options="chartOptions" />
+    <Bar :data="chartData" :options="chartOptions" />
   </div>
 </template>
 
 <script>
-import { Line } from 'vue-chartjs'
+import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   PointElement,
+  BarElement,
   LineElement,
   Title,
   Tooltip,
@@ -24,6 +25,7 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   PointElement,
+  BarElement,
   LineElement,
   Title,
   Tooltip,
@@ -35,7 +37,7 @@ ChartJS.register(
 export default {
   name: 'PowerChart',
   components: {
-    Line
+    Bar
   },
   props: {
     measurements: {
@@ -132,12 +134,10 @@ export default {
           data: data,
           borderColor: colors[item.color].border,
           backgroundColor: colors[item.color].bg,
-          borderWidth: 1,
-          tension: 0,
-          fill: 'origin',
-          pointRadius: 0,
-          stack: 'consumed',
-          yAxisID: 'y'
+          borderWidth: 0,
+          stack: 'power',
+          yAxisID: 'y',
+          type: 'bar'
         })
       })
 
@@ -159,12 +159,10 @@ export default {
           data: data,
           borderColor: colors[item.color].border,
           backgroundColor: colors[item.color].bg,
-          borderWidth: 1,
-          tension: 0,
-          fill: 'origin',
-          pointRadius: 0,
-          stack: 'unused',
-          yAxisID: 'y'
+          borderWidth: 0,
+          stack: 'power',
+          yAxisID: 'y',
+          type: 'bar'
         })
       })
 
@@ -177,7 +175,7 @@ export default {
         }))
       
       if (socData.length > 0) {
-        // Add SOC as first dataset (background)
+        // Add SOC as first dataset (background) - keep as line
         datasets.unshift({
           label: 'Battery SOC',
           data: socData,
@@ -188,7 +186,8 @@ export default {
           fill: true,
           pointRadius: 0,
           yAxisID: 'y1',
-          order: -1  // Draw first (background)
+          order: -1,  // Draw first (background)
+          type: 'line'
         })
       }
 

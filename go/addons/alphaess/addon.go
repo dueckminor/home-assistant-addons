@@ -143,6 +143,29 @@ func (a *addon) getMeasurementsFromDB(filter MeasurementFilter) []Measurement {
 				Value: state,
 			})
 		}
+
+		if filter.Previous && len(result[i].Values) > 0 {
+			// Get previous value before NotBefore
+			queryPrev := "SELECT start_ts, state FROM statistics\n"
+			queryPrev += "WHERE metadata_id = (SELECT id FROM statistics_meta WHERE statistic_id=?)\n"
+			queryPrev += "AND start_ts < ?\n"
+			queryPrev += "ORDER BY start_ts DESC\n"
+			queryPrev += "LIMIT 1\n"
+
+			var ts float64
+			var state float64
+			err := a.db.QueryRow(queryPrev, "sensor.alpha_ess_"+result[i].Name, float64(filter.NotBefore.Unix())).Scan(&ts, &state)
+			if err != nil {
+				// fmt.Println("Error querying previous measurement:", err)
+				continue
+			}
+			timestamp := time.Unix(int64(ts), 0)
+			prevValue := alphaess.MeasurementValue{
+				Time:  timestamp.UTC(),
+				Value: state,
+			}
+			result[i].Values = append([]alphaess.MeasurementValue{prevValue}, result[i].Values...)
+		}
 	}
 
 	return result

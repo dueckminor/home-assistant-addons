@@ -278,7 +278,7 @@ export default {
         
         // Fetch measurements from API for selected day
         const keyMeasurementsQuery = `names=${keyMeasurements.join(',')}`
-        const measurements = await apiGet(`measurements?${keyMeasurementsQuery}&not_before=${encodeURIComponent(notBefore)}&before=${encodeURIComponent(before)}`)
+        const measurements = await apiGet(`measurements?${keyMeasurementsQuery}&not_before=${encodeURIComponent(notBefore)}&before=${encodeURIComponent(before)}&previous=true`)
         allMeasurements.value = measurements
         
         // Fetch current measurements with previous for metrics
