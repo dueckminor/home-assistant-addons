@@ -21,6 +21,7 @@ func NewEndpoints(a *addon) *Endpoints {
 func (e *Endpoints) SetupEndpoints(rg *gin.RouterGroup) {
 	rg.GET("/status", e.getStatus)
 	rg.GET("/measurements", e.getMeasurements)
+	rg.GET("/measurements/aggregate", e.getAggregatedMeasurements)
 	rg.GET("/gaps", e.getGaps)
 	rg.POST("/import-csv", e.importCSV)
 	rg.GET("/fill-gaps", e.previewFillGaps)
@@ -63,6 +64,42 @@ func (e *Endpoints) getGaps(c *gin.Context) {
 
 	measurements := e.addon.GetGaps(filter)
 	c.JSON(200, measurements)
+}
+
+func (e *Endpoints) getAggregatedMeasurements(c *gin.Context) {
+	// Parse query parameters
+	interval := c.Query("interval")
+	if interval == "" {
+		interval = "hourly" // default
+	}
+
+	timezone := c.Query("timezone")
+	if timezone == "" {
+		timezone = "UTC" // default
+	}
+
+	from := ginutil.ParseQueryTime(c, "from")
+	to := ginutil.ParseQueryTime(c, "to")
+
+	if from.IsZero() || to.IsZero() {
+		c.JSON(400, gin.H{"error": "from and to parameters are required"})
+		return
+	}
+
+	params := AggregateParameters{
+		Interval: interval,
+		From:     from,
+		To:       to,
+		Timezone: timezone,
+	}
+
+	aggregates, err := e.addon.Aggregate(params)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, aggregates)
 }
 
 // importCSV handles POST /api/import-csv

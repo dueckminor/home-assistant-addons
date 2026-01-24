@@ -43,9 +43,23 @@ export default {
     measurements: {
       type: Array,
       required: true
+    },
+    selectedDate: {
+      type: Date,
+      required: true
     }
   },
   computed: {
+    dayStart() {
+      const date = new Date(this.selectedDate)
+      date.setHours(0, 0, 0, 0)
+      return date
+    },
+    dayEnd() {
+      const date = new Date(this.selectedDate)
+      date.setHours(23, 0, 0, 0)
+      return date
+    },
     chartData() {
       const datasets = []
       const colors = {
@@ -320,6 +334,8 @@ export default {
                 hour: 'HH:mm'
               }
             },
+            min: this.dayStart,
+            max: this.dayEnd,
             title: {
               display: true,
               text: 'Time'

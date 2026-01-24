@@ -154,7 +154,7 @@
                 </div>
               </v-card-title>
               <v-card-text>
-                <PowerChart :measurements="chartMeasurements" />
+                <PowerChart :measurements="chartMeasurements" :selectedDate="selectedDate" />
               </v-card-text>
             </v-card>
 
@@ -376,7 +376,7 @@ export default {
       todayDate.setHours(0, 0, 0, 0)
       const selected = new Date(selectedDate.value)
       selected.setHours(0, 0, 0, 0)
-      return selected.getTime() === todayDate.getTime()
+      return selected.getTime() >= todayDate.getTime()
     })
     
     const previousDay = () => {
@@ -389,12 +389,8 @@ export default {
     const nextDay = () => {
       const newDate = new Date(selectedDate.value)
       newDate.setDate(newDate.getDate() + 1)
-      const todayDate = new Date()
-      todayDate.setHours(0, 0, 0, 0)
-      if (newDate <= todayDate) {
-        selectedDate.value = newDate
-        refreshData()
-      }
+      selectedDate.value = newDate
+      refreshData()
     }
     
     const onDateSelected = () => {
