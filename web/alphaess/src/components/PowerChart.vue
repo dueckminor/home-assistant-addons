@@ -60,13 +60,34 @@ export default {
       date.setHours(23, 0, 0, 0)
       return date
     },
+    timezone() {
+      // Get timezone abbreviation (e.g., CET, CEST) for the selected date
+      const date = new Date(this.selectedDate)
+      date.setHours(12, 0, 0, 0) // Use noon to get the correct timezone
+      
+      // Try to get the timezone abbreviation using toLocaleTimeString
+      const timeString = date.toLocaleTimeString('en-US', {
+        timeZoneName: 'short',
+        hour: 'numeric'
+      })
+      
+      // Extract timezone abbreviation from the time string
+      const match = timeString.match(/([A-Z]{3,5})$/)
+      if (match && match[1] && !match[1].startsWith('GMT')) {
+        return match[1]
+      }
+      
+      // Fallback to GMT offset
+      const offset = -date.getTimezoneOffset() / 60
+      return `UTC${offset >= 0 ? '+' : ''}${offset}`
+    },
     chartData() {
       const datasets = []
       const colors = {
         'solar_production': { border: 'rgba(255, 193, 7, 0.5)', bg: 'rgba(255, 193, 7, 0.8)' },
         'solar_net': { border: 'rgba(255, 213, 79, 0.5)', bg: 'rgba(255, 213, 79, 0.8)' },
         'to_grid': { border: 'rgba(255, 179, 0, 0.5)', bg: 'rgba(255, 179, 0, 0.8)' },
-        'battery_charge': { border: 'rgba(255, 167, 38, 0.5)', bg: 'rgba(255, 167, 38, 0.8)' },
+        'battery_charge': { border: 'rgba(205, 220, 57, 0.5)', bg: 'rgba(205, 220, 57, 0.8)' },
         'from_grid': { border: 'rgba(244, 67, 54, 0.5)', bg: 'rgba(244, 67, 54, 0.8)' },
         'battery_discharge': { border: 'rgba(76, 175, 80, 0.5)', bg: 'rgba(76, 175, 80, 0.8)' },
         'battery_charge_from_grid': { border: 'rgba(156, 39, 176, 0.5)', bg: 'rgba(156, 39, 176, 0.8)' },
@@ -305,6 +326,9 @@ export default {
       return {
         responsive: true,
         maintainAspectRatio: false,
+        animation: {
+          duration: 0
+        },
         interaction: {
           mode: 'index',
           intersect: false
@@ -338,7 +362,7 @@ export default {
             max: this.dayEnd,
             title: {
               display: true,
-              text: 'Time'
+              text: `Time (${this.timezone})`
             },
             stacked: true
           },

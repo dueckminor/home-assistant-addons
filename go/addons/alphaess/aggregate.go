@@ -41,7 +41,7 @@ func (a *addon) Aggregate(params AggregateParameters) ([]MeasurementAggregate, e
 	filter := MeasurementFilter{
 		NotBefore: params.From,
 		Before:    params.To,
-		Previous:  false,
+		Siblings:  true,
 	}
 	measurements := a.getMeasurementsFromDB(filter)
 
@@ -129,7 +129,12 @@ func (a *addon) measurementsToAggregates(measurements []alphaess.Measurement, lo
 func (a *addon) groupAndCalculate(aggregates []MeasurementAggregate, timeRanges []MeasurementAggregate) []MeasurementAggregate {
 	var result []MeasurementAggregate
 
+	for i, agg := range aggregates {
+		fmt.Printf("EndTime %d: %s\n", i, agg.EndTime)
+	}
+
 	for _, tr := range timeRanges {
+		fmt.Printf("Processing TimeRange: %s - %s\n", tr.StartTime, tr.EndTime)
 		agg := MeasurementAggregate{
 			StartTime: tr.StartTime,
 			EndTime:   tr.EndTime,
@@ -138,29 +143,23 @@ func (a *addon) groupAndCalculate(aggregates []MeasurementAggregate, timeRanges 
 		}
 
 		// Find all aggregates in this time range
-		var inRange []MeasurementAggregate
-		for _, a := range aggregates {
-			if (a.EndTime.Equal(tr.StartTime) || a.EndTime.After(tr.StartTime)) && a.EndTime.Before(tr.EndTime) {
-				inRange = append(inRange, a)
-			}
-		}
+		before, inRange, _ := findAggregateForTime(tr, aggregates)
 
-		if len(inRange) < 2 {
+		if len(inRange) == 0 || before == nil {
 			agg.Gap = true
 			result = append(result, agg)
 			continue
 		}
 
 		// Calculate deltas from first to last
-		first := inRange[0]
 		last := inRange[len(inRange)-1]
 
-		agg.FromGrid = last.FromGrid - first.FromGrid
-		agg.ToGrid = last.ToGrid - first.ToGrid
-		agg.SolarProduction = last.SolarProduction - first.SolarProduction
-		agg.BatteryDischarge = last.BatteryDischarge - first.BatteryDischarge
-		agg.BatteryCharge = last.BatteryCharge - first.BatteryCharge
-		agg.BatteryChargeFromGrid = last.BatteryChargeFromGrid - first.BatteryChargeFromGrid
+		agg.FromGrid = last.FromGrid - before.FromGrid
+		agg.ToGrid = last.ToGrid - before.ToGrid
+		agg.SolarProduction = last.SolarProduction - before.SolarProduction
+		agg.BatteryDischarge = last.BatteryDischarge - before.BatteryDischarge
+		agg.BatteryCharge = last.BatteryCharge - before.BatteryCharge
+		agg.BatteryChargeFromGrid = last.BatteryChargeFromGrid - before.BatteryChargeFromGrid
 
 		// Average SOC
 		sumSOC := 0.0
@@ -176,4 +175,18 @@ func (a *addon) groupAndCalculate(aggregates []MeasurementAggregate, timeRanges 
 	}
 
 	return result
+}
+
+func findAggregateForTime(timeRange MeasurementAggregate, aggregates []MeasurementAggregate) (before *MeasurementAggregate, inRange []MeasurementAggregate, after *MeasurementAggregate) {
+	for _, agg := range aggregates {
+		if agg.EndTime.Before(timeRange.StartTime) {
+			before = &agg
+		} else if !agg.EndTime.After(timeRange.EndTime) {
+			inRange = append(inRange, agg)
+		} else {
+			after = &agg
+			break
+		}
+	}
+	return before, inRange, after
 }

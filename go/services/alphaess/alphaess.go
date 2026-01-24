@@ -27,6 +27,7 @@ type MeasurementFilter struct {
 	MeasurementNames    []string
 	measurementNamesMap map[string]bool
 	Previous            bool
+	Siblings            bool
 	After               time.Time // t >  v
 	NotAfter            time.Time // t <= v
 	Before              time.Time // t <  v
@@ -474,7 +475,7 @@ func (s *scanner) GetMeasurements(filter MeasurementFilter) []Measurement {
 		}
 
 		values := []MeasurementValue{}
-		if filter.Previous && !sensor.Previous.Time.IsZero() && filter.MatchTime(sensor.Previous.Time) {
+		if (filter.Previous || filter.Siblings) && !sensor.Previous.Time.IsZero() && filter.MatchTime(sensor.Previous.Time) {
 			values = append(values, sensor.Previous)
 		}
 		if !sensor.Current.Time.IsZero() && filter.MatchTime(sensor.Current.Time) {
