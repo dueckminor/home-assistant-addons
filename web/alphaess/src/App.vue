@@ -235,18 +235,9 @@ export default {
     
     const allMeasurements = ref([])
     
-    const keyMeasurements = [
-      'from_grid',
-      'battery_charge_from_grid',
-      'to_grid',
-      'solar_production',
-      'battery_discharge',
-      'battery_charge',
-      'battery_soc'
-    ]
-    
     const chartMeasurements = computed(() => {
-      return allMeasurements.value.filter(m => keyMeasurements.includes(m.name))
+      // Return all aggregates directly (no filtering needed)
+      return allMeasurements.value
     })
     
     let refreshInterval = null
@@ -269,22 +260,25 @@ export default {
         // Get start of selected day
         const startOfDay = new Date(selectedDate.value)
         startOfDay.setHours(0, 0, 0, 0)
-        const notBefore = startOfDay.toISOString()
+        const from = startOfDay.toISOString()
         
-        // Get end of selected day
-        const endOfDay = new Date(selectedDate.value)
-        endOfDay.setHours(23, 59, 59, 999)
-        const before = endOfDay.toISOString()
+        // Get start of next day (to include 23:00-24:00 hour)
+        const nextDay = new Date(selectedDate.value)
+        nextDay.setDate(nextDay.getDate() + 1)
+        nextDay.setHours(0, 0, 0, 0)
+        const to = nextDay.toISOString()
         
-        // Fetch measurements from API for selected day
-        const keyMeasurementsQuery = `names=${keyMeasurements.join(',')}`
-        const measurements = await apiGet(`measurements?${keyMeasurementsQuery}&not_before=${encodeURIComponent(notBefore)}&before=${encodeURIComponent(before)}&previous=true`)
-        allMeasurements.value = measurements
+        // Get timezone
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        
+        // Fetch aggregated measurements from API for selected day
+        const aggregates = await apiGet(`measurements/aggregate?interval=hourly&timezone=${encodeURIComponent(timezone)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+        allMeasurements.value = aggregates
         
         // Fetch current measurements with previous for metrics
         const currentMeasurements = await apiGet('measurements?previous=true')
         
-        connectionStatus.value.sensorCount = measurements.length
+        connectionStatus.value.sensorCount = currentMeasurements.length
         
         // Helper to calculate power from accumulated energy (Wh to W)
         const calculatePower = (measurement) => {

@@ -27,11 +27,12 @@ func (a *addon) aggregateHourly(from, to time.Time, loc *time.Location) []Measur
 			break
 		}
 
+		hour := current.Hour()
 		agg := MeasurementAggregate{
 			StartTime: current.UTC(),
 			EndTime:   next.UTC(),
 			LocalDate: current.Format("2006-01-02"),
-			LocalHour: current.Hour(),
+			LocalHour: &hour,
 		}
 		results = append(results, agg)
 

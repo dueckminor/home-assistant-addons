@@ -96,14 +96,17 @@ func (a *addon) Endpoints() addons.Endpoints {
 	return NewEndpoints(a)
 }
 
-func (a *addon) getMeasurementsFromDB(filter MeasurementFilter) []Measurement {
-	result := a.scanner.GetMeasurementInfos(filter)
+func makeQueryAndParams(column string, statisticId string, filter MeasurementFilter, sibling int) (string, []any) {
+	query := "SELECT start_ts, " + column + " FROM statistics\n"
+	query += "WHERE metadata_id = (SELECT id FROM statistics_meta WHERE statistic_id=?)\n"
+	params := []any{statisticId}
 
-	for i := range result {
-		query := "SELECT start_ts, state FROM statistics\n"
-		query += "WHERE metadata_id = (SELECT id FROM statistics_meta WHERE statistic_id=?)\n"
-		params := []any{"sensor.alpha_ess_" + result[i].Name}
-
+	switch sibling {
+	case -1:
+		query += "AND start_ts <= ?\n"
+		params = append(params, float64(filter.After.Unix()))
+		query += "ORDER BY start_ts DESC LIMIT 1\n"
+	case 0:
 		if !filter.Before.IsZero() {
 			query += "AND start_ts < ?\n"
 			params = append(params, float64(filter.Before.Unix()))
@@ -120,75 +123,59 @@ func (a *addon) getMeasurementsFromDB(filter MeasurementFilter) []Measurement {
 			query += "AND start_ts <= ?\n"
 			params = append(params, float64(filter.NotAfter.Unix()))
 		}
-
 		query += "ORDER BY start_ts ASC\n"
+	case 1:
+		query += "AND start_ts >= ?\n"
+		params = append(params, float64(filter.Before.Unix()))
+		query += "ORDER BY start_ts ASC LIMIT 1\n"
+	}
+	return query, params
+}
 
-		rows, err := a.db.Query(query, params...)
+func (a *addon) getMeasurementValuesFromDB(column string, statisticId string, filter MeasurementFilter, sibling int) (values []alphaess.MeasurementValue) {
+	query, params := makeQueryAndParams(column, statisticId, filter, sibling)
+
+	rows, err := a.db.Query(query, params...)
+	if err != nil {
+		fmt.Println("Error querying measurements:", err)
+		return []alphaess.MeasurementValue{}
+	}
+
+	for rows.Next() {
+		var ts float64
+		var state float64
+		err = rows.Scan(&ts, &state)
 		if err != nil {
-			fmt.Println("Error querying measurements:", err)
-			continue
+			return []alphaess.MeasurementValue{}
 		}
+		timestamp := time.Unix(int64(ts), 0)
+		values = append(values, alphaess.MeasurementValue{
+			Time:  timestamp.UTC(),
+			Value: state,
+		})
+	}
 
-		for rows.Next() {
-			var ts float64
-			var state float64
-			err := rows.Scan(&ts, &state)
-			if err != nil {
-				fmt.Println("Error scanning measurement row:", err)
-				continue
-			}
-			timestamp := time.Unix(int64(ts), 0)
-			result[i].Values = append(result[i].Values, alphaess.MeasurementValue{
-				Time:  timestamp.UTC(),
-				Value: state,
-			})
+	return values
+}
+
+func (a *addon) getMeasurementsFromDB(filter MeasurementFilter) []Measurement {
+	result := a.scanner.GetMeasurementInfos(filter)
+
+	for i := range result {
+		column := "state"
+		statisticId := "sensor.alpha_ess_" + result[i].Name
+
+		if result[i].Name == "battery_soc" {
+			column = "mean"
 		}
 
 		if filter.Previous || filter.Siblings {
-			// Get previous value before NotBefore
-			queryPrev := "SELECT start_ts, state FROM statistics\n"
-			queryPrev += "WHERE metadata_id = (SELECT id FROM statistics_meta WHERE statistic_id=?)\n"
-			queryPrev += "AND start_ts < ?\n"
-			queryPrev += "ORDER BY start_ts DESC\n"
-			queryPrev += "LIMIT 1\n"
-
-			var ts float64
-			var state float64
-			err := a.db.QueryRow(queryPrev, "sensor.alpha_ess_"+result[i].Name, float64(filter.NotBefore.Unix())).Scan(&ts, &state)
-			if err != nil {
-				// fmt.Println("Error querying previous measurement:", err)
-				continue
-			}
-			timestamp := time.Unix(int64(ts), 0)
-			prevValue := alphaess.MeasurementValue{
-				Time:  timestamp.UTC(),
-				Value: state,
-			}
-			result[i].Values = append([]alphaess.MeasurementValue{prevValue}, result[i].Values...)
+			result[i].Values = a.getMeasurementValuesFromDB(column, statisticId, filter, -1)
 		}
+		result[i].Values = append(result[i].Values, a.getMeasurementValuesFromDB(column, statisticId, filter, 0)...)
 		if filter.Siblings {
-			// Get previous value before NotBefore
-			queryPrev := "SELECT start_ts, state FROM statistics\n"
-			queryPrev += "WHERE metadata_id = (SELECT id FROM statistics_meta WHERE statistic_id=?)\n"
-			queryPrev += "AND start_ts >= ?\n"
-			queryPrev += "ORDER BY start_ts ASC\n"
-			queryPrev += "LIMIT 1\n"
-
-			var ts float64
-			var state float64
-			err := a.db.QueryRow(queryPrev, "sensor.alpha_ess_"+result[i].Name, float64(filter.Before.Unix())).Scan(&ts, &state)
-			if err != nil {
-				// fmt.Println("Error querying previous measurement:", err)
-				continue
-			}
-			timestamp := time.Unix(int64(ts), 0)
-			prevValue := alphaess.MeasurementValue{
-				Time:  timestamp.UTC(),
-				Value: state,
-			}
-			result[i].Values = append(result[i].Values, prevValue)
+			result[i].Values = append(result[i].Values, a.getMeasurementValuesFromDB(column, statisticId, filter, 1)...)
 		}
-
 	}
 
 	return result
