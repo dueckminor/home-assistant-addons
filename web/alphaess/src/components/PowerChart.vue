@@ -218,31 +218,6 @@ export default {
         })
       })
 
-      // Add battery SOC in background (not stacked, separate axis)
-      const socData = allTimesSorted
-        .filter(time => powerData[time].battery_soc !== undefined)
-        .map(time => ({
-          x: new Date(parseInt(time)),
-          y: powerData[time].battery_soc
-        }))
-      
-      if (socData.length > 0) {
-        // Add SOC as first dataset (background) - keep as line
-        datasets.unshift({
-          label: 'Battery SOC',
-          data: socData,
-          borderColor: colors.battery_soc.border,
-          backgroundColor: colors.battery_soc.bg,
-          borderWidth: 1,
-          tension: 0.3,
-          fill: true,
-          pointRadius: 0,
-          yAxisID: 'y1',
-          order: -1,  // Draw first (background)
-          type: 'line'
-        })
-      }
-
       return { datasets }
     },
     chartOptions() {
@@ -251,6 +226,12 @@ export default {
         maintainAspectRatio: false,
         animation: {
           duration: 0
+        },
+        layout: {
+          padding: {
+            left: 0,
+            right: 0
+          }
         },
         interaction: {
           mode: 'index',
@@ -266,8 +247,7 @@ export default {
               label: (context) => {
                 const label = context.dataset.label || ''
                 const value = Math.abs(context.parsed.y).toFixed(0)
-                const unit = context.dataset.yAxisID === 'y1' ? '%' : 'W'
-                return `${label}: ${value} ${unit}`
+                return `${label}: ${value} W`
               }
             }
           }
@@ -301,19 +281,6 @@ export default {
               callback: function(value) {
                 return Math.abs(value).toFixed(0)
               }
-            }
-          },
-          y1: {
-            type: 'linear',
-            position: 'right',
-            min: 0,
-            max: 100,
-            title: {
-              display: true,
-              text: 'SOC (%)'
-            },
-            grid: {
-              drawOnChartArea: false
             }
           }
         }

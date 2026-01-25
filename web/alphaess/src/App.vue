@@ -100,11 +100,11 @@
               </v-card-text>
             </v-card>
 
-            <!-- Power Chart -->
+            <!-- Battery SOC Chart -->
             <v-card class="mb-4">
               <v-card-title>
-                <v-icon class="me-2">mdi-chart-line</v-icon>
-                Power Flow
+                <v-icon class="me-2">mdi-battery-charging</v-icon>
+                Battery State of Charge
                 <v-spacer></v-spacer>
                 <div class="d-flex align-center ga-2">
                   <v-btn
@@ -154,6 +154,17 @@
                 </div>
               </v-card-title>
               <v-card-text>
+                <SocChart :measurements="chartMeasurements" :selectedDate="selectedDate" />
+              </v-card-text>
+            </v-card>
+
+            <!-- Power Chart -->
+            <v-card class="mb-4">
+              <v-card-title>
+                <v-icon class="me-2">mdi-chart-line</v-icon>
+                Power Flow
+              </v-card-title>
+              <v-card-text>
                 <PowerChart :measurements="chartMeasurements" :selectedDate="selectedDate" />
               </v-card-text>
             </v-card>
@@ -171,6 +182,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import MetricCard from './components/MetricCard.vue'
 import PowerChart from './components/PowerChart.vue'
+import SocChart from './components/SocChart.vue'
 import GapsView from './components/GapsView.vue'
 import { apiGet } from '../../shared/utils/homeassistant.js'
 
@@ -179,6 +191,7 @@ export default {
   components: {
     MetricCard,
     PowerChart,
+    SocChart,
     GapsView
   },
   setup() {
