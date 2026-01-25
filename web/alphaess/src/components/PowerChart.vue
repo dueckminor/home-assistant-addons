@@ -280,8 +280,15 @@ export default {
             ticks: {
               align: 'end',
               padding: 5,
+              font: {
+                family: 'monospace'
+              },
               callback: function(value) {
-                return Math.abs(value).toFixed(0)
+                const absValue = Math.abs(value)
+                if (absValue >= 1000) {
+                  return (absValue / 1000).toFixed(0) + 'k'
+                }
+                return absValue.toFixed(0)
               }
             }
           }

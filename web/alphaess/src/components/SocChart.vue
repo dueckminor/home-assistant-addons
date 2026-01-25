@@ -212,6 +212,9 @@ export default {
             ticks: {
               align: 'end',
               padding: 5,
+              font: {
+                family: 'monospace'
+              },
               callback: function(value) {
                 return value.toFixed(0)
               }
