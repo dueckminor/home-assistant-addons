@@ -100,11 +100,11 @@
               </v-card-text>
             </v-card>
 
-            <!-- Battery SOC Chart -->
+            <!-- Power Flow / Battery State of Charge -->
             <v-card class="mb-4">
               <v-card-title>
-                <v-icon class="me-2">mdi-battery-charging</v-icon>
-                Battery State of Charge
+                <v-icon class="me-2">mdi-chart-line</v-icon>
+                Power Flow / Battery State of Charge
                 <v-spacer></v-spacer>
                 <div class="d-flex align-center ga-2">
                   <v-btn
@@ -155,16 +155,6 @@
               </v-card-title>
               <v-card-text>
                 <SocChart :measurements="chartMeasurements" :selectedDate="selectedDate" />
-              </v-card-text>
-            </v-card>
-
-            <!-- Power Chart -->
-            <v-card class="mb-4">
-              <v-card-title>
-                <v-icon class="me-2">mdi-chart-line</v-icon>
-                Power Flow
-              </v-card-title>
-              <v-card-text>
                 <PowerChart :measurements="chartMeasurements" :selectedDate="selectedDate" />
               </v-card-text>
             </v-card>

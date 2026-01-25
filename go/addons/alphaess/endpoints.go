@@ -198,8 +198,15 @@ func (e *Endpoints) commitFillGaps(c *gin.Context) {
 	})
 }
 
-func min(a, b int) int {
+func min[T int | float64](a, b T) T {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func max[T int | float64](a, b T) T {
+	if a > b {
 		return a
 	}
 	return b

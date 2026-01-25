@@ -278,6 +278,8 @@ export default {
             },
             stacked: true,
             ticks: {
+              align: 'end',
+              padding: 5,
               callback: function(value) {
                 return Math.abs(value).toFixed(0)
               }

@@ -1,41 +1,37 @@
 <template>
-  <div style="position: relative; height: 200px;">
-    <Line :data="chartData" :options="chartOptions" />
+  <div style="position: relative; height: 132px;">
+    <Bar :data="chartData" :options="chartOptions" />
   </div>
 </template>
 
 <script>
-import { Line } from 'vue-chartjs'
+import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
-  TimeScale,
-  Filler
+  TimeScale
 } from 'chart.js'
 import 'chartjs-adapter-date-fns'
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
-  PointElement,
-  LineElement,
+  BarElement,
   Title,
   Tooltip,
   Legend,
-  TimeScale,
-  Filler
+  TimeScale
 )
 
 export default {
   name: 'SocChart',
   components: {
-    Line
+    Bar
   },
   props: {
     measurements: {
@@ -81,50 +77,63 @@ export default {
     },
     chartData() {
       const datasets = []
-      const gapFilledTimes = new Set()
-      
-      // Collect gap times
-      this.measurements.forEach(agg => {
-        if (agg.gap) {
-          const time = new Date(agg.start_time).getTime()
-          gapFilledTimes.add(time)
-        }
-      })
 
-      // Extract SOC data
-      const socData = this.measurements
+      // Create three stacked datasets for min, mean-min, and max-mean
+      const minData = []
+      const meanMinusMinData = []
+      const maxMinusMeanData = []
+      
+      this.measurements
         .filter(agg => agg.battery_soc !== undefined)
-        .map(agg => {
+        .forEach(agg => {
           const time = new Date(agg.start_time)
-          const isGap = gapFilledTimes.has(time.getTime())
+          const min = agg.battery_soc_min || agg.battery_soc
+          const mean = agg.battery_soc
+          const max = agg.battery_soc_max || agg.battery_soc
           
-          return {
-            x: time,
-            y: agg.battery_soc,
-            isGap: isGap
-          }
+          minData.push({ x: time, y: min })
+          meanMinusMinData.push({ x: time, y: mean - min })
+          maxMinusMeanData.push({ x: time, y: max - mean })
         })
       
-      if (socData.length > 0) {
+      if (minData.length > 0) {
+        // Bottom segment: 0 to min (darkest green)
         datasets.push({
-          label: 'Battery SOC',
-          data: socData,
-          borderColor: 'rgba(139, 195, 74, 0.8)',
-          backgroundColor: 'rgba(139, 195, 74, 0.2)',
-          borderWidth: 2,
-          tension: 0.3,
-          fill: true,
-          pointRadius: 0,
-          segment: {
-            borderDash: ctx => {
-              // Use dashed line for gaps
-              const curr = ctx.p1DataIndex
-              if (curr >= 0 && curr < socData.length) {
-                return socData[curr].isGap ? [5, 5] : []
-              }
-              return []
-            }
-          }
+          label: 'Min SOC',
+          data: minData,
+          backgroundColor: this.measurements.map(agg => 
+            agg.gap ? 'rgba(139, 195, 74, 0.5)' : 'rgba(139, 195, 74, 0.85)'
+          ),
+          borderWidth: 0,
+          barPercentage: 0.95,
+          categoryPercentage: 1.0,
+          stack: 'soc'
+        })
+        
+        // Middle segment: min to mean (medium green)
+        datasets.push({
+          label: 'Mean SOC',
+          data: meanMinusMinData,
+          backgroundColor: this.measurements.map(agg => 
+            agg.gap ? 'rgba(139, 195, 74, 0.4)' : 'rgba(139, 195, 74, 0.65)'
+          ),
+          borderWidth: 0,
+          barPercentage: 0.95,
+          categoryPercentage: 1.0,
+          stack: 'soc'
+        })
+        
+        // Top segment: mean to max (lightest green)
+        datasets.push({
+          label: 'Max SOC',
+          data: maxMinusMeanData,
+          backgroundColor: this.measurements.map(agg => 
+            agg.gap ? 'rgba(139, 195, 74, 0.2)' : 'rgba(139, 195, 74, 0.4)'
+          ),
+          borderWidth: 0,
+          barPercentage: 0.95,
+          categoryPercentage: 1.0,
+          stack: 'soc'
         })
       }
 
@@ -149,15 +158,23 @@ export default {
         },
         plugins: {
           legend: {
-            display: true,
-            position: 'bottom'
+            display: false
           },
           tooltip: {
             callbacks: {
-              label: (context) => {
-                const label = context.dataset.label || ''
-                const value = context.parsed.y.toFixed(1)
-                return `${label}: ${value}%`
+              footer: (tooltipItems) => {
+                if (tooltipItems.length === 0) return ''
+                
+                const index = tooltipItems[0].dataIndex
+                const data = this.measurements[index]
+                
+                if (!data) return ''
+                
+                const mean = data.battery_soc?.toFixed(1) || 'N/A'
+                const min = data.battery_soc_min?.toFixed(1) || 'N/A'
+                const max = data.battery_soc_max?.toFixed(1) || 'N/A'
+                
+                return `Min: ${min}% | Mean: ${mean}% | Max: ${max}%`
               }
             }
           }
@@ -174,12 +191,15 @@ export default {
             min: this.dayStart,
             max: this.dayEnd,
             title: {
-              display: true,
-              text: `Time (${this.timezone})`
+              display: false
+            },
+            ticks: {
+              display: false
             },
             grid: {
               display: true
-            }
+            },
+            stacked: true
           },
           y: {
             type: 'linear',
@@ -190,10 +210,13 @@ export default {
               text: 'SOC (%)'
             },
             ticks: {
+              align: 'end',
+              padding: 5,
               callback: function(value) {
                 return value.toFixed(0)
               }
-            }
+            },
+            stacked: true
           }
         }
       }

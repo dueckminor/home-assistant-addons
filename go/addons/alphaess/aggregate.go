@@ -21,6 +21,8 @@ type MeasurementAggregate struct {
 	BatteryCharge         float64   `json:"battery_charge"`           // Wh
 	BatteryChargeFromGrid float64   `json:"battery_charge_from_grid"` // Wh
 	BatterySOC            float64   `json:"battery_soc"`              // % (average)
+	BatterySOCMin         float64   `json:"battery_soc_min"`          // % (minimum)
+	BatterySOCMax         float64   `json:"battery_soc_max"`          // % (maximum)
 }
 
 type AggregateParameters struct {
@@ -43,6 +45,17 @@ func (a *addon) Aggregate(params AggregateParameters) ([]MeasurementAggregate, e
 	// we need, but in case of gaps, we also get the previous measurement before 'from'
 	// and the next measurement after 'to' to be able to calculate deltas.
 	filter := MeasurementFilter{
+		MeasurementNames: []string{
+			"from_grid",
+			"to_grid",
+			"solar_production",
+			"battery_discharge",
+			"battery_charge",
+			"battery_charge_from_grid",
+			"battery_soc",
+			"battery_soc_min",
+			"battery_soc_max",
+		},
 		After:    params.From,
 		Before:   params.To,
 		Siblings: true,
@@ -109,6 +122,10 @@ func (a *addon) measurementsToAggregates(measurements []alphaess.Measurement, lo
 				agg.BatteryChargeFromGrid = v.Value
 			case "battery_soc":
 				agg.BatterySOC = v.Value
+			case "battery_soc_min":
+				agg.BatterySOCMin = v.Value
+			case "battery_soc_max":
+				agg.BatterySOCMax = v.Value
 			}
 		}
 	}
@@ -172,7 +189,9 @@ func (a *addon) groupAndCalculate(aggregates []MeasurementAggregate, timeRanges 
 			agg.BatteryDischarge = (after.BatteryDischarge - before.BatteryDischarge) * factor
 			agg.BatteryCharge = (after.BatteryCharge - before.BatteryCharge) * factor
 			agg.BatteryChargeFromGrid = (after.BatteryChargeFromGrid - before.BatteryChargeFromGrid) * factor
-			agg.BatterySOC = (after.BatterySOC + before.BatterySOC) / 2
+			agg.BatterySOC = after.BatterySOC
+			agg.BatterySOCMin = after.BatterySOCMin
+			agg.BatterySOCMax = after.BatterySOCMax
 		}
 
 		// Calculate load
@@ -185,13 +204,35 @@ func (a *addon) groupAndCalculate(aggregates []MeasurementAggregate, timeRanges 
 }
 
 func findAggregateForTime(timeRange MeasurementAggregate, aggregates []MeasurementAggregate) (before *MeasurementAggregate, after *MeasurementAggregate) {
+
+	measurementCount := 0
+	var batterySOC, batterySOCMin, batterySOCMax float64
+	batterySOCMin = 100.0
+
+	addSOC := func(agg MeasurementAggregate) {
+		measurementCount++
+		batterySOC += agg.BatterySOC
+		batterySOCMin = min(batterySOCMin, agg.BatterySOCMin)
+		batterySOCMax = max(batterySOCMax, agg.BatterySOCMax)
+	}
+
 	for _, agg := range aggregates {
 		if !agg.EndTime.After(timeRange.StartTime) {
 			before = &agg
 		} else if !agg.EndTime.Before(timeRange.EndTime) {
 			after = &agg
+			addSOC(agg)
 			break
+		} else {
+			addSOC(agg)
 		}
 	}
+
+	if after != nil {
+		after.BatterySOC = batterySOC / float64(measurementCount)
+		after.BatterySOCMin = batterySOCMin
+		after.BatterySOCMax = batterySOCMax
+	}
+
 	return before, after
 }

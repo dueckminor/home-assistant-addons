@@ -160,14 +160,35 @@ func (a *addon) getMeasurementValuesFromDB(column string, statisticId string, fi
 
 func (a *addon) getMeasurementsFromDB(filter MeasurementFilter) []Measurement {
 	result := a.scanner.GetMeasurementInfos(filter)
+	if filter.MatchName("battery_soc_min") {
+		result = append(result, alphaess.Measurement{
+			Name: "battery_soc_min",
+			Unit: "%",
+		})
+	}
+	if filter.MatchName("battery_soc_max") {
+		result = append(result, alphaess.Measurement{
+			Name: "battery_soc_max",
+			Unit: "%",
+		})
+	}
 
 	for i := range result {
 		column := "state"
-		statisticId := "sensor.alpha_ess_" + result[i].Name
+		name := result[i].Name
 
-		if result[i].Name == "battery_soc" {
+		switch result[i].Name {
+		case "battery_soc":
 			column = "mean"
+		case "battery_soc_min":
+			column = "min"
+			name = "battery_soc"
+		case "battery_soc_max":
+			column = "max"
+			name = "battery_soc"
 		}
+
+		statisticId := "sensor.alpha_ess_" + name
 
 		if filter.Previous || filter.Siblings {
 			result[i].Values = a.getMeasurementValuesFromDB(column, statisticId, filter, -1)
