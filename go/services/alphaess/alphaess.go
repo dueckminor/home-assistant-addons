@@ -142,6 +142,8 @@ func (s *scanner) init() {
 	s.sensor100Wh(0x0124, "battery_charge_from_grid")
 	s.sensor1W2byte(0x0126, "battery_power")
 
+	s.sensor1W(0x040C, "inverter_power_total")
+
 	s.sensor10Wh(0x0720, "inverter_total_pv_energy")
 
 	s.sensorSolarProduction =

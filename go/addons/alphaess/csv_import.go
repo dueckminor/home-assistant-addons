@@ -2,7 +2,10 @@ package alphaess
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -317,4 +320,119 @@ func GetAllSessions() map[string]*CSVImportSession {
 		sessions[k] = v
 	}
 	return sessions
+}
+
+// SaveCSVToDisk saves CSV content to disk in DataDir/csv folder
+func SaveCSVToDisk(dataDir, date, timezone, content string) error {
+	csvDir := filepath.Join(dataDir, "csv")
+	if err := os.MkdirAll(csvDir, 0755); err != nil {
+		return fmt.Errorf("failed to create csv directory: %w", err)
+	}
+
+	// Create metadata
+	metadata := struct {
+		Date     string `json:"date"`
+		Timezone string `json:"timezone"`
+	}{
+		Date:     date,
+		Timezone: timezone,
+	}
+
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	// Save metadata file
+	metadataPath := filepath.Join(csvDir, date+".json")
+	if err := os.WriteFile(metadataPath, metadataJSON, 0644); err != nil {
+		return fmt.Errorf("failed to save metadata: %w", err)
+	}
+
+	// Save CSV content file
+	csvPath := filepath.Join(csvDir, date+".csv")
+	if err := os.WriteFile(csvPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to save CSV: %w", err)
+	}
+
+	return nil
+}
+
+// LoadAllCSVSessions loads all CSV sessions from disk
+func LoadAllCSVSessions(dataDir string) (map[string]*CSVImportSession, error) {
+	csvDir := filepath.Join(dataDir, "csv")
+	sessions := make(map[string]*CSVImportSession)
+
+	// Check if directory exists
+	if _, err := os.Stat(csvDir); os.IsNotExist(err) {
+		return sessions, nil // Empty is OK
+	}
+
+	// Read directory
+	entries, err := os.ReadDir(csvDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read csv directory: %w", err)
+	}
+
+	// Load each metadata file
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+
+		date := strings.TrimSuffix(entry.Name(), ".json")
+		metadataPath := filepath.Join(csvDir, entry.Name())
+		csvPath := filepath.Join(csvDir, date+".csv")
+
+		// Read metadata
+		metadataBytes, err := os.ReadFile(metadataPath)
+		if err != nil {
+			fmt.Printf("Warning: failed to read metadata %s: %v\n", metadataPath, err)
+			continue
+		}
+
+		var metadata struct {
+			Date     string `json:"date"`
+			Timezone string `json:"timezone"`
+		}
+		if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
+			fmt.Printf("Warning: failed to parse metadata %s: %v\n", metadataPath, err)
+			continue
+		}
+
+		// Read CSV content
+		csvContent, err := os.ReadFile(csvPath)
+		if err != nil {
+			fmt.Printf("Warning: failed to read CSV %s: %v\n", csvPath, err)
+			continue
+		}
+
+		// Parse CSV
+		session, err := ParseCSV(string(csvContent), metadata.Date, metadata.Timezone)
+		if err != nil {
+			fmt.Printf("Warning: failed to parse CSV %s: %v\n", csvPath, err)
+			continue
+		}
+
+		sessions[date] = session
+	}
+
+	return sessions, nil
+}
+
+// DeleteCSVFile deletes a CSV file and its metadata from disk
+func DeleteCSVFile(dataDir, date string) error {
+	csvDir := filepath.Join(dataDir, "csv")
+	metadataPath := filepath.Join(csvDir, date+".json")
+	csvPath := filepath.Join(csvDir, date+".csv")
+
+	// Delete both files
+	if err := os.Remove(metadataPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete metadata: %w", err)
+	}
+	if err := os.Remove(csvPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete CSV: %w", err)
+	}
+
+	return nil
 }

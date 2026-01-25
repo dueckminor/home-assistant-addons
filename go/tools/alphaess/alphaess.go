@@ -63,6 +63,7 @@ func main() {
 
 	alphaEssAddon := addon.NewAddon(addon.AlphaEssAddonConfig{
 		AlphaEssConfig:         theConfig,
+		DataDir:                dataDir,
 		HomeAssistantConfigDir: configDir,
 	})
 

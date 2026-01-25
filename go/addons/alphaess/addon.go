@@ -26,6 +26,7 @@ type AlphaEssConfig struct {
 
 type AlphaEssAddonConfig struct {
 	AlphaEssConfig
+	DataDir                string
 	HomeAssistantConfigDir string
 }
 

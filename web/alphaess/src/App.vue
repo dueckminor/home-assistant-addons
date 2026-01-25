@@ -314,10 +314,15 @@ export default {
         // Update metrics from current measurements
         const findMeasurement = (name) => currentMeasurements.find(m => m.name === name)
         
-        const solarProduction = findMeasurement('solar_production') || findMeasurement('ppv')
+        const solarProduction = findMeasurement('inverter_power_total') || findMeasurement('solar_production') || findMeasurement('ppv')
         if (solarProduction) {
-          const power = calculatePower(solarProduction)
-          metrics.value[0].value = power.toFixed(0)
+          // inverter_power_total is already in W, no need to calculate
+          if (solarProduction.name === 'inverter_power_total') {
+            metrics.value[0].value = getValue(solarProduction).toFixed(0)
+          } else {
+            const power = calculatePower(solarProduction)
+            metrics.value[0].value = power.toFixed(0)
+          }
         }
         
         const batterySoc = findMeasurement('battery_soc') || findMeasurement('soc')

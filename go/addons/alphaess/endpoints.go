@@ -3,7 +3,6 @@ package alphaess
 import (
 	"fmt"
 
-	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
 	"github.com/dueckminor/home-assistant-addons/go/utils/ginutil"
 	"github.com/gin-gonic/gin"
 )
@@ -115,34 +114,33 @@ func (e *Endpoints) importCSV(c *gin.Context) {
 		return
 	}
 
-	// Parse CSV
+	// Parse CSV to validate it
 	session, err := ParseCSV(req.Content, req.Date, req.Timezone)
 	if err != nil {
 		c.JSON(400, gin.H{"error": fmt.Sprintf("Failed to parse CSV: %v", err)})
 		return
 	}
 
-	// Generate session ID
-	sessionID, err := rand.GetString(16)
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to generate session ID"})
+	// Save CSV file to disk
+	if err := SaveCSVToDisk(e.addon.config.DataDir, req.Date, req.Timezone, req.Content); err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to save CSV: %v", err)})
 		return
 	}
 
-	// Store session
-	StoreSession(sessionID, session)
-
 	c.JSON(200, gin.H{
-		"sessionId":   sessionID,
 		"date":        req.Date,
 		"recordCount": len(session.Records),
-		"message":     "CSV uploaded and parsed successfully",
+		"message":     "CSV uploaded and saved successfully",
 	})
 }
 
 // previewFillGaps handles GET /api/fill-gaps
 func (e *Endpoints) previewFillGaps(c *gin.Context) {
-	sessions := GetAllSessions()
+	sessions, err := LoadAllCSVSessions(e.addon.config.DataDir)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to load CSV sessions: %v", err)})
+		return
+	}
 	if len(sessions) == 0 {
 		c.JSON(400, gin.H{"error": "No CSV files uploaded"})
 		return
@@ -152,9 +150,9 @@ func (e *Endpoints) previewFillGaps(c *gin.Context) {
 	preview := make(map[string]interface{})
 	totalHours := 0
 
-	for sessionID, session := range sessions {
+	for date, session := range sessions {
 		hourlyData := session.AggregateToHourly()
-		preview[sessionID] = gin.H{
+		preview[date] = gin.H{
 			"date":       session.Date.Format("2006-01-02"),
 			"hours":      len(hourlyData),
 			"sampleData": hourlyData[:min(3, len(hourlyData))], // Show first 3 hours as preview
@@ -171,7 +169,11 @@ func (e *Endpoints) previewFillGaps(c *gin.Context) {
 
 // commitFillGaps handles POST /api/fill-gaps
 func (e *Endpoints) commitFillGaps(c *gin.Context) {
-	sessions := GetAllSessions()
+	sessions, err := LoadAllCSVSessions(e.addon.config.DataDir)
+	if err != nil {
+		c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to load CSV sessions: %v", err)})
+		return
+	}
 	if len(sessions) == 0 {
 		c.JSON(400, gin.H{"error": "No CSV files uploaded"})
 		return
@@ -186,9 +188,11 @@ func (e *Endpoints) commitFillGaps(c *gin.Context) {
 		// e.addon.InsertMeasurements(hourlyData)
 	}
 
-	// Clear all sessions after commit
-	for sessionID := range sessions {
-		ClearSession(sessionID)
+	// Delete all CSV files after commit
+	for date := range sessions {
+		if err := DeleteCSVFile(e.addon.config.DataDir, date); err != nil {
+			fmt.Printf("Warning: failed to delete CSV file %s: %v\n", date, err)
+		}
 	}
 
 	c.JSON(200, gin.H{
