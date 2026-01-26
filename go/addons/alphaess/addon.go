@@ -31,7 +31,7 @@ type AlphaEssAddonConfig struct {
 }
 
 type addon struct {
-	config  AlphaEssConfig
+	config  AlphaEssAddonConfig
 	scanner alphaess.Scanner
 	db      sqlite.Database
 }
@@ -87,7 +87,7 @@ func NewAddon(config AlphaEssAddonConfig) Addon {
 	}
 
 	return &addon{
-		config:  config.AlphaEssConfig,
+		config:  config,
 		scanner: scanner,
 		db:      db,
 	}

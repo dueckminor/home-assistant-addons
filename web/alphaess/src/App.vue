@@ -160,7 +160,7 @@
             </v-card>
 
             <!-- Data Gaps -->
-            <GapsView />
+            <GapsView @navigate-to-gap="navigateToGap" />
           </v-col>
         </v-row>
       </v-container>
@@ -314,15 +314,10 @@ export default {
         // Update metrics from current measurements
         const findMeasurement = (name) => currentMeasurements.find(m => m.name === name)
         
-        const solarProduction = findMeasurement('inverter_power_total') || findMeasurement('solar_production') || findMeasurement('ppv')
+        const solarProduction = findMeasurement('solar_production') 
         if (solarProduction) {
-          // inverter_power_total is already in W, no need to calculate
-          if (solarProduction.name === 'inverter_power_total') {
-            metrics.value[0].value = getValue(solarProduction).toFixed(0)
-          } else {
             const power = calculatePower(solarProduction)
             metrics.value[0].value = power.toFixed(0)
-          }
         }
         
         const batterySoc = findMeasurement('battery_soc') || findMeasurement('soc')
@@ -395,6 +390,11 @@ export default {
       refreshData()
     }
     
+    const navigateToGap = (dateStr) => {
+      selectedDate.value = new Date(dateStr)
+      refreshData()
+    }
+    
     const onDateSelected = () => {
       datePickerMenu.value = false
       refreshData()
@@ -426,6 +426,7 @@ export default {
       formatDate,
       previousDay,
       nextDay,
+      navigateToGap,
       onDateSelected
     }
   }
