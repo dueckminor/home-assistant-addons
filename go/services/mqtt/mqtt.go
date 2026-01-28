@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"io"
+	"os"
 	"strings"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -42,7 +43,7 @@ func (b *broker) Dial(clientId string, statusTopic string) (Conn, error) {
 	opts.Password = b.password
 	opts.Username = b.username
 	opts.SetClientID(clientId).SetTLSConfig(b.tlsConfig)
-	if statusTopic != "" {
+	if statusTopic != "" && os.Getenv("DEBUG") != "1" {
 		opts.SetWill(statusTopic, "offline", 0, true)
 	}
 	c.client = mqtt.NewClient(opts)

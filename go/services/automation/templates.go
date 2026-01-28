@@ -70,6 +70,10 @@ type DeviceClass int64
 
 const (
 	DeviceClass_Energy DeviceClass = iota
+	DeviceClass_Power
+	DeviceClass_Voltage
+	DeviceClass_Current
+	DeviceClass_Battery
 	DeviceClass_Gas
 )
 
@@ -77,6 +81,14 @@ func (dc DeviceClass) String() string {
 	switch dc {
 	case DeviceClass_Energy:
 		return "energy"
+	case DeviceClass_Power:
+		return "power"
+	case DeviceClass_Voltage:
+		return "voltage"
+	case DeviceClass_Current:
+		return "current"
+	case DeviceClass_Battery:
+		return "battery"
 	case DeviceClass_Gas:
 		return "gas"
 	default:

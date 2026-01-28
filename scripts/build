@@ -3,6 +3,7 @@
 import os
 import sys
 import argparse
+import subprocess
 
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "scripts/lib"))
@@ -39,4 +40,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as e:
+        print(f"\n❌ Build failed with exit code {e.returncode}", file=sys.stderr)
+        sys.exit(e.returncode)
