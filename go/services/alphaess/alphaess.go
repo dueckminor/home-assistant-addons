@@ -80,13 +80,14 @@ type Scanner interface {
 }
 
 type scanner struct {
-	client          *modbus.ModbusClient
-	clientMustClose bool
+	client *modbus.ModbusClient
 
 	registry automation.Registry
 	node     automation.Node
 
-	sensors                   []*sensor
+	sensors   []*sensor
+	sensorMap map[string]*sensor
+
 	sensorSolarProduction     *sensor
 	correctionSolarProduction float64
 	sensorToGrid              *sensor
@@ -108,35 +109,35 @@ type sensor struct {
 func (s *scanner) init() {
 	s.registry = automation.GetRegistry()
 	s.node = s.registry.CreateNode("alphaess")
+
 	// -------------------------------------------------------------------- grid
-	s.sensorToGrid =
-		s.sensor10Wh(0x0010, "to_grid")
+	s.sensor10Wh(0x0010, "to_grid")
 	s.sensor10Wh(0x0012, "from_grid")
-	s.sensor1V(0x0014, "grid_voltage_l1")
-	s.sensor1V(0x0015, "grid_voltage_l2")
-	s.sensor1V(0x0016, "grid_voltage_l3")
-	s.sensor100mA(0x0017, "grid_current_l1")
-	s.sensor100mA(0x0018, "grid_current_l2")
-	s.sensor100mA(0x0019, "grid_current_l3")
+	// s.sensor1V(0x0014, "grid_voltage_l1")
+	// s.sensor1V(0x0015, "grid_voltage_l2")
+	// s.sensor1V(0x0016, "grid_voltage_l3")
+	// s.sensor100mA(0x0017, "grid_current_l1")
+	// s.sensor100mA(0x0018, "grid_current_l2")
+	// s.sensor100mA(0x0019, "grid_current_l3")
 	// s.sensorHz(0x001a, "grid_freq")
-	s.sensor1W(0x001b, "grid_active_power_l1")
-	s.sensor1W(0x001d, "grid_active_power_l2")
-	s.sensor1W(0x001f, "grid_active_power_l3")
+	// s.sensor1W(0x001b, "grid_active_power_l1")
+	// s.sensor1W(0x001d, "grid_active_power_l2")
+	// s.sensor1W(0x001f, "grid_active_power_l3")
 	s.sensor1W(0x0021, "grid_active_power")
-	s.sensor1W(0x0023, "grid_reactive_power_l1")
-	s.sensor1W(0x0025, "grid_reactive_power_l2")
-	s.sensor1W(0x0027, "grid_reactive_power_l3")
-	s.sensor1W(0x0029, "grid_reactive_power")
-	s.sensor1W(0x002b, "grid_apparent_power_l1")
-	s.sensor1W(0x002d, "grid_apparent_power_l2")
-	s.sensor1W(0x002f, "grid_apparent_power_l3")
-	s.sensor1W(0x0031, "grid_apparent_power")
+	// s.sensor1W(0x0023, "grid_reactive_power_l1")
+	// s.sensor1W(0x0025, "grid_reactive_power_l2")
+	// s.sensor1W(0x0027, "grid_reactive_power_l3")
+	// s.sensor1W(0x0029, "grid_reactive_power")
+	// s.sensor1W(0x002b, "grid_apparent_power_l1")
+	// s.sensor1W(0x002d, "grid_apparent_power_l2")
+	// s.sensor1W(0x002f, "grid_apparent_power_l3")
+	// s.sensor1W(0x0031, "grid_apparent_power")
 	// ---------------------------------------------------------------- pv meter
-	s.sensor10Wh(0x0090, "total_to_grid")
-	s.sensor10Wh(0x0092, "total_from_grid")
+	// s.sensor10Wh(0x0090, "total_to_grid")
+	// s.sensor10Wh(0x0092, "total_from_grid")
 	// ----------------------------------------------------------------- battery
-	s.sensor100mV(0x0100, "battery_voltage")
-	s.sensor100mA(0x0101, "battery_current")
+	// s.sensor100mV(0x0100, "battery_voltage")
+	// s.sensor100mA(0x0101, "battery_current")
 	s.sensor100Wh(0x0120, "battery_charge")
 	s.sensor100Wh(0x0122, "battery_discharge")
 	s.sensor100Wh(0x0124, "battery_charge_from_grid")
@@ -144,13 +145,20 @@ func (s *scanner) init() {
 
 	s.sensor1W(0x040C, "inverter_power_total")
 
-	s.sensor10Wh(0x0720, "inverter_total_pv_energy")
+	// s.sensor10Wh(0x0720, "inverter_total_pv_energy")
 
-	s.sensorSolarProduction =
-		s.sensor10Wh(0x08D2, "solar_production")
-	s.correctionSolarProduction = 0.0
+	s.sensor10Wh(0x08D2, "solar_production")
 	s.sensorPercent(0x0102, "battery_soc")
 
+	s.correctionSolarProduction = 0.0
+	s.sensorToGrid = s.sensorMap["to_grid"]
+	s.sensorSolarProduction = s.sensorMap["solar_production"]
+}
+
+func (s *scanner) addSensor(sensor *sensor) *sensor {
+	s.sensors = append(s.sensors, sensor)
+	s.sensorMap[sensor.Name] = sensor
+	return sensor
 }
 
 func (s *scanner) sensor10Wh(addr uint16, name string) *sensor {
@@ -167,8 +175,7 @@ func (s *scanner) sensor10Wh(addr uint16, name string) *sensor {
 		Scale: 10,
 	}
 
-	s.sensors = append(s.sensors, sensor)
-	return sensor
+	return s.addSensor(sensor)
 }
 
 func (s *scanner) sensor100Wh(addr uint16, name string) *sensor {
@@ -184,8 +191,7 @@ func (s *scanner) sensor100Wh(addr uint16, name string) *sensor {
 		Words: 2,
 		Scale: 100,
 	}
-	s.sensors = append(s.sensors, sensor)
-	return sensor
+	return s.addSensor(sensor)
 }
 
 func (s *scanner) sensor1W(addr uint16, name string) *sensor {
@@ -202,8 +208,7 @@ func (s *scanner) sensor1W(addr uint16, name string) *sensor {
 		Words:  2,
 		Scale:  1,
 	}
-	s.sensors = append(s.sensors, sensor)
-	return sensor
+	return s.addSensor(sensor)
 }
 
 func (s *scanner) sensor1W2byte(addr uint16, name string) *sensor {
@@ -220,8 +225,7 @@ func (s *scanner) sensor1W2byte(addr uint16, name string) *sensor {
 		Words:  1,
 		Scale:  1,
 	}
-	s.sensors = append(s.sensors, sensor)
-	return sensor
+	return s.addSensor(sensor)
 }
 
 func (s *scanner) sensor1V(addr uint16, name string) *sensor {
@@ -237,8 +241,7 @@ func (s *scanner) sensor1V(addr uint16, name string) *sensor {
 		Words: 1,
 		Scale: 1,
 	}
-	s.sensors = append(s.sensors, sensor)
-	return sensor
+	return s.addSensor(sensor)
 }
 
 func (s *scanner) sensor100mV(addr uint16, name string) *sensor {
@@ -254,8 +257,7 @@ func (s *scanner) sensor100mV(addr uint16, name string) *sensor {
 		Words: 1,
 		Scale: 0.1,
 	}
-	s.sensors = append(s.sensors, sensor)
-	return sensor
+	return s.addSensor(sensor)
 }
 
 func (s *scanner) sensor100mA(addr uint16, name string) *sensor {
@@ -272,8 +274,7 @@ func (s *scanner) sensor100mA(addr uint16, name string) *sensor {
 		Words:  1,
 		Scale:  0.1,
 	}
-	s.sensors = append(s.sensors, sensor)
-	return sensor
+	return s.addSensor(sensor)
 }
 
 func (s *scanner) sensorPercent(addr uint16, name string) *sensor {
@@ -289,8 +290,7 @@ func (s *scanner) sensorPercent(addr uint16, name string) *sensor {
 		Words: 1,
 		Scale: 0.1,
 	}
-	s.sensors = append(s.sensors, sensor)
-	return sensor
+	return s.addSensor(sensor)
 }
 
 func (s *scanner) modbusConnect() (err error) {
@@ -298,7 +298,6 @@ func (s *scanner) modbusConnect() (err error) {
 	if err != nil {
 		return err
 	}
-	s.clientMustClose = true
 	err = s.client.SetUnitId(0x55)
 	if err != nil {
 		return err
@@ -307,11 +306,7 @@ func (s *scanner) modbusConnect() (err error) {
 }
 
 func (s *scanner) modbusClose() (err error) {
-	if !s.clientMustClose {
-		return nil
-	}
 	err = s.client.Close()
-	s.clientMustClose = false
 	if err != nil {
 		fmt.Println("failed to close modbus client:", err)
 	}
@@ -320,6 +315,7 @@ func (s *scanner) modbusClose() (err error) {
 
 func Run(uri string) (sc Scanner, err error) {
 	s := &scanner{}
+	s.sensorMap = make(map[string]*sensor)
 
 	s.client, err = modbus.NewClient(&modbus.ClientConfiguration{
 		URL:     uri,
