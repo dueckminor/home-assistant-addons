@@ -154,8 +154,18 @@
                 </div>
               </v-card-title>
               <v-card-text>
-                <SocChart :measurements="chartMeasurements" :selectedDate="selectedDate" />
-                <PowerChart :measurements="chartMeasurements" :selectedDate="selectedDate" />
+                <SocChart 
+                  v-if="!loading" 
+                  :key="`soc-${chartKey}`" 
+                  :measurements="chartMeasurements" 
+                  :selectedDate="selectedDate" 
+                />
+                <PowerChart 
+                  v-if="!loading" 
+                  :key="`power-${chartKey}`" 
+                  :measurements="chartMeasurements" 
+                  :selectedDate="selectedDate" 
+                />
               </v-card-text>
             </v-card>
 
@@ -169,7 +179,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import MetricCard from './components/MetricCard.vue'
 import PowerChart from './components/PowerChart.vue'
 import SocChart from './components/SocChart.vue'
@@ -188,6 +198,7 @@ export default {
     const loading = ref(false)
     const selectedDate = ref(new Date())
     const datePickerMenu = ref(false)
+    const chartKey = ref(0)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     
@@ -276,7 +287,8 @@ export default {
         
         // Fetch aggregated measurements from API for selected day
         const aggregates = await apiGet(`measurements/aggregate?interval=hourly&timezone=${encodeURIComponent(timezone)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
-        allMeasurements.value = aggregates
+        allMeasurements.value = Array.isArray(aggregates) ? aggregates : []
+        chartKey.value++
         
         // Fetch current measurements with previous for metrics
         const currentMeasurements = await apiGet('measurements?previous=true')
@@ -376,28 +388,35 @@ export default {
       return selected.getTime() >= todayDate.getTime()
     })
     
-    const previousDay = () => {
+    const previousDay = async () => {
+      if (loading.value) return
       const newDate = new Date(selectedDate.value)
       newDate.setDate(newDate.getDate() - 1)
       selectedDate.value = newDate
-      refreshData()
+      await nextTick()
+      await refreshData()
     }
     
-    const nextDay = () => {
+    const nextDay = async () => {
+      if (loading.value) return
       const newDate = new Date(selectedDate.value)
       newDate.setDate(newDate.getDate() + 1)
       selectedDate.value = newDate
-      refreshData()
+      await nextTick()
+      await refreshData()
     }
     
-    const navigateToGap = (dateStr) => {
+    const navigateToGap = async (dateStr) => {
+      if (loading.value) return
       selectedDate.value = new Date(dateStr)
-      refreshData()
+      await nextTick()
+      await refreshData()
     }
     
-    const onDateSelected = () => {
+    const onDateSelected = async () => {
       datePickerMenu.value = false
-      refreshData()
+      await nextTick()
+      await refreshData()
     }
     
     onMounted(() => {
@@ -419,6 +438,7 @@ export default {
       chartMeasurements,
       selectedDate,
       datePickerMenu,
+      chartKey,
       today,
       isToday,
       refreshData,
