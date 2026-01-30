@@ -24,6 +24,6 @@
     "standard": "^17.1.2",
     "vite": "^7.1.9",
     "vite-plugin-vuetify": "^2.1.2",
-    "vue-router": "^4.5.1"
+    "vue-router": "^5.0.0"
   }
 }
