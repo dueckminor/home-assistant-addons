@@ -132,7 +132,17 @@ func (node *node) Connect() (err error) {
 	if node.mqtt != nil {
 		return nil
 	}
-	node.mqtt, err = node.registry.broker.Dial(node.name, fmt.Sprintf("%s/status", node.name))
+	if node.registry.broker == nil {
+		return nil
+	}
+
+	id, err := rand.GetString(10)
+	if err != nil {
+		panic(err)
+	}
+	clientId := node.name + "-" + id
+
+	node.mqtt, err = node.registry.broker.Dial(clientId, fmt.Sprintf("%s/status", node.name))
 	return err
 }
 
@@ -147,7 +157,7 @@ func (node *node) Disconnect() (err error) {
 
 func (node *node) Publish(topic string, payload string) {
 	err := node.Connect()
-	if err != nil {
+	if err != nil || node.mqtt == nil {
 		return
 	}
 	node.mqtt.Publish(topic, payload)

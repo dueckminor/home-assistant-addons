@@ -1,0 +1,239 @@
+===============================================================================
+Grid Meter Configuration
+===============================================================================
+Address  Description                              Dir Type Remarks
+0000H    Grid Meter CT Enable                     RW  u16  1/bit
+0001H    Grid Meter CT Rate                       RW  u16  1/bit
+
+===============================================================================
+Grid Meter Running Data
+===============================================================================
+Address  Description                              Dir Type Remarks
+0010H    Total energy feed to grid(Grid)          R   u32  0.01kWh/bit
+0012H    Total energy consume from grid(Grid)     R   u32  0.01kWh/bit
+0014H    Voltage of A phase(Grid)                 R   u16  1V
+0015H    Voltage of B phase(Grid)                 R   u16  1V
+0016H    Voltage of C phase(Grid)                 R   u16  1V
+0017H    Current of A phase(Grid)                 R   s16  0.1A
+0018H    Current of B phase(Grid)                 R   s16  0.1A
+0019H    Current of C phase(Grid)                 R   s16  0.1A
+001AH    Frequent(Grid)                           R   u16  0.01Hz
+001BH    Active power of A phase(Grid)            R   s32  1W/bit
+001DH    Active power of B phase(Grid)            R   s32  1W/bit
+001FH    Active power of C phase(Grid)            R   s32  1W/bit
+0021H    Total Active power(Grid Meter)           R   s32  1W/bit
+0023H    Reactive power of A phase(Grid)          R   s32  1var
+0025H    Reactive power of B phase(Grid)          R   s32  1var
+0027H    Reactive power of C phase(Grid)          R   s32  1var
+0029H    Total reactive power(Grid)               R   s32  1var
+002BH    Apparent power of A phase(Grid)          R   s32  1VA
+002DH    Apparent power of B phase(Grid)          R   s32  1VA
+002FH    Apparent power of C phase(Grid)          R   s32  1VA
+0031H    Total apparent power(Grid)               R   s32  1VA
+0033H    Power factor of A phase(Grid)            R   s16  0.01
+0034H    Power factor of B phase(Grid)            R   s16  0.01
+0035H    Power factor of C phase(Grid)            R   s16  0.01
+0036H    Total Power factor(Grid)                 R   s16  0.01
+
+===============================================================================
+PV Meter Configuration
+===============================================================================
+Address  Description                              Dir Type Remarks
+0080H    PV Meter CT Enable                       RW  u16  1/bit
+0081H    PV Meter CT Rate                         RW  u16  1/bit
+
+===============================================================================
+PV Meter Running Data
+===============================================================================
+Address  Description                              Dir Type Remarks
+0090H    Total energy feed to Grid(PV)            R   u32  0.01kWh/bit
+0092H    Total energy consume from Grid(PV)       R   u32  0.01kWh/bit
+0094H    Voltage of A phase(PV)                   R   u16  1V
+0095H    Voltage of B phase(PV)                   R   u16  1V
+0096H    Voltage of C phase(PV)                   R   u16  1V
+0097H    Current of A phase(PV)                   R   s16  0.1A
+0098H    Current of B phase(PV)                   R   s16  0.1A
+0099H    Current of C phase(PV)                   R   s16  0.1A
+009AH    Frequent(PV)                             R   u16  0.01Hz
+009BH    Active power of A phase(PV)              R   s32  1W/bit
+009DH    Active power of B phase(PV)              R   s32  1W/bit
+009FH    Active power of C phase(PV)              R   s32  1W/bit
+00A1H    Total Active power(PV Meter)             R   s32  1W/bit
+00A3H    Reactive power of A phase(PV)            R   s32  1var
+00A5H    Reactive power of B phase(PV)            R   s32  1var
+00A7H    Reactive power of C phase(PV)            R   s32  1var
+00A9H    Total reactive power(PV)                 R   s32  1var
+00ABH    Apparent power of A phase(PV)            R   s32  1VA
+00ADH    Apparent power of B phase(PV)            R   s32  1VA
+00AFH    Apparent power of C phase(PV)            R   s32  1VA
+00B1H    Total apparent power(PV)                 R   s32  1VA
+00B3H    Power factor of A phase(PV)              R   s16  0.01
+00B4H    Power factor of B phase(PV)              R   s16  0.01
+00B5H    Power factor of C phase(PV)              R   s16  0.01
+00B6H    Total Power factor(PV)                   R   s16  0.01
+
+===============================================================================
+Household Battery
+===============================================================================
+Address  Description                              Dir Type Remarks
+0100H    Battery voltage                          R   u16  0.1V/bit
+0101H    Battery current                          R   s16  0.1A/bit
+0102H    Battery SOC                              R   u16  0.1/bit
+0103H    Battery status                           R   u16  Note1
+0104H    Battery relay status                     R   u16  Note2
+0105H    Pack ID of min cell voltage              R   u16  0.001V/bit
+0106H    Cell ID of min cell voltage              R   u16  0.001V/bit
+0107H    Min cell voltage                         R   u16  0.001V/bit
+0108H    Pack ID of max cell voltage              R   u16  0.001V/bit
+0109H    Cell ID of max cell voltage              R   u16  0.001V/bit
+010AH    Max cell voltage                         R   u16  0.001V/bit
+010BH    Pack ID of min cell temperature          R   u16  0.1°C/bit
+010CH    Cell ID of min cell temperature          R   u16  0.1°C/bit
+010DH    Min cell temperature                     R   s16  0.1°C/bit
+010EH    Pack ID of max cell temperature          R   u16  0.1°C/bit
+010FH    Cell ID of max cell temperature          R   u16  0.1°C/bit
+0110H    Max cell temperature                     R   s16  0.1°C/bit
+0111H    Battery max charge current               R   u16  0.1A/bit
+0112H    Battery max discharge current            R   u16  0.1A/bit
+0113H    Battery charge cut-off voltage           R   u16  0.1V/bit
+0114H    Battery discharge cut-off voltage        R   u16  0.1V/bit
+0115H    BMU software version                     R   u16  
+0116H    LMU software version                     R   u16  
+0117H    ISO software version                     R   u16  
+0118H    Battery num                              R   u16  Battery module number
+0119H    Battery capacity                         R   u16  0.1kWh/bit
+011AH    Battery type                             R   u16  Note3
+011BH    Battery SOH                              R   u16  0.1/bit
+011CH    Battery warning                          R   u32  Note28
+011EH    Battery fault                            R   u32  Note4
+0120H    Battery charge energy                    R   u32  0.1kWh/bit
+0122H    Battery discharge energy                 R   u32  0.1kWh/bit
+0124H    Battery energy charge from grid          R   u32  0.1kWh/bit
+0126H    Battery Power                            R   s16  1W/bit (-:Charge, +:Discharge)
+0127H    Battery remaining time                   R   u16  1min/bit
+0128H    Battery Implementation Charge SOC        R   u16  0.1/bit(Rate_SOC-UPS_SOC)
+0129H    Battery Implementation Discharge SOC     R   u16  0.1/bit(Rate_SOC-UPS_SOC)
+012AH    Battery Remaining Charge SOC             R   u16  0.1/bit(Rate_SOC-Remain_SOC)
+012BH    Battery Remaining Discharge SOC          R   u16  0.1/bit(Remain_SOC-UPS_SOC)
+012CH    Battery Max charge power                 R   u16  1W/bit
+012DH    Battery Max Discharge power              R   u16  1W/bit
+012EH    Battery MOS Control                      RW  u16  0:Open, 1:Close
+012FH    Battery SOC Calibration                  R   u16  0:Disable, 1:Enable
+0130H    Battery Single cut error code            R   u16  
+0131H    Battery fault1                           R   u32  
+0133H    Battery fault2                           R   u32  
+0135H    Battery fault3                           R   u32  
+0137H    Battery fault4                           R   u32  
+0139H    Battery fault5                           R   u32  
+013BH    Battery fault6                           R   u32  
+013DH    Battery warning1                         R   u32  
+013FH    Battery warning2                         R   u32  
+0141H    Battery warning3                         R   u32  
+0143H    Battery warning4                         R   u32  
+0145H    Battery warning5                         R   u32  
+0147H    Battery warning6                         R   u32  
+
+===============================================================================
+Household Inverter
+===============================================================================
+Address  Description                              Dir Type Remarks
+0400H    Inverter_Voltage_L1                      R   u16  0.1V/bit
+0401H    Inverter_Voltage_L2                      R   u16  0.1V/bit
+0402H    Inverter_Voltage_L3                      R   u16  0.1V/bit
+0403H    Inverter_Current_L1                      R   s16  0.1A/bit
+0404H    Inverter_Current_L2                      R   s16  0.1A/bit
+0405H    Inverter_Current_L3                      R   s16  0.1A/bit
+0406H    Inverter_Power_L1                        R   s32  1W/bit
+0408H    Inverter_Power_L2                        R   s32  1W/bit
+040AH    Inverter_Power_L3                        R   s32  1W/bit
+040CH    Inverter_Power_Total                     R   s32  1W/bit
+040EH    Inverter_Backup_Voltage_L1               R   u16  0.1V/bit
+040FH    Inverter_Backup_Voltage_L2               R   u16  0.1V/bit
+0410H    Inverter_Backup_Voltage_L3               R   u16  0.1V/bit
+0411H    Inverter_Backup_Current_L1               R   u16  0.1A/bit
+0412H    Inverter_Backup_Current_L2               R   u16  0.1A/bit
+0413H    Inverter_Backup_Current_L3               R   u16  0.1A/bit
+0414H    Inverter_Backup_Power_L1                 R   u32  1W/bit
+0416H    Inverter_Backup_Power_L2                 R   u32  1W/bit
+0418H    Inverter_Backup_Power_L3                 R   u32  1W/bit
+041AH    Inverter_Backup_Power_Total              R   u32  1W/bit
+041CH    Inverter Grid Frequency                  R   u16  0.01Hz/bit
+041DH    PV1 Voltage                              R   u16  0.1V/bit
+041EH    PV1 Current                              R   u16  0.1A/bit
+041FH    PV1 power                                R   u32  1W/bit
+0421H    PV2 Voltage                              R   u16  0.1V/bit
+0422H    PV2 Current                              R   u16  0.1A/bit
+0423H    PV2 power                                R   u32  1W/bit
+0425H    PV3 Voltage                              R   u16  0.1V/bit
+0426H    PV3 Current                              R   u16  0.1A/bit
+0427H    PV3 power                                R   u32  1W/bit
+0429H    PV4 Voltage                              R   u16  0.1V/bit
+042AH    PV4 Current                              R   u16  0.1A/bit
+042BH    PV4 power                                R   u32  1W/bit
+042DH    PV5 Voltage                              R   u16  0.1V/bit
+042EH    PV5 Current                              R   u16  0.1A/bit
+042FH    PV5 power                                R   u32  1W/bit
+0431H    PV6 Voltage                              R   u16  0.1V/bit
+0432H    PV6 Current                              R   u16  0.1A/bit
+0433H    PV6 power                                R   u32  1W/bit
+0435H    INV Temperature                          R   u16  0.1°C/bit
+0436H    Inverter warning1                        R   u32  Reserve
+0438H    Inverter warning2                        R   u32  Reserve
+043AH    Inverter fault1                          R   u32  Note26
+043CH    Inverter fault2                          R   u32  
+043EH    Inverter Total PV Energy                 R   u32  0.1kWh/bit
+0440H    Inverter work mode                       R   u16  Note5
+0441H    Inverter Bat voltage                     R   u16  1V/bit
+0442H    Inverter Bat Current                     R   u16  0.1A/bit
+0443H    Inverter Bat Power                       R   s32  1W/bit
+0444H    Inverter Total React power               R   s32  1W/bit
+0446H    Inverter Total Apparent power            R   s32  1W/bit
+0448H    Inverter Frequency                       R   u16  0.01Hz/bit
+0449H    Inverter Backup Frequency                R   u16  0.01Hz/bit
+044AH    Inverter Power factor                    R   s16  0.01/bit
+044BH    Inverter fault extend1                   R   u32  Note27
+044DH    Inverter fault extend2                   R   u32  
+044FH    Inverter fault extend3                   R   u32  Reserve
+0451H    Inverter fault extend4                   R   u32  Reserve
+
+===============================================================================
+Household Inverter Extend Running Data
+===============================================================================
+Address  Description                              Dir Type Remarks
+0500H~   Reserve                                  R   
+
+===============================================================================
+Inverter Info
+===============================================================================
+Address  Description                              Dir Type Remarks
+0640H~   Inverter master software version         R   10 byte        unsigned char   
+0645H~   Inverter slave software version          R   10 byte        unsigned char   
+064AH~   Inverter SN                              R   20 byte        unsigned char   
+
+===============================================================================
+System (Only applicable to HHE MEC)
+===============================================================================
+Address  Description                              Dir Type Remarks
+0700H    Feed into grid percent                   RW  u16  1%/bit
+0701H    System fault                             R   u32  Note6
+0703H    System_time : (year)-(month)             RW  u16  Data format hex:0xYYMM, example:0x1109; year:0x11(2017) month:0x09(09)
+0704H    System_time : (day)-(hour)               RW  u16  Data format hex:0xDDHH, example:0x1109; day:0x11(The 17 day) hour:0x09(09)
+0705H    System_time : (minute)-(second)          RW  u16  Data format hex:0xmmss, example:0x1109; min:0x11(17) second:0x09(09)
+0706H    EMS SN byte1-2                           R   u16  EMS SN :ASCII 0x414C=='AL'
+0707H    EMS SN byte3-4                           R   u16  EMS SN :ASCII 0x3132=='12'
+0708H    EMS SN byte5-6                           R   u16  EMS SN :ASCII 0x3132=='12'
+0709H    EMS SN byte7-8                           R   u16  EMS SN :ASCII 0x3132=='12'
+070AH    EMS SN byte9-10                          R   u16  EMS SN :ASCII 0x3132=='12'
+070BH    EMS SN byte11-12                         R   u16  EMS SN :ASCII 0x3132=='12'
+070CH    EMS SN byte13-14                         R   u16  EMS SN :ASCII 0x3132=='12'
+070DH    EMS SN byte15-16                         R   u16  EMS SN :ASCII 0x3132=='12'
+070EH    EMS DO0                                   W  u16  Bypass Control function
+070FH    EMS DO1                                   W  u16  System fault output
+0710H    EMS DI0                                  R   u16  EPO, Battery MOS cut off
+0711H    EMS DI1                                  R   u16  Reserved
+0712H    UPS Reserve Soc                          RW  u16  0.1%/bit
+0713H    Time discharge start time1               RW  u16  1h/bit
+0714H    Time discharge stop time1                RW  u16  1h/bit
+0715H    Time discharge start time2               RW  u16  1h/bit
+0716H    Time discharge stop time2                RW  u16  1h/bit
+0717H    Charge Cut Soc                           RW  u16  0.1%/bit
