@@ -135,6 +135,9 @@ func (s *scanner) init() {
 	// ---------------------------------------------------------------- pv meter
 	// s.sensor10Wh(0x0090, "total_to_grid")
 	// s.sensor10Wh(0x0092, "total_from_grid")
+
+	s.sensor1W(0x00A1, "total_active_power")
+
 	// ----------------------------------------------------------------- battery
 	// s.sensor100mV(0x0100, "battery_voltage")
 	// s.sensor100mA(0x0101, "battery_current")
@@ -144,6 +147,7 @@ func (s *scanner) init() {
 	s.sensor1W2byte(0x0126, "battery_power")
 
 	s.sensor1W(0x040C, "inverter_power_total")
+	s.sensor1W(0x041A, "inverter_backup_power_total")
 
 	// s.sensor10Wh(0x0720, "inverter_total_pv_energy")
 
