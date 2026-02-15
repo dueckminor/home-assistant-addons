@@ -100,45 +100,77 @@
               </v-card-text>
             </v-card>
 
-            <!-- Sensors Table -->
-            <v-card>
+            <!-- Power Flow / Battery State of Charge -->
+            <v-card class="mb-4">
               <v-card-title>
-                <v-icon class="me-2">mdi-format-list-bulleted</v-icon>
-                All Sensors
+                <v-icon class="me-2">mdi-chart-line</v-icon>
+                Power Flow / Battery State of Charge
                 <v-spacer></v-spacer>
-                <v-btn
-                  color="primary"
-                  variant="outlined"
-                  @click="refreshData"
-                  :loading="loading"
-                >
-                  <v-icon start>mdi-refresh</v-icon>
-                  Refresh
-                </v-btn>
-              </v-card-title>
-              <v-data-table
-                :headers="sensorHeaders"
-                :items="sensors"
-                :loading="loading"
-                item-value="name"
-                class="elevation-1"
-              >
-                <template v-slot:item.value="{ item }">
-                  <span class="font-weight-bold">{{ item.value }}</span>
-                </template>
-                <template v-slot:item.lastUpdate="{ item }">
-                  {{ formatTime(item.lastUpdate) }}
-                </template>
-                <template v-slot:item.status="{ item }">
-                  <v-chip
-                    :color="item.status === 'online' ? 'success' : 'error'"
+                <div class="d-flex align-center ga-2">
+                  <v-btn
+                    icon="mdi-chevron-left"
                     size="small"
+                    variant="text"
+                    @click="previousDay"
+                    :disabled="loading"
+                  ></v-btn>
+                  <v-menu
+                    v-model="datePickerMenu"
+                    :close-on-content-click="false"
+                    location="bottom"
                   >
-                    {{ item.status }}
-                  </v-chip>
-                </template>
-              </v-data-table>
+                    <template v-slot:activator="{ props }">
+                      <v-btn
+                        v-bind="props"
+                        variant="outlined"
+                        :disabled="loading"
+                      >
+                        <v-icon start>mdi-calendar</v-icon>
+                        {{ formatDate(selectedDate) }}
+                      </v-btn>
+                    </template>
+                    <v-date-picker
+                      v-model="selectedDate"
+                      @update:model-value="onDateSelected"
+                      :max="today"
+                    ></v-date-picker>
+                  </v-menu>
+                  <v-btn
+                    icon="mdi-chevron-right"
+                    size="small"
+                    variant="text"
+                    @click="nextDay"
+                    :disabled="loading || isToday"
+                  ></v-btn>
+                  <v-btn
+                    color="primary"
+                    variant="outlined"
+                    @click="refreshData"
+                    :loading="loading"
+                  >
+                    <v-icon start>mdi-refresh</v-icon>
+                    Refresh
+                  </v-btn>
+                </div>
+              </v-card-title>
+              <v-card-text>
+                <SocChart 
+                  v-if="!loading" 
+                  :key="`soc-${chartKey}`" 
+                  :measurements="chartMeasurements" 
+                  :selectedDate="selectedDate" 
+                />
+                <PowerChart 
+                  v-if="!loading" 
+                  :key="`power-${chartKey}`" 
+                  :measurements="chartMeasurements" 
+                  :selectedDate="selectedDate" 
+                />
+              </v-card-text>
             </v-card>
+
+            <!-- Data Gaps -->
+            <GapsView @navigate-to-gap="navigateToGap" />
           </v-col>
         </v-row>
       </v-container>
@@ -147,17 +179,29 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import MetricCard from './components/MetricCard.vue'
-import { apiGet } from './utils/api'
+import PowerChart from './components/PowerChart.vue'
+import SocChart from './components/SocChart.vue'
+import GapsView from './components/GapsView.vue'
+import { apiGet } from '../../shared/utils/homeassistant.js'
 
 export default {
   name: 'App',
   components: {
-    MetricCard
+    MetricCard,
+    PowerChart,
+    SocChart,
+    GapsView
   },
   setup() {
     const loading = ref(false)
+    const selectedDate = ref(new Date())
+    const datePickerMenu = ref(false)
+    const chartKey = ref(0)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
     const connectionStatus = ref({
       connected: false,
       mqttConnected: false,
@@ -173,7 +217,7 @@ export default {
         key: 'solarProduction',
         title: 'Solar Production',
         value: '0',
-        unit: 'kW',
+        unit: 'W',
         icon: 'mdi-solar-power',
         color: 'orange'
       },
@@ -189,7 +233,7 @@ export default {
         key: 'gridPower',
         title: 'Grid Power',
         value: '0',
-        unit: 'kW',
+        unit: 'W',
         icon: 'mdi-transmission-tower',
         color: 'blue'
       },
@@ -197,78 +241,111 @@ export default {
         key: 'batteryPower',
         title: 'Battery Power',
         value: '0',
-        unit: 'kW',
+        unit: 'W',
         icon: 'mdi-battery-charging',
         color: 'purple'
       }
     ])
     
-    const sensors = ref([])
+    const allMeasurements = ref([])
     
-    const sensorHeaders = [
-      { title: 'Sensor Name', key: 'name', sortable: true },
-      { title: 'Value', key: 'value', sortable: false },
-      { title: 'Unit', key: 'unit', sortable: false },
-      { title: 'Status', key: 'status', sortable: true },
-      { title: 'Last Update', key: 'lastUpdate', sortable: true }
-    ]
+    const chartMeasurements = computed(() => {
+      // Return all aggregates directly (no filtering needed)
+      return allMeasurements.value
+    })
     
     let refreshInterval = null
     
     const refreshData = async () => {
       loading.value = true
       try {
-        // Simulate API calls - replace with actual API endpoints
-        // const status = await apiGet('status')
-        // const sensorData = await apiGet('sensors')
-        
-        // Mock data for demo
+        // Fetch status from API
+        const status = await apiGet('status')
         connectionStatus.value = {
-          connected: true,
-          mqttConnected: true,
-          alphaessConnected: true,
-          mqttUri: 'tcp://core-mosquitto:1883',
-          alphaessUri: 'tcp://192.168.1.100:502',
+          connected: status.connected,
+          mqttConnected: status.mqttConnected,
+          alphaessConnected: status.alphaessConnected,
+          mqttUri: status.mqttUri,
+          alphaessUri: status.alphaessUri,
           lastUpdate: new Date(),
-          sensorCount: 24
+          sensorCount: 0
         }
         
-        sensors.value = [
-          {
-            name: 'solar_production',
-            value: '3.2',
-            unit: 'kW',
-            status: 'online',
-            lastUpdate: new Date()
-          },
-          {
-            name: 'battery_soc',
-            value: '85',
-            unit: '%',
-            status: 'online',
-            lastUpdate: new Date()
-          },
-          {
-            name: 'grid_active_power',
-            value: '1.5',
-            unit: 'kW',
-            status: 'online',
-            lastUpdate: new Date()
-          },
-          {
-            name: 'battery_power',
-            value: '-0.8',
-            unit: 'kW',
-            status: 'online',
-            lastUpdate: new Date()
-          }
-        ]
+        // Get start of selected day
+        const startOfDay = new Date(selectedDate.value)
+        startOfDay.setHours(0, 0, 0, 0)
+        const from = startOfDay.toISOString()
         
-        // Update metrics
-        metrics.value[0].value = '3.2'
-        metrics.value[1].value = '85'
-        metrics.value[2].value = '1.5'
-        metrics.value[3].value = '-0.8'
+        // Get start of next day (to include 23:00-24:00 hour)
+        const nextDay = new Date(selectedDate.value)
+        nextDay.setDate(nextDay.getDate() + 1)
+        nextDay.setHours(0, 0, 0, 0)
+        const to = nextDay.toISOString()
+        
+        // Get timezone
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        
+        // Fetch aggregated measurements from API for selected day
+        const aggregates = await apiGet(`measurements/aggregate?interval=hourly&timezone=${encodeURIComponent(timezone)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+        allMeasurements.value = Array.isArray(aggregates) ? aggregates : []
+        chartKey.value++
+        
+        // Fetch current measurements with previous for metrics
+        const currentMeasurements = await apiGet('measurements?previous=true')
+        
+        connectionStatus.value.sensorCount = currentMeasurements.length
+        
+        // Helper to calculate power from accumulated energy (Wh to W)
+        const calculatePower = (measurement) => {
+          if (!measurement || !measurement.values || measurement.values.length < 2) {
+            return measurement?.values?.[0]?.value || 0
+          }
+          const current = measurement.values[0]
+          const previous = measurement.values[1]
+          
+          if (!current || !previous || !current.time || !previous.time) {
+            return current?.value || 0
+          }
+          
+          const energyDiff = current.value - previous.value // Wh
+          const timeDiff = (new Date(current.time) - new Date(previous.time)) / 1000 / 3600 // hours
+          
+          if (timeDiff <= 0) return 0
+          
+          return energyDiff / timeDiff // W
+        }
+        
+        // Helper to get latest value from measurement
+        const getValue = (measurement) => {
+          if (!measurement || !measurement.values || measurement.values.length === 0) {
+            return 0
+          }
+          return measurement.values[0].value || 0
+        }
+        
+        // Update metrics from current measurements
+        const findMeasurement = (name) => currentMeasurements.find(m => m.name === name)
+        
+        const solarProduction = findMeasurement('solar_production') 
+        if (solarProduction) {
+            const power = calculatePower(solarProduction)
+            metrics.value[0].value = power.toFixed(0)
+        }
+        
+        const batterySoc = findMeasurement('battery_soc') || findMeasurement('soc')
+        if (batterySoc) {
+          metrics.value[1].value = getValue(batterySoc).toFixed(0)
+        }
+        
+        const gridPower = findMeasurement('grid_active_power') || findMeasurement('pgrid')
+        if (gridPower) {
+          metrics.value[2].value = getValue(gridPower).toFixed(0)
+        }
+        
+        const batteryPower = findMeasurement('battery_power') || findMeasurement('pbat')
+        if (batteryPower) {
+          metrics.value[3].value = getValue(batteryPower).toFixed(0)
+        }
         
       } catch (error) {
         console.error('Failed to refresh data:', error)
@@ -281,6 +358,65 @@ export default {
     const formatTime = (date) => {
       if (!date) return 'Never'
       return new Date(date).toLocaleString()
+    }
+    
+    const formatDate = (date) => {
+      const d = new Date(date)
+      const todayDate = new Date()
+      todayDate.setHours(0, 0, 0, 0)
+      const compareDate = new Date(d)
+      compareDate.setHours(0, 0, 0, 0)
+      
+      if (compareDate.getTime() === todayDate.getTime()) {
+        return 'Today'
+      }
+      
+      const yesterday = new Date(todayDate)
+      yesterday.setDate(yesterday.getDate() - 1)
+      if (compareDate.getTime() === yesterday.getTime()) {
+        return 'Yesterday'
+      }
+      
+      return d.toLocaleDateString()
+    }
+    
+    const isToday = computed(() => {
+      const todayDate = new Date()
+      todayDate.setHours(0, 0, 0, 0)
+      const selected = new Date(selectedDate.value)
+      selected.setHours(0, 0, 0, 0)
+      return selected.getTime() >= todayDate.getTime()
+    })
+    
+    const previousDay = async () => {
+      if (loading.value) return
+      const newDate = new Date(selectedDate.value)
+      newDate.setDate(newDate.getDate() - 1)
+      selectedDate.value = newDate
+      await nextTick()
+      await refreshData()
+    }
+    
+    const nextDay = async () => {
+      if (loading.value) return
+      const newDate = new Date(selectedDate.value)
+      newDate.setDate(newDate.getDate() + 1)
+      selectedDate.value = newDate
+      await nextTick()
+      await refreshData()
+    }
+    
+    const navigateToGap = async (dateStr) => {
+      if (loading.value) return
+      selectedDate.value = new Date(dateStr)
+      await nextTick()
+      await refreshData()
+    }
+    
+    const onDateSelected = async () => {
+      datePickerMenu.value = false
+      await nextTick()
+      await refreshData()
     }
     
     onMounted(() => {
@@ -299,10 +435,19 @@ export default {
       loading,
       connectionStatus,
       metrics,
-      sensors,
-      sensorHeaders,
+      chartMeasurements,
+      selectedDate,
+      datePickerMenu,
+      chartKey,
+      today,
+      isToday,
       refreshData,
-      formatTime
+      formatTime,
+      formatDate,
+      previousDay,
+      nextDay,
+      navigateToGap,
+      onDateSelected
     }
   }
 }
