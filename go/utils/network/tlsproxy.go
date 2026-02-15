@@ -38,7 +38,7 @@ type TLSProxy interface {
 	SetMetricCallback(metricCallback MetricCallback)
 	DeleteHandler(sni string)
 	InternalOnly(sni string)
-	AddTLSConfig(sni string, tlsConfig *tls.Config)
+	AddTLSCertificates(sni string, tlsCertificates []tls.Certificate)
 	EnableProxyProtocol(enable bool)
 }
 type tlsProxy struct {
@@ -144,7 +144,15 @@ func (tp *tlsProxy) InternalOnly(sni string) {
 	tp.internal[sni] = true
 }
 
-func (tp *tlsProxy) AddTLSConfig(sni string, tlsConfig *tls.Config) {
+func (tp *tlsProxy) AddTLSCertificates(sni string, tlsCertificates []tls.Certificate) {
+	if len(tlsCertificates) == 0 {
+		delete(tp.tlsConfigs, sni)
+		return
+	}
+	tlsConfig := &tls.Config{
+		Certificates: tlsCertificates,
+		NextProtos:   []string{"h2", "http/1.1"},
+	}
 	tp.tlsConfigs[sni] = tlsConfig
 }
 

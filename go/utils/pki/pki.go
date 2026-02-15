@@ -16,7 +16,7 @@ type CA interface {
 }
 
 type TLSServer interface {
-	AddTLSConfig(sni string, tlsConfig *tls.Config)
+	AddTLSCertificates(sni string, tlsCertificates []tls.Certificate)
 }
 
 type ServerCertificate interface {
@@ -32,17 +32,17 @@ type keyAndChain struct {
 }
 
 type serverCertificate struct {
-	cancel      func()
-	tlsServer   TLSServer
-	keyAndChain *keyAndChain
-	keyFile     string
-	certFile    string
-	newKeyFile  string
-	newCsrFile  string
-	newCertFile string
-	tlsConfig   *tls.Config
-	issuer      CA
-	dnsNames    []string
+	cancel          func()
+	tlsServer       TLSServer
+	keyAndChain     *keyAndChain
+	keyFile         string
+	certFile        string
+	newKeyFile      string
+	newCsrFile      string
+	newCertFile     string
+	tlsCertificates []tls.Certificate
+	issuer          CA
+	dnsNames        []string
 }
 
 func (sc *serverCertificate) Close() error {
@@ -52,15 +52,15 @@ func (sc *serverCertificate) Close() error {
 
 func (sc *serverCertificate) SetTLSServer(tlsServer TLSServer) {
 	sc.tlsServer = tlsServer
-	sc.tlsServer.AddTLSConfig(sc.dnsNames[0], sc.tlsConfig)
+	sc.tlsServer.AddTLSCertificates(sc.dnsNames[0], sc.tlsCertificates)
 }
 
 func (sc *serverCertificate) updateTLSServer() {
-	if nil == sc.tlsServer || nil == sc.tlsConfig {
+	if nil == sc.tlsServer || len(sc.tlsCertificates) == 0 {
 		return
 	}
 	for _, sni := range sc.dnsNames {
-		sc.tlsServer.AddTLSConfig(sni, sc.tlsConfig)
+		sc.tlsServer.AddTLSCertificates(sni, sc.tlsCertificates)
 	}
 }
 
@@ -115,13 +115,11 @@ func (sc *serverCertificate) refreshLoopStep(ctx context.Context) (err error) {
 		return err
 	}
 
-	sc.tlsConfig = &tls.Config{
-		Certificates: []tls.Certificate{
-			{
-				Certificate: chain.ASN1(),
-				PrivateKey:  key,
-				Leaf:        chain[0].OBJ(),
-			},
+	sc.tlsCertificates = []tls.Certificate{
+		{
+			Certificate: chain.ASN1(),
+			PrivateKey:  key,
+			Leaf:        chain[0].OBJ(),
 		},
 	}
 
