@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/auth"
 	"github.com/gin-contrib/sessions"
@@ -58,21 +57,7 @@ func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) ServeCt
 	}
 
 	if combinedOptions.MetricCallback != nil {
-		r.Use(func(c *gin.Context) {
-			metric := Metric{
-				Timestamp:  time.Now(),
-				ClientAddr: c.ClientIP(),
-			}
-			defer func() {
-				metric.Duration = time.Since(metric.Timestamp)
-				metric.Hostname = c.Request.Host
-				metric.Method = c.Request.Method
-				metric.Path = c.Request.URL.Path
-				metric.ResponseCode = c.Writer.Status()
-				combinedOptions.MetricCallback(metric)
-			}()
-			c.Next()
-		})
+		r.Use(MetricMiddleware(combinedOptions.MetricCallback))
 	}
 
 	if combinedOptions.AuthClient != nil {
