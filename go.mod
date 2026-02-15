@@ -22,7 +22,7 @@ require (
 	golang.org/x/net v0.50.0
 	golang.org/x/text v0.34.0
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.44.1
+	modernc.org/sqlite v1.45.0
 )
 
 require (
