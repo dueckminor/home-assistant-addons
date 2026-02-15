@@ -358,6 +358,11 @@ func (g *Gateway) startAuthServer(route *ConfigRoute) {
 		panic("only one auth-server allowed")
 	}
 	r := gin.Default()
+
+	if g.metricsCollector != nil {
+		r.Use(network.MetricMiddleware(g.metricCallback))
+	}
+
 	var err error
 	g.authServer, err = auth.NewAuthServer(r, g.distAuth, path.Join(g.dataDir, "auth"))
 	if err != nil {
