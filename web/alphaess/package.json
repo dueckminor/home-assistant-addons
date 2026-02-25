@@ -16,7 +16,7 @@
     "date-fns": "^4.1.0",
     "vue": "^3.4.23",
     "vue-chartjs": "^5.3.3",
-    "vuetify": "^3.6.0"
+    "vuetify": "^4.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.0",
