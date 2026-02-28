@@ -3,6 +3,7 @@ package dns
 import (
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
@@ -140,13 +141,7 @@ func (s *server) getDomain(name string) *domain {
 func (s *server) DelDomains(domains ...string) error {
 	newDomains := []*domain{}
 	for _, domain := range s.domains {
-		toBeDeleted := false
-		for _, name := range domains {
-			if domain.name == name {
-				toBeDeleted = true
-				break
-			}
-		}
+		toBeDeleted := slices.Contains(domains, domain.name)
 		if !toBeDeleted {
 			newDomains = append(newDomains, domain)
 		}

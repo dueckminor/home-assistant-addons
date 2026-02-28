@@ -49,8 +49,7 @@ type Node interface {
 	CreateClimate(template *ObjectTemplate) Climate
 }
 
-type Object interface {
-}
+type Object any
 
 type Sensor interface {
 	Object
@@ -58,8 +57,7 @@ type Sensor interface {
 	Unit() Unit
 }
 
-type Climate interface {
-}
+type Climate any
 
 ////////////////////////////////////////////////////////////////////////////////
 

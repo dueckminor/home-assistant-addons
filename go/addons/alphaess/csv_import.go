@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -316,9 +317,7 @@ func GetAllSessions() map[string]*CSVImportSession {
 	sessionMutex.RLock()
 	defer sessionMutex.RUnlock()
 	sessions := make(map[string]*CSVImportSession, len(importSessions))
-	for k, v := range importSessions {
-		sessions[k] = v
-	}
+	maps.Copy(sessions, importSessions)
 	return sessions
 }
 

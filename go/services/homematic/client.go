@@ -7,7 +7,7 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
-type CcuCallback func(dev Device, valueKey string, value interface{})
+type CcuCallback func(dev Device, valueKey string, value any)
 
 type CcuClient interface {
 	GetVersion() (version string, err error)
@@ -41,7 +41,7 @@ func (ccuc *CcuClientImpl) ParseMethodCall(methodName string, cb xmlrpc.MethodCa
 		var interfaceID string
 		var address string
 		var valueKey string
-		var value interface{}
+		var value any
 		err = cb.GetCallParam(&interfaceID)
 		if err != nil {
 			return err
@@ -83,7 +83,7 @@ func (ccuc *CcuClientImpl) SetCallback(cb CcuCallback) {
 }
 
 func (ccuc *CcuClientImpl) Init(url string, interfaceID string) (err error) {
-	return ccuc.xmlrpcClient.Call("init", []interface{}{url, interfaceID}, nil)
+	return ccuc.xmlrpcClient.Call("init", []any{url, interfaceID}, nil)
 }
 
 func (ccuc *CcuClientImpl) GetVersion() (version string, err error) {
@@ -101,12 +101,12 @@ func (ccuc *CcuClientImpl) ListDevices() (devices []DeviceDescription, err error
 }
 
 func (ccuc *CcuClientImpl) GetDeviceDescription(address string) (device *DeviceDescription, err error) {
-	err = ccuc.xmlrpcClient.Call("getDeviceDescription", []interface{}{address}, &device)
+	err = ccuc.xmlrpcClient.Call("getDeviceDescription", []any{address}, &device)
 	return device, err
 }
 
 func (ccuc *CcuClientImpl) GetParamsetDescription(address string, paramsetType string) (paramsetDescription ParamsetDescription, err error) {
-	err = ccuc.xmlrpcClient.Call("getParamsetDescription", []interface{}{
+	err = ccuc.xmlrpcClient.Call("getParamsetDescription", []any{
 		address, paramsetType,
 	}, &paramsetDescription)
 	return paramsetDescription, err
@@ -124,23 +124,23 @@ func (ccuc *CcuClientImpl) GetLinkDescription(address string) (paramsetDescripti
 	return ccuc.GetParamsetDescription(address, "LINK")
 }
 
-func (ccuc *CcuClientImpl) GetValue(address, valueKey string) (value interface{}, err error) {
-	err = ccuc.xmlrpcClient.Call("getValue", []interface{}{address, valueKey}, &value)
+func (ccuc *CcuClientImpl) GetValue(address, valueKey string) (value any, err error) {
+	err = ccuc.xmlrpcClient.Call("getValue", []any{address, valueKey}, &value)
 	return value, err
 }
 
 func (ccuc *CcuClientImpl) GetParamsetID(address, paramsetType string) (value string, err error) {
-	err = ccuc.xmlrpcClient.Call("getParamsetId", []interface{}{address, paramsetType}, &value)
+	err = ccuc.xmlrpcClient.Call("getParamsetId", []any{address, paramsetType}, &value)
 	return value, err
 }
 
-func (ccuc *CcuClientImpl) GetParamset(address, paramsetKey string) (value map[string]interface{}, err error) {
-	err = ccuc.xmlrpcClient.Call("getParamset", []interface{}{address, paramsetKey}, &value)
+func (ccuc *CcuClientImpl) GetParamset(address, paramsetKey string) (value map[string]any, err error) {
+	err = ccuc.xmlrpcClient.Call("getParamset", []any{address, paramsetKey}, &value)
 	return value, err
 }
 
-func (ccuc *CcuClientImpl) SetValue(address, valueKey string, value interface{}) (err error) {
-	return ccuc.xmlrpcClient.Call("setValue", []interface{}{address, valueKey, value}, nil)
+func (ccuc *CcuClientImpl) SetValue(address, valueKey string, value any) (err error) {
+	return ccuc.xmlrpcClient.Call("setValue", []any{address, valueKey, value}, nil)
 }
 
 func (ccuc *CcuClientImpl) getDevices() (err error) {

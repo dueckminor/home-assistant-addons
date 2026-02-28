@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"os"
+	"strings"
 )
 
 type Certificate interface {
@@ -15,11 +16,11 @@ type Certificate interface {
 type CertificateChain []Certificate
 
 func (chain CertificateChain) PEM() string {
-	result := ""
+	var result strings.Builder
 	for _, cert := range chain {
-		result += cert.PEM()
+		result.WriteString(cert.PEM())
 	}
-	return result
+	return result.String()
 }
 
 func (chain CertificateChain) ASN1() [][]byte {

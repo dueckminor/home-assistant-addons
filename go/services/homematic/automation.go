@@ -34,7 +34,7 @@ func StartMqttBridge(config HomematicConfig) (err error) {
 		return err
 	}
 
-	ccuc.SetCallback(func(dev Device, valueKey string, value interface{}) {
+	ccuc.SetCallback(func(dev Device, valueKey string, value any) {
 		if valueKey == "GAS_ENERGY_COUNTER" {
 			sensorGas.SetState(value)
 		}

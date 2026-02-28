@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -351,10 +352,8 @@ func (u *users) DeleteGroup(guid string) error {
 	}
 
 	for _, user := range u.config.Users {
-		for _, groupname := range user.Groups {
-			if groupname == group.Name {
-				return fmt.Errorf("group %s is still used", group.Name)
-			}
+		if slices.Contains(user.Groups, group.Name) {
+			return fmt.Errorf("group %s is still used", group.Name)
 		}
 	}
 

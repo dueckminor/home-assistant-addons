@@ -8,14 +8,14 @@ import (
 )
 
 type AddonInfo struct {
-	Slug        string                 `json:"slug"`
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Version     string                 `json:"version"`
-	State       string                 `json:"state"`
-	Network     map[string]int         `json:"network"`
-	NetworkMode string                 `json:"network_mode"`
-	Options     map[string]interface{} `json:"options"`
+	Slug        string         `json:"slug"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Version     string         `json:"version"`
+	State       string         `json:"state"`
+	Network     map[string]int `json:"network"`
+	NetworkMode string         `json:"network_mode"`
+	Options     map[string]any `json:"options"`
 }
 
 type AddonsResponse struct {
