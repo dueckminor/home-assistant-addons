@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -43,7 +44,9 @@ type TLSProxy interface {
 }
 type tlsProxy struct {
 	listener       net.Listener
-	serveHandlers  map[string]ServeCtx
+	httpsListener  Listener
+	httpsServer    *http.Server
+	httpHandlers   map[string]http.Handler
 	dialHandlers   map[string]ProxyDialCtx
 	tlsConfigs     map[string]*tls.Config
 	internal       map[string]bool
@@ -54,10 +57,10 @@ type tlsProxy struct {
 
 func NewTLSProxy(network string, address string) (TLSProxy, error) {
 	tp := &tlsProxy{
-		serveHandlers: make(map[string]ServeCtx),
-		dialHandlers:  make(map[string]ProxyDialCtx),
-		tlsConfigs:    make(map[string]*tls.Config),
-		internal:      make(map[string]bool),
+		httpHandlers: make(map[string]http.Handler),
+		dialHandlers: make(map[string]ProxyDialCtx),
+		tlsConfigs:   make(map[string]*tls.Config),
+		internal:     make(map[string]bool),
 	}
 	err := tp.start(network, address)
 	if err != nil {
@@ -80,16 +83,23 @@ func (tp *tlsProxy) Close() error {
 		tp.listener.Close()
 		tp.listener = nil
 	}
+	if tp.httpsServer != nil {
+		close(tp.httpsListener)
+		tp.httpsListener = nil
+		tp.httpsServer.Close()
+		tp.httpsServer = nil
+	}
 	return nil
 }
 
 func (tp *tlsProxy) start(network string, address string) error {
+	tp.startHTTPSServer()
+
 	listener, err := net.Listen(network, address)
 	if err != nil {
 		return err
 	}
 	go func() {
-
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
@@ -111,11 +121,11 @@ func (tp *tlsProxy) SetExternalIp(address string) {
 }
 
 func (tp *tlsProxy) AddHandler(sni string, handler any) {
-	var serveHandler ServeCtx
+	var serveHandler http.Handler
 	var dialHandler ProxyDialCtx
 
 	switch v := handler.(type) {
-	case ServeCtx:
+	case http.Handler:
 		serveHandler = v
 	case ProxyDialCtx:
 		dialHandler = v
@@ -126,17 +136,17 @@ func (tp *tlsProxy) AddHandler(sni string, handler any) {
 		return
 	}
 	if serveHandler != nil {
-		tp.serveHandlers[sni] = serveHandler
+		tp.httpHandlers[sni] = serveHandler
 		delete(tp.dialHandlers, sni)
 	} else {
 		tp.dialHandlers[sni] = dialHandler
-		delete(tp.serveHandlers, sni)
+		delete(tp.httpHandlers, sni)
 	}
 }
 
 func (tp *tlsProxy) DeleteHandler(sni string) {
 	delete(tp.dialHandlers, sni)
-	delete(tp.serveHandlers, sni)
+	delete(tp.httpHandlers, sni)
 	delete(tp.internal, sni)
 }
 
@@ -151,8 +161,8 @@ func (tp *tlsProxy) AddTLSCertificates(sni string, tlsCertificates []tls.Certifi
 	}
 	tlsConfig := &tls.Config{
 		Certificates: tlsCertificates,
-		// NextProtos:   []string{"h2", "http/1.1"},
-		MinVersion: tls.VersionTLS12,
+		NextProtos:   []string{"h2", "http/1.1"},
+		MinVersion:   tls.VersionTLS12,
 		CipherSuites: []uint16{
 			// TLS 1.3 cipher suites (order doesn't matter for TLS 1.3)
 			tls.TLS_AES_128_GCM_SHA256,
@@ -167,6 +177,7 @@ func (tp *tlsProxy) AddTLSCertificates(sni string, tlsCertificates []tls.Certifi
 			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
 		},
 		CurvePreferences: []tls.CurveID{
+			tls.X25519MLKEM768,
 			tls.X25519,
 			tls.CurveP256,
 			tls.CurveP384,
@@ -175,21 +186,21 @@ func (tp *tlsProxy) AddTLSCertificates(sni string, tlsCertificates []tls.Certifi
 	tp.tlsConfigs[sni] = tlsConfig
 }
 
-func (tp *tlsProxy) getHandler(sni string) (serve ServeCtx, dial ProxyDialCtx, internal bool) {
+func (tp *tlsProxy) getHandler(sni string) (httpHandler http.Handler, dial ProxyDialCtx, internal bool) {
 	if !tp.isValidHostname(sni) {
 		return nil, nil, false
 	}
 	wildcard := "*." + strings.Join(strings.Split(sni, ".")[1:], ".")
 	internal = tp.internal[sni] || tp.internal[wildcard]
 	var ok bool
-	if serve, ok = tp.serveHandlers[sni]; !ok {
+	if httpHandler, ok = tp.httpHandlers[sni]; !ok {
 		if dial, ok = tp.dialHandlers[sni]; !ok {
-			if serve, ok = tp.serveHandlers[wildcard]; !ok {
+			if httpHandler, ok = tp.httpHandlers[wildcard]; !ok {
 				dial, ok = tp.dialHandlers[wildcard]
 			}
 		}
 	}
-	return serve, dial, internal
+	return httpHandler, dial, internal
 }
 
 func (tp *tlsProxy) getTLSConfig(sni string) *tls.Config {
@@ -241,50 +252,23 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 	clientAddr := clientWrapper.RemoteAddr()
 
 	var sni string
-	var serve ServeCtx
+	var httpHandler http.Handler
 	var dial ProxyDialCtx
-	var internal bool
 
 	tlsConn := tls.Server(clientWrapper, &tls.Config{GetConfigForClient: func(clientHelloInfo *tls.ClientHelloInfo) (*tls.Config, error) {
-		clientWrapper.cacheRead = false
 		sni = clientHelloInfo.ServerName
-		fmt.Println("ServerName:", sni)
-
-		serve, dial, internal = tp.getHandler(sni)
-
-		fmt.Println("Remote:", clientAddr)
-		if internal {
-			fmt.Println("Internal!")
-		}
-
-		if nil == serve && nil == dial {
-			fmt.Println("-> dropped")
-			return nil, os.ErrInvalid
-		}
-		if dial != nil {
-			// from now on the connection is handled by dialer
-			// disconnect conn from the clientWrapper, so that the tls
-			// implementation can no longer use it
-			clientWrapper.conn = nil
-			// let the tls handshake fail
-			return nil, os.ErrInvalid
-		}
-
-		tlsConfig := tp.getTLSConfig(sni)
-		if tlsConfig == nil {
-			fmt.Println("-> dropped (have no cert")
-			// let the tls handshake fail
-			return nil, os.ErrInvalid
-		}
-
-		return tlsConfig, nil
+		// ensure that no response is sent back to the client before we know if the hostname is valid
+		clientWrapper.conn = nil
+		return nil, os.ErrInvalid
 	}})
+	_ = tlsConn.Handshake()
 
-	err = tlsConn.Handshake()
+	tlsConfig := tp.getTLSConfig(sni)
+	httpHandler, dial, _ = tp.getHandler(sni)
 
 	fmt.Println(tlsConn.RemoteAddr())
 
-	if nil == serve && nil == dial {
+	if tlsConfig == nil || (nil == httpHandler && nil == dial) {
 		fmt.Println("ServerName:", sni, "rejected")
 		if tp.metricCallback != nil {
 			tp.metricCallback(Metric{
@@ -297,25 +281,16 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	if err != nil && dial == nil {
-		fmt.Println("Handshake Err:", err)
-		if tp.metricCallback != nil {
-			tp.metricCallback(Metric{
-				Timestamp:    time.Now(),
-				ClientAddr:   clientAddr.String(),
-				Hostname:     sni,
-				ResponseCode: 667,
-			})
-		}
-		return
-	}
-
 	fmt.Println("ServerName:", sni)
 
-	if serve != nil {
-		// from now on hostImpl is responsible to close the connection
-		closeConn = false
-		serve.ServeCtx(ctx, tlsConn)
+	// if the handshake was successful, the hostname is valid and we can continue
+	clientWrapper.conn = conn
+	clientWrapper.cacheRead = false
+	closeConn = false
+
+	if httpHandler != nil {
+		clientWrapper.RepeatRead()
+		tp.httpsListener.ServeCtx(ctx, clientWrapper)
 		return
 	}
 
@@ -336,4 +311,28 @@ func (tp *tlsProxy) handleDialer(ctx context.Context, sni string, conn net.Conn,
 	}
 
 	forwardConnect(conn, targetConn)
+}
+
+func (tp *tlsProxy) startHTTPSServer() {
+	tp.httpsServer = &http.Server{
+		TLSConfig: &tls.Config{GetConfigForClient: func(clientHelloInfo *tls.ClientHelloInfo) (*tls.Config, error) {
+			sni := clientHelloInfo.ServerName
+			tlsConfig := tp.getTLSConfig(sni)
+			if tlsConfig == nil {
+				return nil, os.ErrInvalid
+			}
+			return tlsConfig, nil
+		}},
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			sni := r.Host
+			httpHandler, _, _ := tp.getHandler(sni)
+			if httpHandler == nil {
+				http.NotFound(w, r)
+				return
+			}
+			httpHandler.ServeHTTP(w, r)
+		}),
+	}
+	tp.httpsListener = MakeListener()
+	go tp.httpsServer.ServeTLS(tp.httpsListener, "", "")
 }

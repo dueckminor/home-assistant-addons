@@ -2,7 +2,6 @@ package network
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 
@@ -67,49 +66,6 @@ func buildProxyProtocolHeader(clientConn, targetConn net.Conn) []byte {
 		targetAddr.Port)
 
 	return []byte(header)
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-type dialFixedAddress func() (net.Conn, error)
-
-func (f dialFixedAddress) ServeCtx(ctx context.Context, conn net.Conn) {
-	defer conn.Close()
-	targetConn, err := f()
-	if err != nil {
-		fmt.Println("Dial Err:", err)
-		return
-	}
-	forwardConnect(conn, targetConn)
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-func NewServeTLS(address string) ServeCtx {
-	tlsConfig := &tls.Config{
-		ServerName: address,
-	}
-	return (dialFixedAddress)(func() (net.Conn, error) {
-		return tls.Dial("tcp", address, tlsConfig)
-	})
-}
-
-func NewServeTLSInsecure(serverName string) ServeCtx {
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
-		ServerName:         serverName,
-	}
-	return (dialFixedAddress)(func() (net.Conn, error) {
-		return tls.Dial("tcp", serverName, tlsConfig)
-	})
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-func NewServeTCP(address string) ServeCtx {
-	return (dialFixedAddress)(func() (net.Conn, error) {
-		return net.Dial("tcp", address)
-	})
 }
 
 ////////////////////////////////////////////////////////////////////////////////
