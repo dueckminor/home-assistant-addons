@@ -65,6 +65,11 @@ func (w *connWrapper) HandleProxyProtocol() error {
 	return nil
 }
 
+func (w *connWrapper) RepeatRead() {
+	w.readAhead = w.buff
+	w.buff = nil
+}
+
 func (w *connWrapper) ReadAhead(b []byte) (n int, err error) {
 	if w.conn == nil {
 		return 0, nil

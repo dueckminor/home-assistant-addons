@@ -384,7 +384,7 @@ func (g *Gateway) startAuthServer(route *ConfigRoute) {
 		Secret:       "",
 	}
 
-	g.httpsServer.AddHandler(hostname, network.NewGinHandler(r))
+	g.httpsServer.AddHandler(hostname, r)
 }
 
 func (g *Gateway) AddDomain(domain ConfigDomain) (ConfigDomain, error) {

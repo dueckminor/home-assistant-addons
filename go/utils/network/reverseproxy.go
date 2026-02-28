@@ -22,7 +22,7 @@ type ReverseProxyOptions struct {
 	MetricCallback    MetricCallback
 }
 
-func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) ServeCtx {
+func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) http.Handler {
 	r := gin.Default()
 
 	combinedOptions := ReverseProxyOptions{}
@@ -62,7 +62,7 @@ func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) ServeCt
 
 	r.Use(SingleHostReverseProxy(uri, combinedOptions))
 
-	return NewGinHandler(r)
+	return r
 }
 
 func SingleHostReverseProxy(target string, options ReverseProxyOptions) gin.HandlerFunc {
