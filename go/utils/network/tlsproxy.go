@@ -151,8 +151,8 @@ func (tp *tlsProxy) AddTLSCertificates(sni string, tlsCertificates []tls.Certifi
 	}
 	tlsConfig := &tls.Config{
 		Certificates: tlsCertificates,
-		NextProtos:   []string{"h2", "http/1.1"},
-		MinVersion:   tls.VersionTLS12,
+		// NextProtos:   []string{"h2", "http/1.1"},
+		MinVersion: tls.VersionTLS12,
 		CipherSuites: []uint16{
 			// TLS 1.3 cipher suites (order doesn't matter for TLS 1.3)
 			tls.TLS_AES_128_GCM_SHA256,

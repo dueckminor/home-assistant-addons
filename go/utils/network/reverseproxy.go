@@ -1,15 +1,10 @@
 package network
 
 import (
-	"bytes"
 	"crypto/tls"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/dueckminor/home-assistant-addons/go/auth"
@@ -87,80 +82,6 @@ func SingleHostReverseProxy(target string, options ReverseProxyOptions) gin.Hand
 			newLocation := location[len(target):]
 			resp.Header.Set("Location", newLocation)
 		}
-
-		host := resp.Request.Header.Get("X-Forwarded-Host")
-		proto := resp.Request.Header.Get("X-Forwarded-Proto")
-		url := proto + "://" + host
-
-		if strings.HasPrefix(host, "bitwarden") || strings.HasPrefix(host, "btwrdn") {
-			// Read the original body
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil
-			}
-			resp.Body.Close()
-
-			fmt.Println(resp.Request.URL.Path + ":")
-			fmt.Println("---")
-			fmt.Println(string(body))
-			fmt.Println("---")
-
-			parsedBody := make(map[string]any)
-
-			err = json.Unmarshal(body, &parsedBody)
-			if err != nil || len(body) == 0 {
-				resp.Body = io.NopCloser(bytes.NewReader(body))
-				resp.ContentLength = int64(len(body))
-				resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
-				return nil
-			}
-			if err == nil {
-
-				// recursively replace all strings starting with "http://localhost/path" with target+"/path"
-				var replaceURLs func(interface{}) interface{}
-				replaceURLs = func(value interface{}) interface{} {
-					switch v := value.(type) {
-					case string:
-						if strings.HasPrefix(v, "http://localhost") {
-							return url + v[len("http://localhost"):]
-						} else if strings.HasPrefix(v, "https://localhost") {
-							return url + v[len("https://localhost"):]
-						}
-						return v
-					case map[string]interface{}:
-						for key, val := range v {
-							v[key] = replaceURLs(val)
-						}
-						return v
-					case []interface{}:
-						for i, val := range v {
-							v[i] = replaceURLs(val)
-						}
-						return v
-					default:
-						return v
-					}
-				}
-
-				for key, value := range parsedBody {
-					parsedBody[key] = replaceURLs(value)
-				}
-
-				// Modify the body here
-				modifiedBody, err := json.Marshal(parsedBody)
-				if err != nil {
-					return err
-				}
-				fmt.Println(string(modifiedBody))
-				fmt.Println("---")
-
-				// Replace the body
-				resp.Body = io.NopCloser(bytes.NewReader(modifiedBody))
-				resp.ContentLength = int64(len(modifiedBody))
-				resp.Header.Set("Content-Length", strconv.Itoa(len(modifiedBody)))
-			}
-		}
-
 		return nil
 	}
 
