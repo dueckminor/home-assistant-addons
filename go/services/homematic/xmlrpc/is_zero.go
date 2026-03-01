@@ -25,7 +25,7 @@ func isZero(v Value) bool {
 			}
 		}
 		return true
-	case Chan, Func, Interface, Map, Ptr, Slice, UnsafePointer:
+	case Chan, Func, Interface, Map, Pointer, Slice, UnsafePointer:
 		return v.IsNil()
 	case String:
 		return v.Len() == 0

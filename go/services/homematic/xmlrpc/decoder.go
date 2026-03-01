@@ -52,7 +52,7 @@ func unmarshal(data []byte, v any) (err error) {
 		if t, ok := tok.(xml.StartElement); ok {
 			if t.Name.Local == "value" {
 				val := reflect.ValueOf(v)
-				if val.Kind() != reflect.Ptr {
+				if val.Kind() != reflect.Pointer {
 					return errors.New("non-pointer value passed to unmarshal")
 				}
 				if err = dec.decodeValue(val.Elem()); err != nil {
@@ -92,7 +92,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 	var tok xml.Token
 	var err error
 
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			val.Set(reflect.New(val.Type().Elem()))
 		}
@@ -270,7 +270,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 							if v.Kind() == reflect.Interface {
 								v = v.Elem()
 							}
-							if v.Kind() != reflect.Ptr {
+							if v.Kind() != reflect.Pointer {
 								return errors.New("error: cannot write to non-pointer array element")
 							}
 							if err = dec.decodeValue(v); err != nil {
@@ -461,7 +461,7 @@ func checkType(val reflect.Value, kinds ...reflect.Kind) error {
 		return nil
 	}
 
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 

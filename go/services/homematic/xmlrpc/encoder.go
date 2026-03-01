@@ -27,7 +27,7 @@ func encodeValue(val reflect.Value) ([]byte, error) {
 	var b []byte
 	var err error
 
-	if val.Kind() == reflect.Ptr || val.Kind() == reflect.Interface {
+	if val.Kind() == reflect.Pointer || val.Kind() == reflect.Interface {
 		if val.IsNil() {
 			return []byte("<value/>"), nil
 		}
