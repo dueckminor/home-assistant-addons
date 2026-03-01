@@ -40,7 +40,7 @@ type clientCodec struct {
 	close chan uint64
 }
 
-func (codec *clientCodec) WriteRequest(request *rpc.Request, args interface{}) (err error) {
+func (codec *clientCodec) WriteRequest(request *rpc.Request, args any) (err error) {
 	httpRequest, err := NewRequest(codec.url.String(), request.ServiceMethod, args)
 
 	if err != nil {
@@ -111,7 +111,7 @@ func (codec *clientCodec) ReadResponseHeader(response *rpc.Response) (err error)
 	return nil
 }
 
-func (codec *clientCodec) ReadResponseBody(v interface{}) (err error) {
+func (codec *clientCodec) ReadResponseBody(v any) (err error) {
 	if v == nil {
 		return nil
 	}

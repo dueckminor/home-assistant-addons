@@ -102,7 +102,7 @@ func (cmn *checkMethodName) ParseMethodCall(methodName string, cb MethodCallPars
 	cmn.methodNames = append(cmn.methodNames, methodName)
 	switch methodName {
 	case "system.listMethods":
-		var clientName interface{}
+		var clientName any
 		err = cb.GetCallParam(&clientName)
 		if err != nil {
 			return err
@@ -111,7 +111,7 @@ func (cmn *checkMethodName) ParseMethodCall(methodName string, cb MethodCallPars
 		var interfaceID string
 		var address string
 		var valueKey string
-		var value interface{}
+		var value any
 		err = cb.GetCallParam(&interfaceID)
 		if err != nil {
 			return err

@@ -36,7 +36,7 @@ type decoder struct {
 	*xml.Decoder
 }
 
-func unmarshal(data []byte, v interface{}) (err error) {
+func unmarshal(data []byte, v any) (err error) {
 	dec := &decoder{xml.NewDecoder(bytes.NewBuffer(data))}
 
 	if CharsetReader != nil {
@@ -52,7 +52,7 @@ func unmarshal(data []byte, v interface{}) (err error) {
 		if t, ok := tok.(xml.StartElement); ok {
 			if t.Name.Local == "value" {
 				val := reflect.ValueOf(v)
-				if val.Kind() != reflect.Ptr {
+				if val.Kind() != reflect.Pointer {
 					return errors.New("non-pointer value passed to unmarshal")
 				}
 				if err = dec.decodeValue(val.Elem()); err != nil {
@@ -92,7 +92,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 	var tok xml.Token
 	var err error
 
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			val.Set(reflect.New(val.Type().Elem()))
 		}
@@ -139,8 +139,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 				}
 				ismap = true
 			} else if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				var dummy map[string]interface{}
-				valType = reflect.TypeOf(dummy)
+				valType = reflect.TypeFor[map[string]any]()
 				pmap = reflect.New(valType).Elem()
 				val.Set(pmap)
 				ismap = true
@@ -236,7 +235,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 	case "array":
 		slice := val
 		if checkType(val, reflect.Interface) == nil && val.IsNil() {
-			slice = reflect.ValueOf([]interface{}{})
+			slice = reflect.ValueOf([]any{})
 		} else if err = checkType(val, reflect.Slice); err != nil {
 			return err
 		}
@@ -270,7 +269,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 							if v.Kind() == reflect.Interface {
 								v = v.Elem()
 							}
-							if v.Kind() != reflect.Ptr {
+							if v.Kind() != reflect.Pointer {
 								return errors.New("error: cannot write to non-pointer array element")
 							}
 							if err = dec.decodeValue(v); err != nil {
@@ -322,7 +321,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 					return err
 				}
 
-				pi := reflect.New(reflect.TypeOf(i)).Elem()
+				pi := reflect.New(reflect.TypeFor[int64]()).Elem()
 				pi.SetInt(i)
 				val.Set(pi)
 			} else if err = checkType(val, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64); err != nil {
@@ -338,7 +337,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 		case "string", "base64":
 			str := string(data)
 			if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				pstr := reflect.New(reflect.TypeOf(str)).Elem()
+				pstr := reflect.New(reflect.TypeFor[string]()).Elem()
 				pstr.SetString(str)
 				val.Set(pstr)
 			} else if err = checkType(val, reflect.String); err != nil {
@@ -361,7 +360,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 			}
 
 			if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				ptime := reflect.New(reflect.TypeOf(t)).Elem()
+				ptime := reflect.New(reflect.TypeFor[time.Time]()).Elem()
 				ptime.Set(reflect.ValueOf(t))
 				val.Set(ptime)
 			} else if _, ok := val.Interface().(time.Time); !ok {
@@ -376,7 +375,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 			}
 
 			if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				pv := reflect.New(reflect.TypeOf(v)).Elem()
+				pv := reflect.New(reflect.TypeFor[bool]()).Elem()
 				pv.SetBool(v)
 				val.Set(pv)
 			} else if err = checkType(val, reflect.Bool); err != nil {
@@ -391,7 +390,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 					return err
 				}
 
-				pdouble := reflect.New(reflect.TypeOf(i)).Elem()
+				pdouble := reflect.New(reflect.TypeFor[float64]()).Elem()
 				pdouble.SetFloat(i)
 				val.Set(pdouble)
 			} else if err = checkType(val, reflect.Float32, reflect.Float64); err != nil {
@@ -461,7 +460,7 @@ func checkType(val reflect.Value, kinds ...reflect.Kind) error {
 		return nil
 	}
 
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		val = val.Elem()
 	}
 

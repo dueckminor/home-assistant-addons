@@ -149,9 +149,9 @@ type MethodCallParser interface {
 // /////////////////////////////////////////////////////////////////////////////
 
 type MethodCallParserCB interface {
-	GetCallParam(val interface{}) (err error)
+	GetCallParam(val any) (err error)
 	IgnoreParams() (err error)
-	PutResult(val interface{}) (err error)
+	PutResult(val any) (err error)
 }
 
 type methodCallParserCB struct {
@@ -159,7 +159,7 @@ type methodCallParserCB struct {
 	elements []string
 }
 
-func (cb *methodCallParserCB) GetCallParam(v interface{}) (err error) {
+func (cb *methodCallParserCB) GetCallParam(v any) (err error) {
 	_, err = cb.dec.requireStartElements(cb.elements...)
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func (cb *methodCallParserCB) IgnoreParams() (err error) {
 	return cb.dec.skipChildren()
 }
 
-func (cb *methodCallParserCB) PutResult(v interface{}) (err error) {
+func (cb *methodCallParserCB) PutResult(v any) (err error) {
 	return nil
 }
 

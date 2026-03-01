@@ -6,12 +6,12 @@ import (
 	"net/http"
 )
 
-func NewRequest(url string, method string, args interface{}) (*http.Request, error) {
-	var t []interface{}
+func NewRequest(url string, method string, args any) (*http.Request, error) {
+	var t []any
 	var ok bool
-	if t, ok = args.([]interface{}); !ok {
+	if t, ok = args.([]any); !ok {
 		if args != nil {
-			t = []interface{}{args}
+			t = []any{args}
 		}
 	}
 
@@ -31,7 +31,7 @@ func NewRequest(url string, method string, args interface{}) (*http.Request, err
 	return request, nil
 }
 
-func EncodeMethodCall(method string, args ...interface{}) ([]byte, error) {
+func EncodeMethodCall(method string, args ...any) ([]byte, error) {
 	var b bytes.Buffer
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
 	b.WriteString(fmt.Sprintf("<methodCall><methodName>%s</methodName>", method))
