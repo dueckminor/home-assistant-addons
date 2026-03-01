@@ -46,6 +46,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-python: true
+
       - name: Set up Go
         uses: actions/setup-go@v6
         with:

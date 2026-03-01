@@ -1,8 +1,10 @@
 import subprocess
 import os
+import sys
 from typing import Optional
+import argparse
 
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def get_components(component_selector: Optional[str] = None) -> list[str]:
@@ -183,3 +185,39 @@ def install(
     build_go(component_name)
     prepare_local(component_name)
     upload(component_name, homeassistant)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Install addons with web embed assets."
+    )
+    parser.add_argument(
+        "--fast", action="store_true", help="Skip building if assets already exist."
+    )
+    parser.add_argument(
+        "component",
+        nargs="?",
+        default=None,
+        help="Component name to install (optional)",
+    )
+    args = parser.parse_args()
+
+    component_names = get_components(args.component)
+
+    for component_name in component_names:
+        additional_web_components = []
+        if component_name == "gateway":
+            additional_web_components = ["auth"]
+        build(
+            component_name,
+            additional_web_components=additional_web_components,
+            fast=args.fast,
+        )
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.CalledProcessError as e:
+        print(f"\n❌ Build failed with exit code {e.returncode}", file=sys.stderr)
+        sys.exit(e.returncode)
