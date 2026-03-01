@@ -231,8 +231,6 @@ func (tp *tlsProxy) isValidHostname(sni string) bool {
 //     removing the TLS layer (here the cache is used to repeat the client hello)
 //   - complete the TLS handshake and forward the content to a different host
 func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
-	clientWrapper := &connWrapper{conn: conn, cacheRead: true}
-
 	closeConn := true
 	defer func() {
 		if closeConn {
@@ -242,31 +240,20 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 
 	var err error
 	if tp.proxyProtocol {
-		err = clientWrapper.HandleProxyProtocol()
+		conn, err = HandleProxyProtocol(conn)
 		if err != nil {
 			fmt.Println("Proxy Protocol Err:", err)
 			return
 		}
 	}
 
-	clientAddr := clientWrapper.RemoteAddr()
+	clientAddr := conn.RemoteAddr()
 
-	var sni string
-	var httpHandler http.Handler
-	var dial ProxyDialCtx
-
-	tlsConn := tls.Server(clientWrapper, &tls.Config{GetConfigForClient: func(clientHelloInfo *tls.ClientHelloInfo) (*tls.Config, error) {
-		sni = clientHelloInfo.ServerName
-		// ensure that no response is sent back to the client before we know if the hostname is valid
-		clientWrapper.conn = nil
-		return nil, os.ErrInvalid
-	}})
-	_ = tlsConn.Handshake()
+	clientHello, conn := ReadTlsClientHello(conn)
+	sni := clientHello.ServerName
 
 	tlsConfig := tp.getTLSConfig(sni)
-	httpHandler, dial, _ = tp.getHandler(sni)
-
-	fmt.Println(tlsConn.RemoteAddr())
+	httpHandler, dial, _ := tp.getHandler(sni)
 
 	if nil == dial && (tlsConfig == nil || nil == httpHandler) {
 		fmt.Println("ServerName:", sni, "rejected")
@@ -283,33 +270,17 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 
 	fmt.Println("ServerName:", sni)
 
-	// if the handshake was successful, the hostname is valid and we can continue
-	clientWrapper.conn = conn
-	clientWrapper.cacheRead = false
-	closeConn = false
-
 	if httpHandler != nil {
-		clientWrapper.RepeatRead()
-		tp.httpsListener.ServeCtx(ctx, clientWrapper)
+		closeConn = false
+		tp.httpsListener.ServeCtx(ctx, conn)
 		return
 	}
 
-	tp.handleDialer(ctx, sni, conn, dial, clientWrapper.buff)
-}
-
-func (tp *tlsProxy) handleDialer(ctx context.Context, sni string, conn net.Conn, dial ProxyDialCtx, clientHello []byte) {
 	targetConn, err := dial.ProxyDialCtx(ctx, conn, sni)
 	if err != nil {
 		fmt.Println("Dial Err:", err)
 		return
 	}
-
-	_, err = targetConn.Write(clientHello)
-	if err != nil {
-		fmt.Println("Forwarding client hello failed:", err)
-		return
-	}
-
 	forwardConnect(conn, targetConn)
 }
 
@@ -335,4 +306,16 @@ func (tp *tlsProxy) startHTTPSServer() {
 	}
 	tp.httpsListener = MakeListener()
 	go tp.httpsServer.ServeTLS(tp.httpsListener, "", "")
+}
+
+func ReadTlsClientHello(conn net.Conn) (result *tls.ClientHelloInfo, conn2 net.Conn) {
+	bufferedConn := ConnBufferRead(conn)
+
+	tlsConn := tls.Server(ConnWithWriteDevNull(bufferedConn), &tls.Config{GetConfigForClient: func(clientHelloInfo *tls.ClientHelloInfo) (*tls.Config, error) {
+		result = clientHelloInfo
+		return nil, os.ErrInvalid
+	}})
+	_ = tlsConn.Handshake()
+
+	return result, bufferedConn.GetConnReadAgain()
 }

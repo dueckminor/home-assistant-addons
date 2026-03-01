@@ -122,13 +122,11 @@ def main():
 
     # Get changed files from arguments (newline-separated to handle spaces in filenames)
     changed_files_str = sys.argv[1]
-    changed_files = [f.strip() for f in changed_files_str.split('\n') if f.strip()]
+    changed_files = [f.strip() for f in changed_files_str.split("\n") if f.strip()]
 
     print(f"Changed files: {' '.join(changed_files)}", flush=True)
 
-    # Get repository root (3 levels up from this script)
-    script_dir = Path(__file__).resolve().parent
-    repo_root = script_dir.parent.parent.parent
+    repo_root = Path(__file__).resolve().parent.parent.parent
 
     # Get changed addons
     changed_addons = get_changed_addons(changed_files, repo_root)
