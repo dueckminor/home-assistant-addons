@@ -23,8 +23,8 @@ type bookUnexported struct {
 }
 
 var unmarshalTests = []struct {
-	value interface{}
-	ptr   interface{}
+	value any
+	ptr   any
 	xml   string
 }{
 	// int, i4, i8
@@ -61,14 +61,14 @@ var unmarshalTests = []struct {
 
 	// array
 	{[]int{1, 5, 7}, new(*[]int), "<value><array><data><value><int>1</int></value><value><int>5</int></value><value><int>7</int></value></data></array></value>"},
-	{[]interface{}{"A", "5"}, new(interface{}), "<value><array><data><value><string>A</string></value><value><string>5</string></value></data></array></value>"},
-	{[]interface{}{"A", int64(5)}, new(interface{}), "<value><array><data><value><string>A</string></value><value><int>5</int></value></data></array></value>"},
+	{[]any{"A", "5"}, new(any), "<value><array><data><value><string>A</string></value><value><string>5</string></value></data></array></value>"},
+	{[]any{"A", int64(5)}, new(any), "<value><array><data><value><string>A</string></value><value><int>5</int></value></data></array></value>"},
 
 	// struct
 	{book{"War and Piece", 20}, new(*book), "<value><struct><member><name>Title</name><value><string>War and Piece</string></value></member><member><name>Amount</name><value><int>20</int></value></member></struct></value>"},
 	{bookUnexported{}, new(*bookUnexported), "<value><struct><member><name>title</name><value><string>War and Piece</string></value></member><member><name>amount</name><value><int>20</int></value></member></struct></value>"},
-	{map[string]interface{}{"Name": "John Smith"}, new(interface{}), "<value><struct><member><name>Name</name><value><string>John Smith</string></value></member></struct></value>"},
-	{map[string]interface{}{}, new(interface{}), "<value><struct></struct></value>"},
+	{map[string]any{"Name": "John Smith"}, new(any), "<value><struct><member><name>Name</name><value><string>John Smith</string></value></member></struct></value>"},
+	{map[string]any{}, new(any), "<value><struct></struct></value>"},
 }
 
 func makeTime(s string) time.Time {
@@ -90,7 +90,7 @@ func TestUnmarshal(t *testing.T) {
 
 		if v.Kind() != reflect.Slice {
 			a1 := v.Interface()
-			a2 := interface{}(tt.value)
+			a2 := any(tt.value)
 
 			if !reflect.DeepEqual(a1, a2) {
 				t.Fatalf("unmarshal error:\nexpected: %v\n     got: %v", tt.value, v.Interface())
@@ -160,7 +160,7 @@ func TestUnmarshalExistingArray(t *testing.T) {
 		v2 bool
 		v3 string
 
-		v = []interface{}{&v1, &v2, &v3}
+		v = []any{&v1, &v2, &v3}
 	)
 	if err := unmarshal([]byte(arrayValueXML), &v); err != nil {
 		t.Fatal(err)

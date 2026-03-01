@@ -14,7 +14,7 @@ import (
 // Base64 represents value in base64 encoding
 type Base64 string
 
-func marshal(v interface{}) ([]byte, error) {
+func marshal(v any) ([]byte, error) {
 	if v == nil {
 		return []byte{}, nil
 	}

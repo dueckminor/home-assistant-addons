@@ -36,7 +36,7 @@ type decoder struct {
 	*xml.Decoder
 }
 
-func unmarshal(data []byte, v interface{}) (err error) {
+func unmarshal(data []byte, v any) (err error) {
 	dec := &decoder{xml.NewDecoder(bytes.NewBuffer(data))}
 
 	if CharsetReader != nil {
@@ -139,7 +139,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 				}
 				ismap = true
 			} else if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				var dummy map[string]interface{}
+				var dummy map[string]any
 				valType = reflect.TypeOf(dummy)
 				pmap = reflect.New(valType).Elem()
 				val.Set(pmap)
@@ -236,7 +236,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 	case "array":
 		slice := val
 		if checkType(val, reflect.Interface) == nil && val.IsNil() {
-			slice = reflect.ValueOf([]interface{}{})
+			slice = reflect.ValueOf([]any{})
 		} else if err = checkType(val, reflect.Slice); err != nil {
 			return err
 		}

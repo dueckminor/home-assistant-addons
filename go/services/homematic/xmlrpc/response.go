@@ -33,7 +33,7 @@ func (r Response) Err() error {
 	return fault
 }
 
-func (r Response) Unmarshal(v interface{}) error {
+func (r Response) Unmarshal(v any) error {
 	if err := unmarshal(r, v); err != nil {
 		return err
 	}
