@@ -6,6 +6,11 @@ version = "0.0.1"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.scripts]
+ha-build = "ha_addons.build:main"
+ha-install = "ha_addons.install:main"
+ha-serve = "ha_addons.serve:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
