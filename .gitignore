@@ -7,6 +7,7 @@ __debug_*
 # Python cache files
 __pycache__
 *.pyc
+uv.lock
 
 # Files required for docker build will be copied to the addons/* directory
 addons/*/dist

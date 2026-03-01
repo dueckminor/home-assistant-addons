@@ -18,6 +18,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-python: true
+
       - name: Get changed files
         id: changed_files
         uses: tj-actions/changed-files@v47
@@ -33,7 +39,7 @@ jobs:
       - name: List addons
         id: list-addons
         run: |
-          python scripts/lib/ha_addons/changed_addons.py "${{ steps.changed_files.outputs.all_changed_files }}"
+          uv run python python/ha_addons/changed_addons.py "${{ steps.changed_files.outputs.all_changed_files }}"
 
   test-build:
     needs: detect-changed-addons
@@ -45,6 +51,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-python: true
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -88,13 +100,21 @@ jobs:
 
   # Summary job for branch protection - fails if any test-build job failed
   ci-success:
-    needs: test-build
+    needs: [detect-changed-addons, test-build]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check test results
         run: |
+          addons='${{ needs.detect-changed-addons.outputs.addons }}'
           result="${{ needs.test-build.result }}"
+          
+          # If no addons changed, treat as success
+          if [ "$addons" = "[]" ] || [ "$addons" = "" ]; then
+            echo "✅ No addons changed, skipping tests"
+            exit 0
+          fi
+          
           if [ "$result" = "success" ] || [ "$result" = "skipped" ]; then
             echo "✅ All tests passed (result: $result)"
           else
