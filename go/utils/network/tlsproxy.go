@@ -268,7 +268,7 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 
 	fmt.Println(tlsConn.RemoteAddr())
 
-	if tlsConfig == nil || (nil == httpHandler && nil == dial) {
+	if nil == dial && (tlsConfig == nil || nil == httpHandler) {
 		fmt.Println("ServerName:", sni, "rejected")
 		if tp.metricCallback != nil {
 			tp.metricCallback(Metric{
