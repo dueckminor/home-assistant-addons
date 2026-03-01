@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-
-	"github.com/gin-gonic/gin"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,12 +64,4 @@ func buildProxyProtocolHeader(clientConn, targetConn net.Conn) []byte {
 		targetAddr.Port)
 
 	return []byte(header)
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-func NewGinHandler(r *gin.Engine) ServeCtx {
-	l := MakeListener()
-	go r.RunListener(l)
-	return l
 }
