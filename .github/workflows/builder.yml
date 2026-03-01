@@ -18,6 +18,12 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-python: true
+
       - name: Get changed files
         id: changed_files
         uses: tj-actions/changed-files@v47
@@ -33,7 +39,7 @@ jobs:
       - name: List addons
         id: list-addons
         run: |
-          python scripts/lib/ha_addons/changed_addons.py "${{ steps.changed_files.outputs.all_changed_files }}"
+          uv run python python/ha_addons/changed_addons.py "${{ steps.changed_files.outputs.all_changed_files }}"
 
   test-build:
     needs: detect-changed-addons
