@@ -1,149 +1,129 @@
 package network
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"sync"
-	"time"
 )
 
+// /////////////////////////////////////////////////////////////////////////////
+
 type connWrapper struct {
-	conn       net.Conn
-	cacheRead  bool
-	buff       []byte
-	readAhead  []byte
-	clientAddr net.Addr
+	net.Conn
 }
 
-func (w *connWrapper) HandleProxyProtocol() error {
-	if w.conn == nil {
-		return nil
-	}
-
-	proxyData := make([]byte, 4096)
-
-	n, err := w.ReadAhead(proxyData[:6])
-	if err != nil {
-		return err
-	}
-	if n == 6 && string(proxyData[0:6]) == "PROXY " {
-		// Read until \r\n
-		totalRead := n
-		for {
-			if totalRead >= len(proxyData) {
-				return nil // header too large
-			}
-			n, err := w.ReadAhead(proxyData[totalRead : totalRead+1])
-			if err != nil {
-				return err
-			}
-			totalRead += n
-			if totalRead >= 2 && proxyData[totalRead-2] == '\r' && proxyData[totalRead-1] == '\n' {
-				break
-			}
-		}
-		w.readAhead = nil
-
-		header := string(proxyData[:totalRead])
-		var proto, srcAddr, destAddr string
-		var srcPort, destPort int
-		_, err = fmt.Sscanf(header, "PROXY %s %s %s %d %d\r\n", &proto, &srcAddr, &destAddr, &srcPort, &destPort)
-		if err != nil {
-			return err
-		}
-		ip := net.ParseIP(srcAddr)
-		if ip == nil {
-			return nil
-		}
-
-		w.clientAddr = &net.TCPAddr{
-			IP:   ip,
-			Port: srcPort,
-		}
-	}
-	return nil
+func (c *connWrapper) Unwrap() net.Conn {
+	return c.Conn
 }
 
-func (w *connWrapper) RepeatRead() {
-	w.readAhead = w.buff
-	w.buff = nil
+// /////////////////////////////////////////////////////////////////////////////
+
+func ConnWithRemoteAddr(conn net.Conn, remoteAddr net.Addr) net.Conn {
+	return &connWithRemoteAddr{connWrapper: connWrapper{conn}, remoteAddr: remoteAddr}
 }
 
-func (w *connWrapper) ReadAhead(b []byte) (n int, err error) {
-	if w.conn == nil {
-		return 0, nil
+type connWithRemoteAddr struct {
+	connWrapper
+	remoteAddr net.Addr
+}
+
+func (c *connWithRemoteAddr) RemoteAddr() net.Addr {
+	return c.remoteAddr
+}
+
+// /////////////////////////////////////////////////////////////////////////////
+
+func ConnWithWriteDevNull(conn net.Conn) net.Conn {
+	return &connWithWriteDevNull{connWrapper: connWrapper{conn}}
+}
+
+type connWithWriteDevNull struct {
+	connWrapper
+}
+
+func (c *connWithWriteDevNull) Write(b []byte) (n int, err error) {
+	return len(b), nil
+}
+
+// /////////////////////////////////////////////////////////////////////////////
+
+func ConnWithReadPrefix(conn net.Conn, prefix []byte) net.Conn {
+	if len(prefix) == 0 {
+		return conn
 	}
-	n, err = w.conn.Read(b)
+	if existingReadPrefix, ok := findConnWithReadPrefix(conn); ok {
+		// Our connection is already a ConnWithReadPrefix,
+		// so we can just prepend our buffer to the existing prefix
+		existingReadPrefix.prefix = append(prefix, existingReadPrefix.prefix...)
+		return conn
+	}
+	return &connWithReadPrefix{connWrapper: connWrapper{conn}, prefix: prefix}
+}
+
+type connWithReadPrefix struct {
+	connWrapper
+	prefix []byte
+}
+
+func (c *connWithReadPrefix) Read(b []byte) (n int, err error) {
+	if len(c.prefix) > 0 {
+		n = copy(b, c.prefix)
+		c.prefix = c.prefix[n:]
+		return n, nil
+	}
+	return c.Conn.Read(b)
+}
+
+func findConnWithReadPrefix(conn net.Conn) (*connWithReadPrefix, bool) {
+	for conn != nil {
+		if c, ok := conn.(*connWithReadPrefix); ok {
+			return c, true
+		}
+		wrapper, ok := conn.(interface{ Unwrap() net.Conn })
+		if !ok {
+			break
+		}
+		conn = wrapper.Unwrap()
+	}
+	return nil, false
+}
+
+// /////////////////////////////////////////////////////////////////////////////
+
+func ConnBufferRead(conn net.Conn) *connBufferRead {
+	return &connBufferRead{connWrapper: connWrapper{conn}, buf: make([]byte, 0)}
+}
+
+type connBufferRead struct {
+	connWrapper
+	buf []byte
+}
+
+func (c *connBufferRead) Read(b []byte) (n int, err error) {
+	n, err = c.Conn.Read(b)
 	if n > 0 {
-		w.readAhead = append(w.readAhead, b[0:n]...)
+		c.buf = append(c.buf, b[0:n]...)
 	}
 	return n, err
 }
 
-func (w *connWrapper) Read(b []byte) (n int, err error) {
-	if w.conn == nil {
-		return 0, nil
-	}
-	if len(w.readAhead) > 0 {
-		n = copy(b, w.readAhead)
-		if w.cacheRead && n > 0 {
-			w.buff = append(w.buff, b[0:n]...)
-		}
-		w.readAhead = w.readAhead[n:]
-		return n, nil
-	}
-	n, err = w.conn.Read(b)
-	if w.cacheRead && n > 0 {
-		w.buff = append(w.buff, b[0:n]...)
-	}
-	return
+func (c *connBufferRead) GetConnReadAgain() net.Conn {
+	return ConnWithReadPrefix(c.Conn, c.buf)
 }
-func (w *connWrapper) Write(b []byte) (n int, err error) {
-	if w.conn == nil {
-		return len(b), nil
-	}
-	return w.conn.Write(b)
+func (c *connBufferRead) GetConnSkipAllRead() net.Conn {
+	return c.Conn
 }
-func (w *connWrapper) Close() error {
-	if w.conn == nil {
-		return nil
+func (c *connBufferRead) GetConnSkipFirstN(n int) net.Conn {
+	if n <= 0 {
+		return ConnWithReadPrefix(c.Conn, c.buf)
 	}
-	return w.conn.Close()
+	if n < len(c.buf) {
+		return ConnWithReadPrefix(c.Conn, c.buf[n:])
+	}
+	return c.Conn
 }
-func (w *connWrapper) LocalAddr() net.Addr {
-	if w.conn == nil {
-		return nil
-	}
-	return w.conn.LocalAddr()
-}
-func (w *connWrapper) RemoteAddr() net.Addr {
-	if w.conn == nil {
-		return nil
-	}
-	if w.clientAddr != nil {
-		return w.clientAddr
-	}
-	return w.conn.RemoteAddr()
-}
-func (w *connWrapper) SetDeadline(t time.Time) error {
-	if w.conn == nil {
-		return nil
-	}
-	return w.conn.SetDeadline(t)
-}
-func (w *connWrapper) SetReadDeadline(t time.Time) error {
-	if w.conn == nil {
-		return nil
-	}
-	return w.conn.SetReadDeadline(t)
-}
-func (w *connWrapper) SetWriteDeadline(t time.Time) error {
-	if w.conn == nil {
-		return nil
-	}
-	return w.conn.SetWriteDeadline(t)
-}
+
+// /////////////////////////////////////////////////////////////////////////////
 
 func forwardConnect(client, server net.Conn) {
 	wg := sync.WaitGroup{}
