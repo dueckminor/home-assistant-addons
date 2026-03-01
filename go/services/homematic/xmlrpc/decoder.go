@@ -139,8 +139,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 				}
 				ismap = true
 			} else if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				var dummy map[string]any
-				valType = reflect.TypeOf(dummy)
+				valType = reflect.TypeFor[map[string]any]()
 				pmap = reflect.New(valType).Elem()
 				val.Set(pmap)
 				ismap = true
@@ -322,7 +321,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 					return err
 				}
 
-				pi := reflect.New(reflect.TypeOf(i)).Elem()
+				pi := reflect.New(reflect.TypeFor[int64]()).Elem()
 				pi.SetInt(i)
 				val.Set(pi)
 			} else if err = checkType(val, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64); err != nil {
@@ -338,7 +337,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 		case "string", "base64":
 			str := string(data)
 			if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				pstr := reflect.New(reflect.TypeOf(str)).Elem()
+				pstr := reflect.New(reflect.TypeFor[string]()).Elem()
 				pstr.SetString(str)
 				val.Set(pstr)
 			} else if err = checkType(val, reflect.String); err != nil {
@@ -361,7 +360,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 			}
 
 			if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				ptime := reflect.New(reflect.TypeOf(t)).Elem()
+				ptime := reflect.New(reflect.TypeFor[time.Time]()).Elem()
 				ptime.Set(reflect.ValueOf(t))
 				val.Set(ptime)
 			} else if _, ok := val.Interface().(time.Time); !ok {
@@ -376,7 +375,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 			}
 
 			if checkType(val, reflect.Interface) == nil && val.IsNil() {
-				pv := reflect.New(reflect.TypeOf(v)).Elem()
+				pv := reflect.New(reflect.TypeFor[bool]()).Elem()
 				pv.SetBool(v)
 				val.Set(pv)
 			} else if err = checkType(val, reflect.Bool); err != nil {
@@ -391,7 +390,7 @@ func (dec *decoder) decodeValue(val reflect.Value) error {
 					return err
 				}
 
-				pdouble := reflect.New(reflect.TypeOf(i)).Elem()
+				pdouble := reflect.New(reflect.TypeFor[float64]()).Elem()
 				pdouble.SetFloat(i)
 				val.Set(pdouble)
 			} else if err = checkType(val, reflect.Float32, reflect.Float64); err != nil {
