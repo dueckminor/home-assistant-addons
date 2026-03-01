@@ -11,20 +11,20 @@ type Device interface {
 	SetName(name string)
 	Address() string
 	Type() string
-	GetValue(valueName string) (result interface{}, err error)
-	SetValue(valueName string, value interface{}) (err error)
-	SetValueIfChanged(valueName string, value interface{}) (changed bool, err error)
+	GetValue(valueName string) (result any, err error)
+	SetValue(valueName string, value any) (err error)
+	SetValueIfChanged(valueName string, value any) (changed bool, err error)
 	SubDevices() []Device
 	GetSubDevice(subdeviceType string) (subdevice Device, err error)
 	GetMasterDescription() (paramsetDescription ParamsetDescription, err error)
 	GetValueDescription() (paramsetDescription ParamsetDescription, err error)
-	GetValues() (value map[string]interface{}, err error)
+	GetValues() (value map[string]any, err error)
 }
 
 type deviceInt interface {
 	Device
 	setSubdevice(subdevice Device)
-	putValue(valueName string, value interface{})
+	putValue(valueName string, value any)
 }
 
 type deviceImpl struct {
@@ -33,7 +33,7 @@ type deviceImpl struct {
 	deviceDesc DeviceDescription
 	mutex      sync.RWMutex
 	subdevices map[string]Device
-	values     map[string]interface{}
+	values     map[string]any
 }
 
 func newDevice(ccuc *CcuClientImpl, deviceDesc DeviceDescription) (dev *deviceImpl) {
@@ -63,10 +63,10 @@ func (dev *deviceImpl) Type() string {
 
 func (dev *deviceImpl) initMaps() {
 	dev.subdevices = make(map[string]Device)
-	dev.values = make(map[string]interface{})
+	dev.values = make(map[string]any)
 }
 
-func (dev *deviceImpl) getValueFromCache(valueName string) (result interface{}, found bool) {
+func (dev *deviceImpl) getValueFromCache(valueName string) (result any, found bool) {
 	dev.mutex.RLock()
 	defer dev.mutex.RUnlock()
 	if result, found = dev.values[valueName]; found {
@@ -75,7 +75,7 @@ func (dev *deviceImpl) getValueFromCache(valueName string) (result interface{}, 
 	return nil, false
 }
 
-func (dev *deviceImpl) GetValue(valueName string) (result interface{}, err error) {
+func (dev *deviceImpl) GetValue(valueName string) (result any, err error) {
 	if result, ok := dev.getValueFromCache(valueName); ok {
 		return result, nil
 	}
@@ -113,7 +113,7 @@ func (dev *deviceImpl) setSubdevice(subdevice Device) {
 	dev.subdevices[subdevice.Type()] = subdevice
 }
 
-func (dev *deviceImpl) putValueToCache(valueName string, value interface{}) (changed bool) {
+func (dev *deviceImpl) putValueToCache(valueName string, value any) (changed bool) {
 	dev.mutex.Lock()
 	defer dev.mutex.Unlock()
 	if oldValue, ok := dev.values[valueName]; !ok || oldValue != value {
@@ -123,14 +123,14 @@ func (dev *deviceImpl) putValueToCache(valueName string, value interface{}) (cha
 	return changed
 }
 
-func (dev *deviceImpl) putValue(valueName string, value interface{}) {
+func (dev *deviceImpl) putValue(valueName string, value any) {
 	dev.putValueToCache(valueName, value)
 	for _, callback := range dev.ccuc.callbacks {
 		callback(dev, valueName, value)
 	}
 }
 
-func (dev *deviceImpl) SetValue(valueName string, value interface{}) (err error) {
+func (dev *deviceImpl) SetValue(valueName string, value any) (err error) {
 	err = dev.ccuc.SetValue(dev.deviceDesc.Address, valueName, value)
 	if err == nil {
 		dev.putValue(valueName, value)
@@ -138,7 +138,7 @@ func (dev *deviceImpl) SetValue(valueName string, value interface{}) (err error)
 	return err
 }
 
-func equals(a, b interface{}) bool {
+func equals(a, b any) bool {
 	da, err := json.Marshal(a)
 	if err != nil {
 		return false
@@ -150,7 +150,7 @@ func equals(a, b interface{}) bool {
 	return bytes.Equal(da, db)
 }
 
-func (dev *deviceImpl) SetValueIfChanged(valueName string, value interface{}) (changed bool, err error) {
+func (dev *deviceImpl) SetValueIfChanged(valueName string, value any) (changed bool, err error) {
 	if oldValue, ok := dev.getValueFromCache(valueName); !ok || !equals(oldValue, value) {
 		err = dev.ccuc.SetValue(dev.deviceDesc.Address, valueName, value)
 		if err == nil {
@@ -169,7 +169,7 @@ func (dev *deviceImpl) GetValueDescription() (paramsetDescription ParamsetDescri
 	return dev.ccuc.GetValueDescription(dev.deviceDesc.Address)
 }
 
-func (dev *deviceImpl) GetValues() (values map[string]interface{}, err error) {
+func (dev *deviceImpl) GetValues() (values map[string]any, err error) {
 	values, err = dev.ccuc.GetParamset(dev.deviceDesc.Address, "VALUES")
 	if err == nil {
 		for valueName, value := range values {

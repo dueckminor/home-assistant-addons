@@ -13,7 +13,7 @@ type Client interface {
 	Flush()
 	SendMetric(measurement string, value float64, tags map[string]string) error
 	SendMetricAtTs(measurement string, value float64, tags map[string]string, ts time.Time) error
-	SendMetricWithFieldsAtTs(measurement string, fields map[string]interface{}, tags map[string]string, ts time.Time) error
+	SendMetricWithFieldsAtTs(measurement string, fields map[string]any, tags map[string]string, ts time.Time) error
 }
 
 type client struct {
@@ -53,7 +53,7 @@ func (c *client) SendMetricAtTs(measurement string, value float64, tags map[stri
 	return nil
 }
 
-func (c *client) SendMetricWithFieldsAtTs(measurement string, fields map[string]interface{}, tags map[string]string, ts time.Time) error {
+func (c *client) SendMetricWithFieldsAtTs(measurement string, fields map[string]any, tags map[string]string, ts time.Time) error {
 	points, err := influxdb1.NewBatchPoints(c.config)
 	if err != nil {
 		return fmt.Errorf("failed to create batch points: %w", err)

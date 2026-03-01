@@ -94,21 +94,17 @@ func main() {
 	fmt.Println("Web server listening on:", httpServer.Addr)
 
 	// Start web server
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		go func() {
 			<-ctx.Done()
 			httpServer.Shutdown(context.Background())
 		}()
 		httpServer.Serve(listener)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		<-ctx.Done()
-		wg.Done()
-	}()
+	})
 
 	wg.Wait()
 

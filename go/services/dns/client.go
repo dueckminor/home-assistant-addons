@@ -76,7 +76,7 @@ func (dc *DNSClient) findAuthoritativeServers(hostname string, client *miekgdns.
 	parts := strings.Split(strings.TrimSuffix(hostname, "."), ".")
 
 	// Try from most specific to least specific (e.g., sub.example.com -> example.com -> com)
-	for i := 0; i < len(parts); i++ {
+	for i := range parts {
 		zoneName := strings.Join(parts[i:], ".")
 
 		// Query for NS records of this zone

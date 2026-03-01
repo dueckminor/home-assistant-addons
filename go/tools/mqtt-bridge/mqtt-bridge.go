@@ -134,17 +134,13 @@ func main() {
 		panic(err)
 	}
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		s.Serve(ctx)
-		wg.Done()
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		<-ctx.Done()
-		wg.Done()
-	}()
+	})
 
 	wg.Wait()
 

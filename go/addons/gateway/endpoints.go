@@ -115,7 +115,7 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 
 type CertificateInfo struct {
 	ValidNotBefore time.Time `json:"valid_not_before"`
-	ValidNotAfter  time.Time `json:"valid_not_after,omitempty"`
+	ValidNotAfter  time.Time `json:"valid_not_after"`
 }
 type DomainWithStatus struct {
 	ConfigDomain      `json:",inline"`

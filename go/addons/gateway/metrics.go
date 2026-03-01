@@ -185,7 +185,7 @@ func (mc *MetricsCollector) sendMetrics() {
 		}
 
 		// Create comprehensive fields (numeric and string data)
-		fields := map[string]interface{}{
+		fields := map[string]any{
 			"request_count": float64(metrics.RequestCount),
 			"error_count":   float64(metrics.ErrorCount),
 			"client_ip":     metrics.ClientAddr,

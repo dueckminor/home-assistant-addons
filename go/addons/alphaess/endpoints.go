@@ -147,7 +147,7 @@ func (e *Endpoints) previewFillGaps(c *gin.Context) {
 	}
 
 	// Aggregate all sessions to hourly data
-	preview := make(map[string]interface{})
+	preview := make(map[string]any)
 	totalHours := 0
 
 	for date, session := range sessions {

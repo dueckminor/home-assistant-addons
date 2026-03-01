@@ -65,7 +65,7 @@ func (c *Client) SendMail(msg *Message) error {
 	}
 
 	// Connect to SMTP server
-	addr := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
+	addr := net.JoinHostPort(c.config.Host, fmt.Sprintf("%d", c.config.Port))
 
 	var conn net.Conn
 	useTLS := c.config.UseTLS

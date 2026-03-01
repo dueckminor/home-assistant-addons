@@ -3,6 +3,8 @@ package homeassistant
 import (
 	"fmt"
 	"log"
+	"slices"
+	"strings"
 
 	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
 )
@@ -51,13 +53,7 @@ func (sc *SupervisorClient) DetectInfluxDB() (*InfluxDBConfig, error) {
 		}
 
 		// Check if this is a known InfluxDB add-on
-		isInfluxDB := false
-		for _, slug := range influxDBSlugs {
-			if addon.Slug == slug {
-				isInfluxDB = true
-				break
-			}
-		}
+		isInfluxDB := slices.Contains(influxDBSlugs, addon.Slug)
 
 		// Also check if the name contains "influx" (case-insensitive)
 		if !isInfluxDB && containsIgnoreCase(addon.Name, "influx") {
@@ -148,15 +144,15 @@ func (sc *SupervisorClient) DetectInfluxDB() (*InfluxDBConfig, error) {
 
 // Helper function to convert slug to hostname (replace underscores with hyphens)
 func convertSlugToHostname(slug string) string {
-	result := ""
+	var result strings.Builder
 	for _, char := range slug {
 		if char == '_' {
-			result += "-"
+			result.WriteString("-")
 		} else {
-			result += string(char)
+			result.WriteString(string(char))
 		}
 	}
-	return result
+	return result.String()
 }
 
 // Helper function for case-insensitive substring search
@@ -167,15 +163,15 @@ func containsIgnoreCase(s, substr string) bool {
 }
 
 func toLower(s string) string {
-	result := ""
+	var result strings.Builder
 	for _, char := range s {
 		if char >= 'A' && char <= 'Z' {
-			result += string(char + 32)
+			result.WriteString(string(char + 32))
 		} else {
-			result += string(char)
+			result.WriteString(string(char))
 		}
 	}
-	return result
+	return result.String()
 }
 
 func contains(s, substr string) bool {

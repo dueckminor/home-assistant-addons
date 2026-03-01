@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-func makeFloat64(val interface{}) (float64, error) {
+func makeFloat64(val any) (float64, error) {
 	switch i := val.(type) {
 	case float64:
 		return i, nil

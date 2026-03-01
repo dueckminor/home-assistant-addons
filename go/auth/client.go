@@ -196,7 +196,7 @@ func (ac *AuthClient) handleLoginCallback(c *gin.Context) {
 		return
 	}
 
-	var data map[string]interface{}
+	var data map[string]any
 	err = json.Unmarshal(bodyText, &data)
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
@@ -209,7 +209,7 @@ func (ac *AuthClient) handleLoginCallback(c *gin.Context) {
 		return
 	}
 
-	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
 			return ac.ServerKey, nil
 		}

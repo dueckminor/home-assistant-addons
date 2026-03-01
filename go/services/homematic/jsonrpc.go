@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 )
 
@@ -44,9 +45,7 @@ func (j *jsonRPC) addSession(method string, params map[string]any) map[string]an
 		"_session_id_": j.sessionId,
 	}
 
-	for k, v := range params {
-		result[k] = v
-	}
+	maps.Copy(result, params)
 
 	return result
 }

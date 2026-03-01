@@ -16,7 +16,7 @@ func ParseQueryStringArray(c *gin.Context, paramName string) []string {
 
 	if param := c.Query(paramName); param != "" {
 		// Split by comma and trim spaces
-		for _, value := range strings.Split(param, ",") {
+		for value := range strings.SplitSeq(param, ",") {
 			if trimmed := strings.TrimSpace(value); trimmed != "" {
 				values = append(values, trimmed)
 			}

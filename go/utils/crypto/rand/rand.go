@@ -28,7 +28,7 @@ func GetString(s int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for i := 0; i < s; i++ {
+	for i := range s {
 		val := int64(b[i])*256 + int64(b[i+1])
 		val *= int64(len(chars))
 		val /= (256 * 256)
