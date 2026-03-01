@@ -100,13 +100,21 @@ jobs:
 
   # Summary job for branch protection - fails if any test-build job failed
   ci-success:
-    needs: test-build
+    needs: [detect-changed-addons, test-build]
     runs-on: ubuntu-latest
     if: always()
     steps:
       - name: Check test results
         run: |
+          addons='${{ needs.detect-changed-addons.outputs.addons }}'
           result="${{ needs.test-build.result }}"
+          
+          # If no addons changed, treat as success
+          if [ "$addons" = "[]" ] || [ "$addons" = "" ]; then
+            echo "✅ No addons changed, skipping tests"
+            exit 0
+          fi
+          
           if [ "$result" = "success" ] || [ "$result" = "skipped" ]; then
             echo "✅ All tests passed (result: $result)"
           else
