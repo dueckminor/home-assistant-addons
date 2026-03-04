@@ -102,6 +102,21 @@ func makeQueryAndParams(column string, statisticId string, filter MeasurementFil
 	query += "WHERE metadata_id = (SELECT id FROM statistics_meta WHERE statistic_id=?)\n"
 	params := []any{statisticId}
 
+	// the timestamps in the DB are from the begin of the hour,
+	// so we need to adjust the filter accordingly
+	if !filter.After.IsZero() {
+		filter.After = filter.After.Add(-time.Hour)
+	}
+	if !filter.Before.IsZero() {
+		filter.Before = filter.Before.Add(-time.Hour)
+	}
+	if !filter.NotAfter.IsZero() {
+		filter.NotAfter = filter.NotAfter.Add(-time.Hour)
+	}
+	if !filter.NotBefore.IsZero() {
+		filter.NotBefore = filter.NotBefore.Add(-time.Hour)
+	}
+
 	switch sibling {
 	case -1:
 		query += "AND start_ts <= ?\n"
