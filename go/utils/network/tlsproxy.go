@@ -250,6 +250,11 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 	clientAddr := conn.RemoteAddr()
 
 	clientHello, conn := ReadTlsClientHello(conn)
+	if clientHello == nil {
+		fmt.Println("Failed to read TLS Client Hello")
+		return
+	}
+
 	sni := clientHello.ServerName
 
 	tlsConfig := tp.getTLSConfig(sni)
@@ -295,6 +300,11 @@ func (tp *tlsProxy) startHTTPSServer() {
 			return tlsConfig, nil
 		}},
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Println("crash in http handler")
+				}
+			}()
 			sni := r.Host
 			httpHandler, _, _ := tp.getHandler(sni)
 			if httpHandler == nil {
