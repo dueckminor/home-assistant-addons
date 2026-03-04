@@ -95,7 +95,7 @@ func (a *addon) measurementsToAggregates(measurements []alphaess.Measurement, lo
 				localTime := v.Time.In(loc)
 				hour := localTime.Hour()
 				timestampMap[v.Time] = &MeasurementAggregate{
-					EndTime:   v.Time,
+					EndTime:   v.Time.Add(time.Hour),
 					LocalDate: localTime.Format("2006-01-02"),
 					LocalHour: &hour,
 				}
