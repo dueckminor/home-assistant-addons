@@ -6,7 +6,7 @@ toolchain go1.26.1
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
-	github.com/gin-contrib/cors v1.7.6
+	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-contrib/sessions v1.1.0
 	github.com/gin-contrib/static v1.1.6
 	github.com/gin-gonic/gin v1.12.0
@@ -57,7 +57,7 @@ require (
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
-	golang.org/x/arch v0.22.0 // indirect
+	golang.org/x/arch v0.23.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
