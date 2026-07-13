@@ -19,7 +19,7 @@ require (
 	github.com/miekg/dns v1.1.72
 	github.com/simonvetter/modbus v1.6.4
 	golang.org/x/crypto v0.54.0
-	golang.org/x/net v0.56.0
+	golang.org/x/net v0.57.0
 	golang.org/x/text v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.48.1
