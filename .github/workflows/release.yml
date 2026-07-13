@@ -13,7 +13,7 @@ jobs:
       addons: ${{ steps.list-addons.outputs.addons }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       
       - name: List addons
         id: list-addons
@@ -30,7 +30,7 @@ jobs:
         addon: ${{ fromJson(needs.discover-addons.outputs.addons) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Go
         uses: actions/setup-go@v6
