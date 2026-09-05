@@ -7,7 +7,7 @@ toolchain go1.27.1
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/gin-contrib/cors v1.7.8
-	github.com/gin-contrib/sessions v1.1.0
+	github.com/gin-contrib/sessions v1.1.1
 	github.com/gin-contrib/static v1.1.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/goccy/go-yaml v1.19.2
