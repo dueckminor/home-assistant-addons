@@ -161,20 +161,10 @@ func (c *Client) buildMessage(msg *Message) (string, error) {
 	// Add standard headers
 	builder.WriteString(fmt.Sprintf("From: %s\r\n", fromHeader))
 
-	if len(msg.To) > 0 {
-		toHeader, err := normalizeHeaderAddressList(msg.To)
-		if err != nil {
-			return "", fmt.Errorf("invalid to header: %w", err)
-		}
-		builder.WriteString(fmt.Sprintf("To: %s\r\n", toHeader))
-	}
-
-	if len(msg.Cc) > 0 {
-		ccHeader, err := normalizeHeaderAddressList(msg.Cc)
-		if err != nil {
-			return "", fmt.Errorf("invalid cc header: %w", err)
-		}
-		builder.WriteString(fmt.Sprintf("Cc: %s\r\n", ccHeader))
+	if len(msg.To) > 0 || len(msg.Cc) > 0 || len(msg.Bcc) > 0 {
+		// Keep recipient addresses in SMTP envelope only; this avoids exposing
+		// untrusted recipient input in MIME headers.
+		builder.WriteString("To: undisclosed-recipients:;\r\n")
 	}
 
 	builder.WriteString(fmt.Sprintf("Subject: %s\r\n", sanitizeHeaderValue(msg.Subject)))
