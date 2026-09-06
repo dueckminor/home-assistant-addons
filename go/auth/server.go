@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/services/smtp"
 	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
@@ -107,7 +108,15 @@ func (a *AuthServer) GetAuthClientConfig(clientId string) (c *AuthClientConfig, 
 
 func (a *AuthServer) GetSessionStore() sessions.Store {
 	if a.sessionStore == nil {
-		a.sessionStore = cookie.NewStore(a.config.AuthKey, a.config.EncKey)
+		store := cookie.NewStore(a.config.AuthKey, a.config.EncKey)
+		store.Options(sessions.Options{
+			Path:     "/",
+			MaxAge:   int((12 * time.Hour).Seconds()),
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		a.sessionStore = store
 	}
 	return a.sessionStore
 }
