@@ -37,6 +37,8 @@ func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer
 		return nil, err
 	}
 
+	a.loginLimiter = NewDefaultLoginRateLimiter()
+
 	if distDir != "" {
 		ginutil.ServeFromUri(r, distDir)
 	} else {
@@ -53,6 +55,7 @@ type AuthServer struct {
 	clients      AuthClientConfigManager
 	sessionStore sessions.Store
 	users        Users
+	loginLimiter *LoginRateLimiter
 	// for the password reset
 	hostname   string
 	domain     string
@@ -72,13 +75,22 @@ func (a *AuthServer) Register(r *gin.Engine) {
 
 	rg := r.Group("")
 	rg.Use(sessions.Sessions("MYPI_AUTH_SESSION", store))
-	rg.POST("/login", a.login)
+	rg.POST("/login", a.loginRateLimitMiddleware(), a.login)
 	rg.POST("/logout", a.handleLogout)
 	rg.GET("/status", a.handleStatus)
 	rg.GET("/oauth/authorize", a.handleOauthAuthorize)
 	rg.POST("/oauth/token", a.handleOauthToken)
 	rg.POST("/send_reset_password_mail", a.sendResetPasswordMail)
 	rg.POST("/reset_password", a.resetPassword)
+}
+
+func (a *AuthServer) loginRateLimitMiddleware() gin.HandlerFunc {
+	if a.loginLimiter == nil {
+		return func(c *gin.Context) {
+			c.Next()
+		}
+	}
+	return a.loginLimiter.Middleware()
 }
 
 func (a *AuthServer) Users() Users {
