@@ -136,11 +136,10 @@ func (s *Server) Start() error {
 
 	// Create TLS config for FTPS support
 	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{s.generateSelfSignedCert()},
-		ServerName:         s.config.ServerName,
-		InsecureSkipVerify: true,
-		MinVersion:         tls.VersionTLS12,
-		MaxVersion:         tls.VersionTLS13,
+		Certificates: []tls.Certificate{s.generateSelfSignedCert()},
+		ServerName:   s.config.ServerName,
+		MinVersion:   tls.VersionTLS12,
+		MaxVersion:   tls.VersionTLS13,
 	}
 
 	// Create the server

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/smtp"
 	"strings"
 	"time"
@@ -58,6 +59,10 @@ func NewClient(config Config) *Client {
 
 // SendMail sends an email message
 func (c *Client) SendMail(msg *Message) error {
+	if msg == nil {
+		return fmt.Errorf("message must not be nil")
+	}
+
 	// Build the email message
 	emailContent, err := c.buildMessage(msg)
 	if err != nil {
@@ -100,17 +105,28 @@ func (c *Client) SendMail(msg *Message) error {
 	if from == "" {
 		from = c.config.From
 	}
+	fromEnvelope, err := normalizeEmailAddress(from)
+	if err != nil {
+		return fmt.Errorf("invalid sender address: %w", err)
+	}
 
 	// Set sender
-	if err = smtpClient.Mail(from); err != nil {
+	if err = smtpClient.Mail(fromEnvelope); err != nil {
 		return fmt.Errorf("failed to set sender: %w", err)
 	}
 
 	// Set recipients
 	allRecipients := append(msg.To, msg.Cc...)
 	allRecipients = append(allRecipients, msg.Bcc...)
+	if len(allRecipients) == 0 {
+		return fmt.Errorf("at least one recipient is required")
+	}
 	for _, recipient := range allRecipients {
-		if err = smtpClient.Rcpt(recipient); err != nil {
+		recipientEnvelope, err := normalizeEmailAddress(recipient)
+		if err != nil {
+			return fmt.Errorf("invalid recipient address %q: %w", recipient, err)
+		}
+		if err = smtpClient.Rcpt(recipientEnvelope); err != nil {
 			return fmt.Errorf("failed to set recipient %s: %w", recipient, err)
 		}
 	}
@@ -133,24 +149,44 @@ func (c *Client) SendMail(msg *Message) error {
 func (c *Client) buildMessage(msg *Message) (string, error) {
 	var builder strings.Builder
 
+	from := msg.From
+	if from == "" {
+		from = c.config.From
+	}
+	fromHeader, err := normalizeHeaderAddress(from)
+	if err != nil {
+		return "", fmt.Errorf("invalid from header: %w", err)
+	}
+
 	// Add standard headers
-	builder.WriteString(fmt.Sprintf("From: %s\r\n", msg.From))
+	builder.WriteString(fmt.Sprintf("From: %s\r\n", fromHeader))
 
 	if len(msg.To) > 0 {
-		builder.WriteString(fmt.Sprintf("To: %s\r\n", strings.Join(msg.To, ", ")))
+		toHeader, err := normalizeHeaderAddressList(msg.To)
+		if err != nil {
+			return "", fmt.Errorf("invalid to header: %w", err)
+		}
+		builder.WriteString(fmt.Sprintf("To: %s\r\n", toHeader))
 	}
 
 	if len(msg.Cc) > 0 {
-		builder.WriteString(fmt.Sprintf("Cc: %s\r\n", strings.Join(msg.Cc, ", ")))
+		ccHeader, err := normalizeHeaderAddressList(msg.Cc)
+		if err != nil {
+			return "", fmt.Errorf("invalid cc header: %w", err)
+		}
+		builder.WriteString(fmt.Sprintf("Cc: %s\r\n", ccHeader))
 	}
 
-	builder.WriteString(fmt.Sprintf("Subject: %s\r\n", msg.Subject))
+	builder.WriteString(fmt.Sprintf("Subject: %s\r\n", sanitizeHeaderValue(msg.Subject)))
 	builder.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
 	builder.WriteString("MIME-Version: 1.0\r\n")
 
 	// Add custom headers
 	for key, value := range msg.Headers {
-		builder.WriteString(fmt.Sprintf("%s: %s\r\n", key, value))
+		if !isValidHeaderName(key) {
+			return "", fmt.Errorf("invalid header name: %q", key)
+		}
+		builder.WriteString(fmt.Sprintf("%s: %s\r\n", key, sanitizeHeaderValue(value)))
 	}
 
 	// Determine content type
@@ -192,4 +228,56 @@ func (c *Client) buildMessage(msg *Message) (string, error) {
 	}
 
 	return builder.String(), nil
+}
+
+func normalizeEmailAddress(value string) (string, error) {
+	if strings.Contains(value, "\r") || strings.Contains(value, "\n") {
+		return "", fmt.Errorf("address contains invalid newline characters")
+	}
+	parsed, err := mail.ParseAddress(strings.TrimSpace(value))
+	if err != nil {
+		return "", err
+	}
+	return parsed.Address, nil
+}
+
+func normalizeHeaderAddress(value string) (string, error) {
+	if strings.Contains(value, "\r") || strings.Contains(value, "\n") {
+		return "", fmt.Errorf("address contains invalid newline characters")
+	}
+	parsed, err := mail.ParseAddress(strings.TrimSpace(value))
+	if err != nil {
+		return "", err
+	}
+	return sanitizeHeaderValue(parsed.String()), nil
+}
+
+func normalizeHeaderAddressList(values []string) (string, error) {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		item, err := normalizeHeaderAddress(value)
+		if err != nil {
+			return "", err
+		}
+		normalized = append(normalized, item)
+	}
+	return strings.Join(normalized, ", "), nil
+}
+
+func sanitizeHeaderValue(value string) string {
+	value = strings.ReplaceAll(value, "\r", "")
+	value = strings.ReplaceAll(value, "\n", "")
+	return strings.TrimSpace(value)
+}
+
+func isValidHeaderName(name string) bool {
+	if name == "" || strings.Contains(name, ":") {
+		return false
+	}
+	for _, r := range name {
+		if r <= 31 || r == 127 {
+			return false
+		}
+	}
+	return true
 }
