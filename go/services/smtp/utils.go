@@ -2,12 +2,21 @@ package smtp
 
 import (
 	"fmt"
+	"html"
+	"net/url"
 )
 
 // SendPasswordResetEmail sends a password reset email
 func (c *Client) SendPasswordResetEmail(userEmail, resetToken, resetURL string) error {
 	senderEmail := c.config.From
 	subject := "Password Reset Request"
+
+	parsedResetURL, err := validateResetURL(resetURL)
+	if err != nil {
+		return err
+	}
+	safeResetURL := parsedResetURL.String()
+	escapedResetURL := html.EscapeString(safeResetURL)
 
 	// Plain text version
 	plainBody := fmt.Sprintf(`Hello,
@@ -21,7 +30,7 @@ If you did not request this password reset, please ignore this email.
 This link will expire in 24 hours.
 
 Best regards,
-Gateway Team`, resetURL)
+Gateway Team`, safeResetURL)
 
 	// HTML version
 	htmlBody := fmt.Sprintf(`<!DOCTYPE html>
@@ -57,7 +66,7 @@ Gateway Team`, resetURL)
         </p>
     </div>
 </body>
-</html>`, resetURL, resetURL)
+</html>`, escapedResetURL, escapedResetURL)
 
 	message := &Message{
 		From:     senderEmail,
@@ -78,6 +87,7 @@ Gateway Team`, resetURL)
 // SendWelcomeEmail sends a welcome email to new users
 func (c *Client) SendWelcomeEmail(userEmail, username string) error {
 	senderEmail := c.config.From
+	safeUsername := html.EscapeString(username)
 
 	subject := "Welcome to Gateway"
 
@@ -90,7 +100,7 @@ You can now access your dashboard and configure your gateway services.
 If you have any questions, please don't hesitate to contact support.
 
 Best regards,
-Gateway Team`, username)
+Gateway Team`, safeUsername)
 
 	htmlBody := fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -128,7 +138,7 @@ Gateway Team`, username)
         </p>
     </div>
 </body>
-</html>`, username)
+</html>`, safeUsername)
 
 	message := &Message{
 		From:     senderEmail,
@@ -143,4 +153,18 @@ Gateway Team`, username)
 	}
 
 	return c.SendMail(message)
+}
+
+func validateResetURL(resetURL string) (*url.URL, error) {
+	parsedResetURL, err := url.ParseRequestURI(resetURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid reset URL")
+	}
+	if parsedResetURL.Scheme != "https" && parsedResetURL.Scheme != "http" {
+		return nil, fmt.Errorf("invalid reset URL scheme")
+	}
+	if parsedResetURL.Host == "" {
+		return nil, fmt.Errorf("invalid reset URL host")
+	}
+	return parsedResetURL, nil
 }
