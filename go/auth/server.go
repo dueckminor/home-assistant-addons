@@ -73,6 +73,7 @@ func (a *AuthServer) Register(r *gin.Engine) {
 	config.AllowCredentials = true
 	config.AllowHeaders = append(config.AllowHeaders, "next")
 	r.Use(cors.New(config))
+	r.Use(authSecurityHeadersMiddleware())
 
 	rg := r.Group("")
 	rg.Use(sessions.Sessions("MYPI_AUTH_SESSION", store))
