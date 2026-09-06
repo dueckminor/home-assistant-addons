@@ -243,23 +243,27 @@ func (a *AuthServer) handleOauthToken(c *gin.Context) {
 	clientID := c.Request.Form.Get("client_id")
 
 	if grantType != "authorization_code" {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	if responseType != "token" {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	username := a.basicAuth(c)
 	if username != clientID {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
 	authRequest := GetRequest(code)
+	if authRequest == nil {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
 	if authRequest.RedirectURI != redirectURI {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
