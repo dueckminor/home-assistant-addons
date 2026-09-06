@@ -6,6 +6,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   discover-addons:
     runs-on: ubuntu-latest
@@ -25,6 +28,9 @@ jobs:
   build-and-push:
     needs: discover-addons
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         addon: ${{ fromJson(needs.discover-addons.outputs.addons) }}

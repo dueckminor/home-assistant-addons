@@ -321,8 +321,21 @@ func GetAllSessions() map[string]*CSVImportSession {
 	return sessions
 }
 
+func normalizeCSVDate(date string) (string, error) {
+	parsed, err := time.Parse("2006-01-02", strings.TrimSpace(date))
+	if err != nil {
+		return "", fmt.Errorf("invalid date format: %w", err)
+	}
+	return parsed.Format("2006-01-02"), nil
+}
+
 // SaveCSVToDisk saves CSV content to disk in DataDir/csv folder
 func SaveCSVToDisk(dataDir, date, timezone, content string) error {
+	normalizedDate, err := normalizeCSVDate(date)
+	if err != nil {
+		return err
+	}
+
 	csvDir := filepath.Join(dataDir, "csv")
 	if err := os.MkdirAll(csvDir, 0755); err != nil {
 		return fmt.Errorf("failed to create csv directory: %w", err)
@@ -333,7 +346,7 @@ func SaveCSVToDisk(dataDir, date, timezone, content string) error {
 		Date     string `json:"date"`
 		Timezone string `json:"timezone"`
 	}{
-		Date:     date,
+		Date:     normalizedDate,
 		Timezone: timezone,
 	}
 
@@ -343,13 +356,13 @@ func SaveCSVToDisk(dataDir, date, timezone, content string) error {
 	}
 
 	// Save metadata file
-	metadataPath := filepath.Join(csvDir, date+".json")
+	metadataPath := filepath.Join(csvDir, normalizedDate+".json")
 	if err := os.WriteFile(metadataPath, metadataJSON, 0644); err != nil {
 		return fmt.Errorf("failed to save metadata: %w", err)
 	}
 
 	// Save CSV content file
-	csvPath := filepath.Join(csvDir, date+".csv")
+	csvPath := filepath.Join(csvDir, normalizedDate+".csv")
 	if err := os.WriteFile(csvPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to save CSV: %w", err)
 	}
@@ -379,8 +392,13 @@ func LoadAllCSVSessions(dataDir string) (map[string]*CSVImportSession, error) {
 			continue
 		}
 
-		date := strings.TrimSuffix(entry.Name(), ".json")
-		metadataPath := filepath.Join(csvDir, entry.Name())
+		rawDate := strings.TrimSuffix(entry.Name(), ".json")
+		date, err := normalizeCSVDate(rawDate)
+		if err != nil {
+			fmt.Printf("Warning: skipping CSV metadata with invalid date %q\n", rawDate)
+			continue
+		}
+		metadataPath := filepath.Join(csvDir, date+".json")
 		csvPath := filepath.Join(csvDir, date+".csv")
 
 		// Read metadata
@@ -421,9 +439,14 @@ func LoadAllCSVSessions(dataDir string) (map[string]*CSVImportSession, error) {
 
 // DeleteCSVFile deletes a CSV file and its metadata from disk
 func DeleteCSVFile(dataDir, date string) error {
+	normalizedDate, err := normalizeCSVDate(date)
+	if err != nil {
+		return err
+	}
+
 	csvDir := filepath.Join(dataDir, "csv")
-	metadataPath := filepath.Join(csvDir, date+".json")
-	csvPath := filepath.Join(csvDir, date+".csv")
+	metadataPath := filepath.Join(csvDir, normalizedDate+".json")
+	csvPath := filepath.Join(csvDir, normalizedDate+".csv")
 
 	// Delete both files
 	if err := os.Remove(metadataPath); err != nil && !os.IsNotExist(err) {

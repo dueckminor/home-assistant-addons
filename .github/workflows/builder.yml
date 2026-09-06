@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   detect-changed-addons:
     runs-on: ubuntu-latest

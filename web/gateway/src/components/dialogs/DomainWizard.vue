@@ -664,10 +664,18 @@ export default {
         // First get the gateway's current IPv4 address for comparison
         const gatewayIpResponse = await apiGet('dns/external/ipv4')
         const expectedIp = gatewayIpResponse.address
+        const normalizedExpectedIp = this.normalizeIPv4(expectedIp)
 
         if (!expectedIp || gatewayIpResponse.error) {
           this.dnsValidation.nsRecords.status = 'error'
           this.dnsValidation.nsRecords.message = `Cannot determine gateway IP: ${gatewayIpResponse.error || 'No address available'}`
+          this.dnsValidation.nsRecords.records = []
+          return
+        }
+
+        if (!normalizedExpectedIp) {
+          this.dnsValidation.nsRecords.status = 'error'
+          this.dnsValidation.nsRecords.message = 'Cannot determine a valid gateway IPv4 address'
           this.dnsValidation.nsRecords.records = []
           return
         }
@@ -686,15 +694,10 @@ export default {
             const soaRecords = nsResponse.records.filter(record => record.type === 'SOA')
             const isGatewayManaged = soaRecords.length > 0
             
-            // Check if the NS records point to your gateway (for external delegation)
-            const gatewayNsPatterns = [
-              /\.myfritz\.net\.?$/,  // FRITZ!Box dynamic DNS
-              new RegExp(`^${expectedIp.replace(/\./g, '\\.')}$`)  // Direct IP match
-            ]
-            
-            const isExternalDelegation = nsNames.some(ns => 
-              gatewayNsPatterns.some(pattern => pattern.test(ns))
-            )
+            const isExternalDelegation = nsNames.some(ns => {
+              const normalizedNs = this.normalizeNsName(ns)
+              return normalizedNs.endsWith('.myfritz.net') || normalizedNs === normalizedExpectedIp
+            })
             
             // For gateway-managed domains, check if NS points to a subdomain of the domain itself
             const isGatewayNsSubdomain = nsNames.some(ns => {
@@ -720,15 +723,17 @@ export default {
                   
                   if (aRecords.length > 0) {
                     const ipAddresses = aRecords.map(record => record.value)
-                    const matchingRecords = ipAddresses.filter(ip => ip === expectedIp)
+                    const matchingRecords = ipAddresses
+                      .map(ip => this.normalizeIPv4(ip))
+                      .filter(ip => ip === normalizedExpectedIp)
                     
                     if (matchingRecords.length > 0) {
                       this.dnsValidation.nsRecords.status = 'success'
-                      this.dnsValidation.nsRecords.message = `✓ NS records correctly delegated to gateway → Domain resolves to ${expectedIp}`
+                      this.dnsValidation.nsRecords.message = `✓ NS records correctly delegated to gateway → Domain resolves to ${normalizedExpectedIp}`
                       this.dnsValidation.nsRecords.records = nsNames
                     } else {
                       this.dnsValidation.nsRecords.status = 'warning'
-                      this.dnsValidation.nsRecords.message = `✓ NS delegation correct, but A records point to: ${ipAddresses.join(', ')} (expected ${expectedIp})`
+                      this.dnsValidation.nsRecords.message = `✓ NS delegation correct, but A records point to: ${ipAddresses.join(', ')} (expected ${normalizedExpectedIp})`
                       this.dnsValidation.nsRecords.records = nsNames
                     }
                   } else {
@@ -760,7 +765,7 @@ export default {
             } else {
               // NS records don't point to gateway - this needs attention
               this.dnsValidation.nsRecords.status = 'warning'
-              this.dnsValidation.nsRecords.message = `NS records found but don't point to gateway: ${nsNames.join(', ')} (expected *.myfritz.net, gateway subdomain, or ${expectedIp})`
+              this.dnsValidation.nsRecords.message = `NS records found but don't point to gateway: ${nsNames.join(', ')} (expected *.myfritz.net, gateway subdomain, or ${normalizedExpectedIp})`
               this.dnsValidation.nsRecords.records = nsNames
             }
           } else {
@@ -809,6 +814,24 @@ export default {
       }
       
       return this.dnsValidation[checkType]?.message || 'Not checked yet'
+    },
+
+    normalizeNsName(value) {
+      return String(value || '').trim().toLowerCase().replace(/\.$/, '')
+    },
+
+    normalizeIPv4(value) {
+      const candidate = String(value || '').trim()
+      if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(candidate)) {
+        return null
+      }
+
+      const octets = candidate.split('.').map(n => Number(n))
+      if (octets.some(n => n < 0 || n > 255)) {
+        return null
+      }
+
+      return octets.join('.')
     },
 
     shouldShowDnsSetupInstructions() {
