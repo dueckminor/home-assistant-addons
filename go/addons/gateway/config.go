@@ -106,17 +106,11 @@ type ConfigMail struct {
 	FromName  string `yaml:"from_name" json:"from_name"`
 }
 
-type ConfigInfluxDB struct {
-	Username string `yaml:"username" json:"username"`
-	Password string `yaml:"password" json:"password"`
-}
-
 type Config struct {
-	file     string
-	Domains  []*ConfigDomain `yaml:"domains" json:"domains"`
-	Dns      ConfigDns       `yaml:"dns" json:"dns"`
-	Mail     ConfigMail      `yaml:"mail" json:"mail"`
-	InfluxDB ConfigInfluxDB  `yaml:"influxdb" json:"influxdb"`
+	file    string
+	Domains []*ConfigDomain `yaml:"domains" json:"domains"`
+	Dns     ConfigDns       `yaml:"dns" json:"dns"`
+	Mail    ConfigMail      `yaml:"mail" json:"mail"`
 }
 
 func (config *Config) GetDomain(guid string) *ConfigDomain {
