@@ -110,10 +110,6 @@ func (g *Gateway) detectInfluxDB() {
 		if envUsername != "" {
 			g.influxDBConfig.Username = envUsername
 			g.influxDBConfig.Password = envPassword
-		} else if g.config.InfluxDB.Username != "" {
-			// Fallback to config file credentials if no env vars
-			g.influxDBConfig.Username = g.config.InfluxDB.Username
-			g.influxDBConfig.Password = g.config.InfluxDB.Password
 		}
 
 		// Override database name if provided

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/services/smtp"
 	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
@@ -37,6 +38,8 @@ func NewAuthServer(r *gin.Engine, distDir string, dataDir string) (a *AuthServer
 		return nil, err
 	}
 
+	a.loginLimiter = NewDefaultLoginRateLimiter()
+
 	if distDir != "" {
 		ginutil.ServeFromUri(r, distDir)
 	} else {
@@ -53,6 +56,7 @@ type AuthServer struct {
 	clients      AuthClientConfigManager
 	sessionStore sessions.Store
 	users        Users
+	loginLimiter *LoginRateLimiter
 	// for the password reset
 	hostname   string
 	domain     string
@@ -69,16 +73,26 @@ func (a *AuthServer) Register(r *gin.Engine) {
 	config.AllowCredentials = true
 	config.AllowHeaders = append(config.AllowHeaders, "next")
 	r.Use(cors.New(config))
+	r.Use(authSecurityHeadersMiddleware())
 
 	rg := r.Group("")
 	rg.Use(sessions.Sessions("MYPI_AUTH_SESSION", store))
-	rg.POST("/login", a.login)
+	rg.POST("/login", a.loginRateLimitMiddleware(), a.login)
 	rg.POST("/logout", a.handleLogout)
 	rg.GET("/status", a.handleStatus)
 	rg.GET("/oauth/authorize", a.handleOauthAuthorize)
 	rg.POST("/oauth/token", a.handleOauthToken)
 	rg.POST("/send_reset_password_mail", a.sendResetPasswordMail)
 	rg.POST("/reset_password", a.resetPassword)
+}
+
+func (a *AuthServer) loginRateLimitMiddleware() gin.HandlerFunc {
+	if a.loginLimiter == nil {
+		return func(c *gin.Context) {
+			c.Next()
+		}
+	}
+	return a.loginLimiter.Middleware()
 }
 
 func (a *AuthServer) Users() Users {
@@ -95,7 +109,15 @@ func (a *AuthServer) GetAuthClientConfig(clientId string) (c *AuthClientConfig, 
 
 func (a *AuthServer) GetSessionStore() sessions.Store {
 	if a.sessionStore == nil {
-		a.sessionStore = cookie.NewStore(a.config.AuthKey, a.config.EncKey)
+		store := cookie.NewStore(a.config.AuthKey, a.config.EncKey)
+		store.Options(sessions.Options{
+			Path:     "/",
+			MaxAge:   int((12 * time.Hour).Seconds()),
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+		})
+		a.sessionStore = store
 	}
 	return a.sessionStore
 }
@@ -243,23 +265,27 @@ func (a *AuthServer) handleOauthToken(c *gin.Context) {
 	clientID := c.Request.Form.Get("client_id")
 
 	if grantType != "authorization_code" {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	if responseType != "token" {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	username := a.basicAuth(c)
 	if username != clientID {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
 	authRequest := GetRequest(code)
+	if authRequest == nil {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
 	if authRequest.RedirectURI != redirectURI {
-		c.AbortWithStatus(http.StatusInternalServerError)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
