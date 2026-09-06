@@ -583,7 +583,7 @@ func (g *Gateway) startDomain(domain *ConfigDomain) {
 	}
 
 	g.dnsServer.AddDomains(domain.Name)
-	domain.serverCertificate = pki.NewServerCertificate(path.Join(g.acmeClient.DataDir(), domain.Name), g.acmeClient, "*."+domain.Name)
+	domain.serverCertificate = pki.NewServerCertificate(g.acmeClient.DataDir(), domain.Name, g.acmeClient, "*."+domain.Name)
 	domain.serverCertificate.SetTLSServer(g.httpsServer)
 }
 

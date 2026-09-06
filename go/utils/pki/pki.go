@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/utils/crypto"
@@ -194,8 +196,45 @@ func (sc *serverCertificate) createCert() (err error) {
 	return nil
 }
 
-func NewServerCertificate(filename string, issuer CA, dnsNames ...string) (sc ServerCertificate) {
+func sanitizeFileStem(input string) string {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "certificate"
+	}
+
+	var b strings.Builder
+	b.Grow(len(input))
+	for _, r := range input {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '.', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+
+	stem := strings.Trim(b.String(), "._-")
+	if stem == "" {
+		return "certificate"
+	}
+	if len(stem) > 128 {
+		stem = stem[:128]
+	}
+	return stem
+}
+
+func NewServerCertificate(baseDir string, fileStem string, issuer CA, dnsNames ...string) (sc ServerCertificate) {
 	ctx, cancel := context.WithCancel(context.Background())
+
+	baseDir = filepath.Clean(baseDir)
+	fileStem = sanitizeFileStem(fileStem)
+	filename := filepath.Join(baseDir, fileStem)
 
 	result := &serverCertificate{
 		cancel:      cancel,
