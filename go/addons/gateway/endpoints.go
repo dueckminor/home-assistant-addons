@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/mail"
 	"strings"
 	"time"
 
@@ -526,6 +527,13 @@ func (ep *Endpoints) POST_MailTest(c *gin.Context) {
 		return
 	}
 
+	parsedRecipient, err := mail.ParseAddress(strings.TrimSpace(testRequest.Email))
+	if err != nil || parsedRecipient.Address == "" {
+		c.JSON(400, gin.H{"error": "Invalid recipient email address"})
+		return
+	}
+	recipientEmail := parsedRecipient.Address
+
 	if !ep.Gateway.config.Mail.Enabled {
 		c.JSON(400, gin.H{"error": "Mail service is not enabled"})
 		return
@@ -542,7 +550,7 @@ func (ep *Endpoints) POST_MailTest(c *gin.Context) {
 	// Send test email
 	message := &smtp.Message{
 		From:    ep.Gateway.config.Mail.FromEmail,
-		To:      []string{testRequest.Email},
+		To:      []string{recipientEmail},
 		Subject: "Gateway Mail Configuration Test",
 		Body:    "This is a test email from your Gateway mail configuration. If you receive this, your mail settings are working correctly!",
 		BodyHTML: `
