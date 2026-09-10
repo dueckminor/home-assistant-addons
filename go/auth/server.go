@@ -61,6 +61,19 @@ type AuthServer struct {
 	hostname   string
 	domain     string
 	smtpClient *smtp.Client
+	clientCA   clientCertIssuer
+}
+
+// clientCertIssuer is the subset of pki.ClientCA needed by the auth server.
+// Using an interface avoids importing the pki package from auth.
+type clientCertIssuer interface {
+	IssueClientCert(name string) (pfxData []byte, password string, err error)
+	CACertPEM() string
+}
+
+// SetClientCA registers a client CA so authenticated users can generate and download PKCS#12 certs.
+func (a *AuthServer) SetClientCA(ca clientCertIssuer) {
+	a.clientCA = ca
 }
 
 func (a *AuthServer) Register(r *gin.Engine) {
@@ -84,6 +97,11 @@ func (a *AuthServer) Register(r *gin.Engine) {
 	rg.POST("/oauth/token", a.handleOauthToken)
 	rg.POST("/send_reset_password_mail", a.sendResetPasswordMail)
 	rg.POST("/reset_password", a.resetPassword)
+
+	authed := rg.Group("")
+	authed.Use(a.requireAuth)
+	authed.POST("/certificates", a.generateCertificate)
+	authed.GET("/ca-cert", a.downloadCACert)
 }
 
 func (a *AuthServer) loginRateLimitMiddleware() gin.HandlerFunc {
@@ -374,4 +392,50 @@ func (a *AuthServer) handleStatus(c *gin.Context) {
 	c.AbortWithStatusJSON(http.StatusOK, status{
 		Username: username,
 	})
+}
+
+func (a *AuthServer) requireAuth(c *gin.Context) {
+	session := sessions.Default(c)
+	if username, _ := session.Get("username").(string); username == "" {
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+	c.Next()
+}
+
+func (a *AuthServer) generateCertificate(c *gin.Context) {
+	if a.clientCA == nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	var params struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&params); err != nil || params.Name == "" {
+		session := sessions.Default(c)
+		params.Name, _ = session.Get("username").(string)
+	}
+	if params.Name == "" {
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	pfxData, password, err := a.clientCA.IssueClientCert(params.Name)
+	if err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+
+	c.Header("Content-Disposition", "attachment; filename=\""+params.Name+".p12\"")
+	c.Header("X-PKCS12-Password", password)
+	c.Data(http.StatusOK, "application/x-pkcs12", pfxData)
+}
+
+func (a *AuthServer) downloadCACert(c *gin.Context) {
+	if a.clientCA == nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Header("Content-Disposition", "attachment; filename=\"gateway-ca.pem\"")
+	c.Data(http.StatusOK, "application/x-pem-file", []byte(a.clientCA.CACertPEM()))
 }

@@ -3,6 +3,7 @@ package network
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"log"
@@ -40,6 +41,7 @@ type TLSProxy interface {
 	DeleteHandler(sni string)
 	InternalOnly(sni string)
 	AddTLSCertificates(sni string, tlsCertificates []tls.Certificate)
+	SetClientCA(sni string, pool *x509.CertPool)
 	EnableProxyProtocol(enable bool)
 }
 type tlsProxy struct {
@@ -49,6 +51,7 @@ type tlsProxy struct {
 	httpHandlers   map[string]http.Handler
 	dialHandlers   map[string]ProxyDialCtx
 	tlsConfigs     map[string]*tls.Config
+	clientCAs      map[string]*x509.CertPool
 	internal       map[string]bool
 	externalAddr   net.IP
 	metricCallback MetricCallback
@@ -60,6 +63,7 @@ func NewTLSProxy(network string, address string) (TLSProxy, error) {
 		httpHandlers: make(map[string]http.Handler),
 		dialHandlers: make(map[string]ProxyDialCtx),
 		tlsConfigs:   make(map[string]*tls.Config),
+		clientCAs:    make(map[string]*x509.CertPool),
 		internal:     make(map[string]bool),
 	}
 	err := tp.start(network, address)
@@ -186,6 +190,14 @@ func (tp *tlsProxy) AddTLSCertificates(sni string, tlsCertificates []tls.Certifi
 	tp.tlsConfigs[sni] = tlsConfig
 }
 
+func (tp *tlsProxy) SetClientCA(sni string, pool *x509.CertPool) {
+	if pool == nil {
+		delete(tp.clientCAs, sni)
+	} else {
+		tp.clientCAs[sni] = pool
+	}
+}
+
 func (tp *tlsProxy) getHandler(sni string) (httpHandler http.Handler, dial ProxyDialCtx, internal bool) {
 	if !tp.isValidHostname(sni) {
 		return nil, nil, false
@@ -296,6 +308,17 @@ func (tp *tlsProxy) startHTTPSServer() {
 			tlsConfig := tp.getTLSConfig(sni)
 			if tlsConfig == nil {
 				return nil, os.ErrInvalid
+			}
+			caPool := tp.clientCAs[sni]
+			if caPool == nil {
+				wildcard := "*." + strings.Join(strings.Split(sni, ".")[1:], ".")
+				caPool = tp.clientCAs[wildcard]
+			}
+			if caPool != nil {
+				c := tlsConfig.Clone()
+				c.ClientAuth = tls.VerifyClientCertIfGiven
+				c.ClientCAs = caPool
+				return c, nil
 			}
 			return tlsConfig, nil
 		}},

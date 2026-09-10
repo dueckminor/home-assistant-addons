@@ -54,6 +54,10 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 		return
 	}
 
+	if !sessionVerified && c.Request.TLS != nil && len(c.Request.TLS.VerifiedChains) > 0 {
+		sessionVerified = ac.handleMTLS(c)
+	}
+
 	if ac.Secret != "" {
 		sessionVerified = ac.handleSecret(c, sessionVerified)
 	}
@@ -94,6 +98,18 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 
 	c.Header("Location", redirectToAuthURI.String())
 	c.AbortWithStatus(http.StatusFound)
+}
+
+func (ac *AuthClient) handleMTLS(c *gin.Context) bool {
+	cert := c.Request.TLS.VerifiedChains[0][0]
+	session := sessions.Default(c)
+	session.Set("access_token", "mtls:"+cert.Subject.CommonName)
+	session.Set("hostname", ginutil.GetHostname(c))
+	if err := session.Save(); err != nil {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return false
+	}
+	return true
 }
 
 func (ac *AuthClient) handleSecret(c *gin.Context, sessionVerified bool) bool {

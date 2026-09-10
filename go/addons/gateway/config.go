@@ -19,6 +19,7 @@ type ConfigRouteOptions struct {
 	UseTargetHostname bool   `yaml:"use_target_hostname,omitempty" json:"use_target_hostname,omitempty"`
 	Auth              bool   `yaml:"auth,omitempty" json:"auth,omitempty"`
 	AuthSecret        string `yaml:"auth_secret,omitempty" json:"auth_secret,omitempty"`
+	AuthMTLS          bool   `yaml:"auth_mtls,omitempty" json:"auth_mtls,omitempty"`
 }
 
 type ConfigRoute struct {

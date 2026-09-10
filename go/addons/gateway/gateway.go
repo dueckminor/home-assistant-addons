@@ -55,6 +55,8 @@ type Gateway struct {
 	authServer *auth.AuthServer
 	authClient *auth.AuthClient
 
+	clientCA *pki.ClientCA
+
 	dnsServer dns.Server
 
 	acmeClient acme.Client
@@ -210,6 +212,16 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 		err = g.StartAcmeClient(ctx)
 	}
 	if err == nil {
+		primaryDomain := ""
+		for _, domain := range g.config.Domains {
+			if domain.Redirect == nil || domain.Redirect.Target == "" {
+				primaryDomain = domain.Name
+				break
+			}
+		}
+		g.clientCA, err = pki.NewClientCA(path.Join(g.dataDir, "mtls"), primaryDomain)
+	}
+	if err == nil {
 		err = g.StartUI(ctx, 8099)
 	}
 
@@ -335,6 +347,9 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 			options.SessionStore = g.authServer.GetSessionStore()
 		}
 		g.httpsServer.AddHandler(hostname, network.NewHostImplReverseProxy(route.Target, options))
+		if route.Options.AuthMTLS && g.clientCA != nil {
+			g.httpsServer.SetClientCA(hostname, g.clientCA.Pool())
+		}
 	}
 	if strings.HasPrefix(route.Target, "tcp://") {
 		g.httpsServer.AddHandler(hostname, network.NewDialTCPRaw("tcp", route.Target[6:]))
@@ -363,6 +378,10 @@ func (g *Gateway) startAuthServer(route *ConfigRoute) {
 	g.authServer, err = auth.NewAuthServer(r, g.distAuth, path.Join(g.dataDir, "auth"))
 	if err != nil {
 		panic(err)
+	}
+
+	if g.clientCA != nil {
+		g.authServer.SetClientCA(g.clientCA)
 	}
 
 	acc, err := g.authServer.GetAuthClientConfig("gateway")
