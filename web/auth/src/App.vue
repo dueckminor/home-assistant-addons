@@ -34,7 +34,7 @@
                 >
                   Authentication successful. You can now access protected resources.
                 </v-alert>
-                
+
                 <div class="text-center">
                   <v-btn
                     color="primary"
@@ -45,6 +45,24 @@
                     prepend-icon="mdi-logout"
                   >
                     Logout
+                  </v-btn>
+                </div>
+
+                <v-divider class="my-4"></v-divider>
+
+                <div class="text-center">
+                  <p class="text-body-2 text-medium-emphasis mb-3">
+                    Download a client certificate to authenticate with mTLS instead of a password.
+                  </p>
+                  <v-btn
+                    color="secondary"
+                    variant="tonal"
+                    size="large"
+                    @click="downloadCertificate"
+                    :loading="downloadingCert"
+                    prepend-icon="mdi-certificate"
+                  >
+                    Download Client Certificate
                   </v-btn>
                 </div>
               </v-card-text>
@@ -161,6 +179,49 @@
                 </v-form>
               </v-card-text>
             </v-card>
+
+            <!-- Certificate Password Dialog -->
+            <v-dialog v-model="showCertDialog" max-width="440px">
+              <v-card>
+                <v-card-title class="d-flex align-center pa-4">
+                  <v-icon class="me-2" color="success">mdi-certificate-outline</v-icon>
+                  Certificate Downloaded
+                </v-card-title>
+                <v-card-text class="pa-4 pt-0">
+                  <p class="text-body-2 mb-4">
+                    The certificate file <strong>{{ certFilename }}</strong> has been saved.
+                    Use the password below when importing it on your device.
+                  </p>
+                  <v-text-field
+                    :model-value="certPassword"
+                    label="Import Password"
+                    variant="outlined"
+                    readonly
+                    density="comfortable"
+                    prepend-inner-icon="mdi-lock-outline"
+                    :append-inner-icon="certPasswordVisible ? 'mdi-eye-off' : 'mdi-eye'"
+                    :type="certPasswordVisible ? 'text' : 'password'"
+                    @click:append-inner="certPasswordVisible = !certPasswordVisible"
+                  ></v-text-field>
+                  <v-btn
+                    variant="tonal"
+                    color="primary"
+                    size="small"
+                    prepend-icon="mdi-content-copy"
+                    @click="copyPassword"
+                    class="mt-n2"
+                  >
+                    Copy Password
+                  </v-btn>
+                  <v-alert type="info" variant="tonal" density="compact" class="mt-4">
+                    This password will not be shown again. On iOS: Settings → General → VPN &amp; Device Management → tap the downloaded profile.
+                  </v-alert>
+                </v-card-text>
+                <v-card-actions class="justify-end pa-4 pt-0">
+                  <v-btn color="primary" variant="elevated" @click="showCertDialog = false">Done</v-btn>
+                </v-card-actions>
+              </v-card>
+            </v-dialog>
 
             <!-- Forgot Password Dialog -->
             <v-dialog v-model="showForgotPasswordDialog" max-width="500px">
@@ -406,6 +467,13 @@ export default {
     const sendingResetEmail = ref(false)
     const resetEmailSent = ref(false)
     const resetEmailError = ref('')
+
+    // Certificate download state
+    const downloadingCert = ref(false)
+    const showCertDialog = ref(false)
+    const certPassword = ref('')
+    const certFilename = ref('')
+    const certPasswordVisible = ref(false)
     
     // Password reset state
     const showPasswordResetDialog = ref(false)
@@ -666,8 +734,52 @@ export default {
       }
     }
     
-    const closeForgotPasswordDialog = () => {
-      showForgotPasswordDialog.value = false
+    const downloadCertificate = async () => {
+      downloadingCert.value = true
+      certPasswordVisible.value = false
+      try {
+        const response = await fetch('/certificates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        })
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+        certPassword.value = response.headers.get('X-PKCS12-Password') || ''
+
+        const disposition = response.headers.get('Content-Disposition') || ''
+        const match = disposition.match(/filename="?([^"]+)"?/)
+        certFilename.value = match ? match[1] : credentials.username + '.p12'
+
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = certFilename.value
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+
+        showCertDialog.value = true
+      } catch (error) {
+        console.error('Certificate download error:', error)
+        showNotification('Failed to generate certificate', 'error', 'mdi-alert-circle')
+      } finally {
+        downloadingCert.value = false
+      }
+    }
+
+    const copyPassword = async () => {
+      try {
+        await navigator.clipboard.writeText(certPassword.value)
+        showNotification('Password copied to clipboard', 'success', 'mdi-check-circle')
+      } catch {
+        showNotification('Copy failed — select and copy manually', 'warning', 'mdi-alert')
+      }
+    }
+
+    const closeForgotPasswordDialog = () => {      showForgotPasswordDialog.value = false
       resetEmail.value = ''
       resetEmailSent.value = false
       resetEmailError.value = ''
@@ -827,6 +939,13 @@ export default {
       sendingResetEmail,
       resetEmailSent,
       resetEmailError,
+
+      // Certificate download state
+      downloadingCert,
+      showCertDialog,
+      certPassword,
+      certFilename,
+      certPasswordVisible,
       
       // Password reset state
       showPasswordResetDialog,
@@ -864,7 +983,9 @@ export default {
       sendResetEmail,
       closeForgotPasswordDialog,
       submitNewPassword,
-      closePasswordResetDialog
+      closePasswordResetDialog,
+      downloadCertificate,
+      copyPassword
     }
   }
 }

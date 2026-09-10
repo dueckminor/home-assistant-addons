@@ -254,6 +254,15 @@
                   ></v-switch>
                   
                   <div v-if="routeData.options.auth" class="mt-4">
+                    <v-switch
+                      v-model="routeData.options.auth_mtls"
+                      color="secondary"
+                      label="Use mTLS (client certificate)"
+                      hint="Allow access with a PKCS#12 client certificate instead of login — download certs from the auth page"
+                      persistent-hint
+                      class="mb-2"
+                    ></v-switch>
+
                     <v-text-field
                       v-model="routeData.options.auth_secret"
                       label="Bypass Secret (Optional)"
@@ -380,7 +389,12 @@
                     <v-icon start>{{ routeData.options.auth ? 'mdi-shield-account' : 'mdi-shield-off' }}</v-icon>
                     {{ routeData.options.auth ? 'Auth Required' : 'No Auth' }}
                   </v-chip>
-                  
+
+                  <v-chip v-if="routeData.options.auth && routeData.options.auth_mtls" color="secondary" class="mb-2 mr-2">
+                    <v-icon start>mdi-certificate-outline</v-icon>
+                    mTLS Enabled
+                  </v-chip>
+
                   <div v-if="routeData.options.auth && routeData.options.auth_secret" class="text-caption mt-1">
                     <v-chip size="small" color="info" variant="tonal" class="mt-1">
                       <v-icon start size="small">mdi-key</v-icon>
@@ -488,6 +502,7 @@ export default {
           insecure: false,
           use_target_hostname: false,
           auth: false,
+          auth_mtls: false,
           auth_secret: ''
         }
       },
@@ -778,6 +793,7 @@ export default {
           insecure: false,
           use_target_hostname: false,
           auth: false,
+          auth_mtls: false,
           auth_secret: ''
         }
       }
