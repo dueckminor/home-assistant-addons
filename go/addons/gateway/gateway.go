@@ -334,7 +334,6 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 			UseTargetHostname: route.Options.UseTargetHostname,
 			InsecureTLS:       route.Options.Insecure,
 			Auth:              route.Options.Auth,
-			AuthSecret:        route.Options.AuthSecret,
 			MetricCallback:    g.metricCallback,
 		}
 		if options.Auth {
@@ -343,11 +342,10 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 			}
 			options.AuthClient = new(auth.AuthClient)
 			*options.AuthClient = *g.authClient
-			options.AuthClient.Secret = options.AuthSecret
 			options.SessionStore = g.authServer.GetSessionStore()
 		}
 		g.httpsServer.AddHandler(hostname, network.NewHostImplReverseProxy(route.Target, options))
-		if route.Options.AuthMTLS && g.clientCA != nil {
+		if options.Auth && g.clientCA != nil {
 			g.httpsServer.SetClientCA(hostname, g.clientCA.Pool())
 		}
 	}

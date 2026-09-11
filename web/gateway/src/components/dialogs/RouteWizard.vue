@@ -253,26 +253,10 @@
                     persistent-hint
                   ></v-switch>
                   
-                  <div v-if="routeData.options.auth" class="mt-4">
-                    <v-switch
-                      v-model="routeData.options.auth_mtls"
-                      color="secondary"
-                      label="Use mTLS (client certificate)"
-                      hint="Allow access with a PKCS#12 client certificate instead of login — download certs from the auth page"
-                      persistent-hint
-                      class="mb-2"
-                    ></v-switch>
-
-                    <v-text-field
-                      v-model="routeData.options.auth_secret"
-                      label="Bypass Secret (Optional)"
-                      variant="outlined"
-                      class="mt-4"
-                      placeholder="my-secret-key"
-                      hint="Secret parameter value for bypassing auth (e.g., ?secret=my-secret-key) - needed for 3rd party apps like Home Assistant companion"
-                      persistent-hint
-                    ></v-text-field>
-                  </div>
+                  <v-alert v-if="routeData.options.auth" type="info" variant="tonal" class="mt-4" density="compact">
+                    <v-icon start>mdi-certificate-outline</v-icon>
+                    mTLS (client certificate) is automatically enabled when auth is required.
+                  </v-alert>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -390,17 +374,10 @@
                     {{ routeData.options.auth ? 'Auth Required' : 'No Auth' }}
                   </v-chip>
 
-                  <v-chip v-if="routeData.options.auth && routeData.options.auth_mtls" color="secondary" class="mb-2 mr-2">
+                  <v-chip v-if="routeData.options.auth" color="secondary" class="mb-2 mr-2">
                     <v-icon start>mdi-certificate-outline</v-icon>
                     mTLS Enabled
                   </v-chip>
-
-                  <div v-if="routeData.options.auth && routeData.options.auth_secret" class="text-caption mt-1">
-                    <v-chip size="small" color="info" variant="tonal" class="mt-1">
-                      <v-icon start size="small">mdi-key</v-icon>
-                      Bypass with ?secret={{ routeData.options.auth_secret }}
-                    </v-chip>
-                  </div>
                 </v-col>
               </v-row>
             </v-card-text>
@@ -501,9 +478,7 @@ export default {
         options: {
           insecure: false,
           use_target_hostname: false,
-          auth: false,
-          auth_mtls: false,
-          auth_secret: ''
+          auth: false
         }
       },
       
@@ -792,9 +767,7 @@ export default {
         options: {
           insecure: false,
           use_target_hostname: false,
-          auth: false,
-          auth_mtls: false,
-          auth_secret: ''
+          auth: false
         }
       }
       this.testResult = null
