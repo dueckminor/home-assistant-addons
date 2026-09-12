@@ -17,6 +17,7 @@ type RouteMetrics struct {
 	ClientAddr    string
 	Hostname      string
 	Method        string
+	Path          string
 	GeoLocation   *localmetrics.GeoLocation
 	RequestCount  int64
 	TotalDuration time.Duration
@@ -67,13 +68,14 @@ func (mc *MetricsCollector) RecordMetric(metric network.Metric) {
 		method = "NONE"
 	}
 
-	key := fmt.Sprintf("%s/%s/%s", clientIP, hostname, method)
+	key := fmt.Sprintf("%s/%s/%s/%s", clientIP, hostname, method, metric.Path)
 
 	metrics, exists := mc.routes[key]
 	if !exists {
 		metrics = &RouteMetrics{
 			Hostname:    hostname,
 			Method:      method,
+			Path:        metric.Path,
 			ClientAddr:  clientIP,
 			MinDuration: metric.Duration,
 		}
@@ -155,7 +157,7 @@ func (mc *MetricsCollector) sendMetrics() {
 			avgMs = metrics.TotalDuration.Milliseconds() / metrics.RequestCount
 		}
 
-		if err := mc.store.RecordBatch(bucketStart, metrics.Hostname, metrics.ClientAddr, metrics.Method, localmetrics.RouteMetricsSnapshot{
+		if err := mc.store.RecordBatch(bucketStart, metrics.Hostname, metrics.ClientAddr, metrics.Method, metrics.Path, localmetrics.RouteMetricsSnapshot{
 			RequestCount:  metrics.RequestCount,
 			ErrorCount:    metrics.ErrorCount,
 			DurationAvgMs: avgMs,

@@ -3,79 +3,109 @@
 </template>
 
 <script>
-import 'leaflet/dist/leaflet.css'
-import L from 'leaflet'
+import maplibregl from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 
 export default {
   name: 'WorldMap',
   props: {
-    locations:   { type: Array,  default: () => [] },
-    tileUrl:     { type: String, default: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png' },
-    attribution: { type: String, default: '© OpenStreetMap contributors © CARTO' }
+    locations: { type: Array,  default: () => [] },
+    mapStyle:  { type: String, default: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json' }
   },
   data() {
-    return { map: null, markers: [], tileLayer: null }
+    return { map: null, mapLoaded: false }
   },
   watch: {
     locations(val) {
-      this.updateMarkers(val)
+      this.updateData(val)
     },
-    tileUrl(url) {
-      if (this.tileLayer) { this.tileLayer.remove(); this.tileLayer = null }
-      this.tileLayer = L.tileLayer(url, { attribution: this.attribution, subdomains: 'abcd', maxZoom: 19, noWrap: true }).addTo(this.map)
+    mapStyle(style) {
+      if (!this.map) return
+      this.mapLoaded = false
+      this.map.setStyle(style)
+      this.map.once('style.load', () => {
+        this.mapLoaded = true
+        this.addDataLayer()
+        this.updateData(this.locations)
+      })
     }
   },
   mounted() {
-    this.map = L.map(this.$refs.mapContainer, {
-      scrollWheelZoom: true,
-      worldCopyJump: false,
-      maxBounds: [[-90, -180], [90, 180]],
-      maxBoundsViscosity: 1.0
-    }).setView([20, 0], 2)
-    this.tileLayer = L.tileLayer(this.tileUrl, {
-      attribution: this.attribution,
-      subdomains: 'abcd',
-      maxZoom: 19,
-      noWrap: true
-    }).addTo(this.map)
-    this.$nextTick(() => {
-      this.map.invalidateSize()
-      this.updateMarkers(this.locations)
+    this.map = new maplibregl.Map({
+      container: this.$refs.mapContainer,
+      style: this.mapStyle,
+      center: [0, 20],
+      zoom: 1.5,
+      renderWorldCopies: false
     })
+    this.map.on('load', () => {
+      this.mapLoaded = true
+      this.addDataLayer()
+      this.updateData(this.locations)
+    })
+    this.map.on('click', 'locations', e => {
+      const p = e.features[0].properties
+      new maplibregl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(`<strong>${p.city}, ${p.country}</strong><br>${Number(p.count).toLocaleString()} requests`)
+        .addTo(this.map)
+    })
+    this.map.on('mouseenter', 'locations', () => { this.map.getCanvas().style.cursor = 'pointer' })
+    this.map.on('mouseleave', 'locations', () => { this.map.getCanvas().style.cursor = '' })
   },
   beforeUnmount() {
-    if (this.map) {
-      this.map.remove()
-      this.map = null
-    }
+    if (this.map) { this.map.remove(); this.map = null }
   },
   methods: {
     invalidateSize() {
-      if (this.map) this.map.invalidateSize()
+      if (this.map) this.map.resize()
     },
-    updateMarkers(locations) {
-      if (!this.map) return
-      this.markers.forEach(m => m.remove())
-      this.markers = []
-      if (!locations || !locations.length) return
-
-      const maxCount = Math.max(...locations.map(l => l.count))
-      locations.forEach(loc => {
-        if (loc.lat == null || loc.lon == null) return
-        const radius = Math.max(6, Math.min(30, Math.sqrt(loc.count / maxCount) * 30))
-        const marker = L.circleMarker([loc.lat, loc.lon], {
-          radius,
-          color: '#1976d2',
-          fillColor: '#1976d2',
-          fillOpacity: 0.6,
-          weight: 1
+    addDataLayer() {
+      if (!this.map || !this.mapLoaded) return
+      if (!this.map.getSource('locations')) {
+        this.map.addSource('locations', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] }
         })
-        marker.bindPopup(
-          `<strong>${loc.city || '?'}, ${loc.country || '?'}</strong><br>${loc.count.toLocaleString()} requests`
-        )
-        marker.addTo(this.map)
-        this.markers.push(marker)
-      })
+      }
+      if (!this.map.getLayer('locations')) {
+        this.map.addLayer({
+          id: 'locations',
+          type: 'circle',
+          source: 'locations',
+          paint: {
+            'circle-radius': ['get', 'radius'],
+            'circle-color': '#1976d2',
+            'circle-opacity': 0.6,
+            'circle-stroke-width': 1,
+            'circle-stroke-color': '#1565c0'
+          }
+        })
+      }
+    },
+    updateData(locations) {
+      if (!this.map || !this.mapLoaded) return
+      const source = this.map.getSource('locations')
+      if (source) source.setData(this.toGeoJSON(locations))
+    },
+    toGeoJSON(locations) {
+      if (!locations || !locations.length) return { type: 'FeatureCollection', features: [] }
+      const maxCount = Math.max(...locations.map(l => l.count))
+      return {
+        type: 'FeatureCollection',
+        features: locations
+          .filter(l => l.lat != null && l.lon != null)
+          .map(loc => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [loc.lon, loc.lat] },
+            properties: {
+              count: loc.count,
+              city: loc.city || '?',
+              country: loc.country || '?',
+              radius: Math.max(6, Math.min(30, Math.sqrt(loc.count / maxCount) * 30))
+            }
+          }))
+      }
     }
   }
 }

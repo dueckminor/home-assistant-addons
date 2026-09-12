@@ -9,13 +9,12 @@ import (
 
 func (ep *Endpoints) GET_MetricsConfig(c *gin.Context) {
 	key := ep.Gateway.config.Metrics.CartoApiKey
-	tileURL := "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+	styleURL := "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json"
 	if key != "" {
-		tileURL += "?key=" + key
+		styleURL += "?api_key=" + key
 	}
 	c.JSON(200, gin.H{
-		"tile_url":    tileURL,
-		"attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors © <a href=\"https://carto.com/\">CARTO</a>",
+		"style_url": styleURL,
 	})
 }
 
@@ -79,6 +78,52 @@ func (ep *Endpoints) GET_MetricsTimeSeries(c *gin.Context) {
 		points = []localmetrics.TimePoint{}
 	}
 	c.JSON(200, points)
+}
+
+func (ep *Endpoints) GET_MetricsIPs(c *gin.Context) {
+	if ep.Gateway.metricsStore == nil {
+		c.JSON(503, gin.H{"error": "metrics not available"})
+		return
+	}
+
+	from, to, err := parseTimeRange(c)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	stats, err := ep.Gateway.metricsStore.GetIPStats(from, to, c.Query("hostname"), 100)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if stats == nil {
+		stats = []localmetrics.IPStat{}
+	}
+	c.JSON(200, stats)
+}
+
+func (ep *Endpoints) GET_MetricsPaths(c *gin.Context) {
+	if ep.Gateway.metricsStore == nil {
+		c.JSON(503, gin.H{"error": "metrics not available"})
+		return
+	}
+
+	from, to, err := parseTimeRange(c)
+	if err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	stats, err := ep.Gateway.metricsStore.GetTopPaths(from, to, c.Query("hostname"), 100)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	if stats == nil {
+		stats = []localmetrics.PathStat{}
+	}
+	c.JSON(200, stats)
 }
 
 func parseTimeRange(c *gin.Context) (from, to time.Time, err error) {

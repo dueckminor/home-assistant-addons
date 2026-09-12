@@ -42,6 +42,22 @@ type TimePoint struct {
 	Errors    int64     `json:"errors"`
 }
 
+type PathStat struct {
+	Path     string `json:"path"`
+	Method   string `json:"method"`
+	Hostname string `json:"hostname"`
+	Count    int64  `json:"count"`
+	Errors   int64  `json:"errors"`
+}
+
+type IPStat struct {
+	IP          string `json:"ip"`
+	Country     string `json:"country"`
+	CountryCode string `json:"country_code"`
+	City        string `json:"city"`
+	Count       int64  `json:"count"`
+}
+
 type Store struct {
 	db sqlite.Database
 }
@@ -67,6 +83,7 @@ func (s *Store) migrate() error {
 			hostname        TEXT    NOT NULL,
 			client_ip       TEXT    NOT NULL,
 			method          TEXT    NOT NULL,
+			path            TEXT    NOT NULL DEFAULT '',
 			request_count   INTEGER NOT NULL,
 			error_count     INTEGER NOT NULL,
 			duration_avg_ms INTEGER NOT NULL,
@@ -93,13 +110,21 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	// Add path column to existing databases that predate this migration
+	var hasPath int
+	row := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('access_log') WHERE name='path'`)
+	if row.Scan(&hasPath) == nil && hasPath == 0 {
+		if _, err := s.db.Exec(`ALTER TABLE access_log ADD COLUMN path TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func (s *Store) RecordBatch(bucketStart time.Time, hostname, clientIP, method string, rm RouteMetricsSnapshot) error {
+func (s *Store) RecordBatch(bucketStart time.Time, hostname, clientIP, method, path string, rm RouteMetricsSnapshot) error {
 	_, err := s.db.Exec(
-		`INSERT INTO access_log (bucket_start, hostname, client_ip, method, request_count, error_count, duration_avg_ms, duration_min_ms, duration_max_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		bucketStart.Unix(), hostname, clientIP, method,
+		`INSERT INTO access_log (bucket_start, hostname, client_ip, method, path, request_count, error_count, duration_avg_ms, duration_min_ms, duration_max_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		bucketStart.Unix(), hostname, clientIP, method, path,
 		rm.RequestCount, rm.ErrorCount, rm.DurationAvgMs, rm.DurationMinMs, rm.DurationMaxMs,
 	)
 	return err
@@ -210,6 +235,67 @@ func (s *Store) GetHostnames() ([]string, error) {
 		hostnames = append(hostnames, h)
 	}
 	return hostnames, rows.Err()
+}
+
+func (s *Store) GetTopPaths(from, to time.Time, hostname string, limit int) ([]PathStat, error) {
+	query := `SELECT path, method, hostname, SUM(request_count), SUM(error_count)
+		FROM access_log
+		WHERE bucket_start >= ? AND bucket_start <= ? AND path != ''`
+	args := []any{from.Unix(), to.Unix()}
+
+	if hostname != "" {
+		query += " AND hostname = ?"
+		args = append(args, hostname)
+	}
+	query += " GROUP BY path, method, hostname ORDER BY SUM(request_count) DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []PathStat
+	for rows.Next() {
+		var p PathStat
+		if err := rows.Scan(&p.Path, &p.Method, &p.Hostname, &p.Count, &p.Errors); err != nil {
+			return nil, err
+		}
+		stats = append(stats, p)
+	}
+	return stats, rows.Err()
+}
+
+func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IPStat, error) {
+	query := `SELECT a.client_ip, COALESCE(g.country,''), COALESCE(g.country_code,''), COALESCE(g.city,''), SUM(a.request_count) as total
+		FROM access_log a
+		LEFT JOIN geo_cache g ON a.client_ip = g.ip
+		WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
+	args := []any{from.Unix(), to.Unix()}
+
+	if hostname != "" {
+		query += " AND a.hostname = ?"
+		args = append(args, hostname)
+	}
+	query += " GROUP BY a.client_ip ORDER BY total DESC LIMIT ?"
+	args = append(args, limit)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stats []IPStat
+	for rows.Next() {
+		var p IPStat
+		if err := rows.Scan(&p.IP, &p.Country, &p.CountryCode, &p.City, &p.Count); err != nil {
+			return nil, err
+		}
+		stats = append(stats, p)
+	}
+	return stats, rows.Err()
 }
 
 func (s *Store) Cleanup(retentionDays int) error {

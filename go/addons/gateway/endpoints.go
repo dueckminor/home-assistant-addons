@@ -110,6 +110,8 @@ func (ep *Endpoints) setupEndpoints(r *gin.RouterGroup) {
 	r.GET("/metrics/hostnames", ep.GET_MetricsHostnames)
 	r.GET("/metrics/map", ep.GET_MetricsMap)
 	r.GET("/metrics/timeseries", ep.GET_MetricsTimeSeries)
+	r.GET("/metrics/paths", ep.GET_MetricsPaths)
+	r.GET("/metrics/ips", ep.GET_MetricsIPs)
 
 	// Debug endpoint to inspect Home Assistant headers
 	r.GET("/debug/headers", ep.GET_DebugHeaders)
