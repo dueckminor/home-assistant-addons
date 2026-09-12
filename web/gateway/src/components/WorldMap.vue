@@ -35,8 +35,8 @@ export default {
       container: this.$refs.mapContainer,
       style: this.mapStyle,
       center: [0, 20],
-      zoom: 1.5,
-      renderWorldCopies: false
+      zoom: 1,
+      minZoom: -2,
     })
     this.map.on('load', () => {
       this.mapLoaded = true
@@ -52,11 +52,34 @@ export default {
     })
     this.map.on('mouseenter', 'locations', () => { this.map.getCanvas().style.cursor = 'pointer' })
     this.map.on('mouseleave', 'locations', () => { this.map.getCanvas().style.cursor = '' })
+
+    this._initialFitDone = false
+    this._resizeObserver = new ResizeObserver(() => {
+      if (!this.map) return
+      this.map.resize()
+      if (!this._initialFitDone) {
+        const el = this.$refs.mapContainer
+        if (el.clientWidth > 0 && el.clientHeight > 0) {
+          this._initialFitDone = true
+          this.fitWorld()
+        }
+      }
+    })
+    this._resizeObserver.observe(this.$refs.mapContainer)
   },
   beforeUnmount() {
+    if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null }
     if (this.map) { this.map.remove(); this.map = null }
   },
   methods: {
+    fitWorld() {
+      const el = this.$refs.mapContainer
+      if (!el || !el.clientWidth) return
+      // Zoom so the world fills the container width — prevents world copies in the initial view.
+      // (fitBounds with world bounds would be height-constrained on wide containers, showing copies.)
+      const zoom = Math.log2(el.clientWidth / 512)
+      this.map.jumpTo({ center: [0, 20], zoom })
+    },
     invalidateSize() {
       if (this.map) this.map.resize()
     },
