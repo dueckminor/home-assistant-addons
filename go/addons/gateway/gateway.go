@@ -331,10 +331,11 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 
 	if strings.HasPrefix(route.Target, "http://") || strings.HasPrefix(route.Target, "https://") {
 		options := network.ReverseProxyOptions{
-			UseTargetHostname: route.Options.UseTargetHostname,
-			InsecureTLS:       route.Options.Insecure,
-			Auth:              route.Options.Auth,
-			MetricCallback:    g.metricCallback,
+			UseTargetHostname:    route.Options.UseTargetHostname,
+			InsecureTLS:          route.Options.Insecure,
+			Auth:                 route.Options.Auth,
+			DisableServiceWorker: route.Options.DisableServiceWorker,
+			MetricCallback:       g.metricCallback,
 		}
 		if options.Auth {
 			if g.authClient == nil {

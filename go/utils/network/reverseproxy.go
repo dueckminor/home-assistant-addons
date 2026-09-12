@@ -13,12 +13,13 @@ import (
 )
 
 type ReverseProxyOptions struct {
-	UseTargetHostname bool
-	InsecureTLS       bool
-	Auth              bool
-	AuthClient        *auth.AuthClient
-	SessionStore      sessions.Store
-	MetricCallback    MetricCallback
+	UseTargetHostname    bool
+	InsecureTLS          bool
+	Auth                 bool
+	DisableServiceWorker bool
+	AuthClient           *auth.AuthClient
+	SessionStore         sessions.Store
+	MetricCallback       MetricCallback
 }
 
 func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) http.Handler {
@@ -42,9 +43,24 @@ func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) http.Ha
 		if opt.SessionStore != nil {
 			combinedOptions.SessionStore = opt.SessionStore
 		}
+		if opt.DisableServiceWorker {
+			combinedOptions.DisableServiceWorker = true
+		}
 		if opt.MetricCallback != nil {
 			combinedOptions.MetricCallback = opt.MetricCallback
 		}
+	}
+
+	if combinedOptions.DisableServiceWorker {
+		r.Use(func(c *gin.Context) {
+			if c.GetHeader("Service-Worker") == "script" {
+				c.Header("Content-Type", "application/javascript")
+				c.String(http.StatusOK, "self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',()=>self.registration.unregister());")
+				c.Abort()
+				return
+			}
+			c.Next()
+		})
 	}
 
 	if combinedOptions.MetricCallback != nil {
