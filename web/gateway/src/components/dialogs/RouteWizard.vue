@@ -261,6 +261,26 @@
               </v-card>
             </v-col>
           </v-row>
+
+          <v-row class="mt-4">
+            <v-col cols="12">
+              <v-card variant="outlined">
+                <v-card-title class="text-subtitle-1">
+                  <v-icon class="me-2">mdi-cog-transfer</v-icon>
+                  Browser Behavior
+                </v-card-title>
+                <v-card-text>
+                  <v-switch
+                    v-model="routeData.options.disable_service_worker"
+                    color="warning"
+                    label="Disable service worker"
+                    hint="Prevents the browser from caching offline state (fixes 'Unable to connect' on restart for PWAs like Home Assistant)"
+                    persistent-hint
+                  ></v-switch>
+                </v-card-text>
+              </v-card>
+            </v-col>
+          </v-row>
         </div>
 
         <!-- Step 3: Connectivity Test -->
@@ -378,6 +398,11 @@
                     <v-icon start>mdi-certificate-outline</v-icon>
                     mTLS Enabled
                   </v-chip>
+
+                  <v-chip v-if="routeData.options.disable_service_worker" color="warning" class="mb-2 mr-2">
+                    <v-icon start>mdi-cog-transfer</v-icon>
+                    Service Worker Disabled
+                  </v-chip>
                 </v-col>
               </v-row>
             </v-card-text>
@@ -478,10 +503,11 @@ export default {
         options: {
           insecure: false,
           use_target_hostname: false,
-          auth: false
+          auth: false,
+          disable_service_worker: false
         }
       },
-      
+
       hostnameRules: [
         v => !!v || 'Hostname is required',
         v => /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(v) || 'Invalid hostname format'
@@ -767,7 +793,8 @@ export default {
         options: {
           insecure: false,
           use_target_hostname: false,
-          auth: false
+          auth: false,
+          disable_service_worker: false
         }
       }
       this.testResult = null

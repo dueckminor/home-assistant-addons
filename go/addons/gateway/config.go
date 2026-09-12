@@ -15,9 +15,10 @@ type ConfigExternalIp struct {
 }
 
 type ConfigRouteOptions struct {
-	Insecure          bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
-	UseTargetHostname bool `yaml:"use_target_hostname,omitempty" json:"use_target_hostname,omitempty"`
-	Auth              bool `yaml:"auth,omitempty" json:"auth,omitempty"`
+	Insecure             bool `yaml:"insecure,omitempty" json:"insecure,omitempty"`
+	UseTargetHostname    bool `yaml:"use_target_hostname,omitempty" json:"use_target_hostname,omitempty"`
+	Auth                 bool `yaml:"auth,omitempty" json:"auth,omitempty"`
+	DisableServiceWorker bool `yaml:"disable_service_worker,omitempty" json:"disable_service_worker,omitempty"`
 }
 
 type ConfigRoute struct {
