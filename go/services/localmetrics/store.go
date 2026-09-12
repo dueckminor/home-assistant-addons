@@ -153,7 +153,7 @@ func (s *Store) GetGeoLocation(ip string) (*GeoLocation, bool, error) {
 	return &geo, true, nil
 }
 
-func (s *Store) GetMapData(from, to time.Time, hostname string) ([]MapPoint, error) {
+func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]MapPoint, error) {
 	query := `SELECT g.lat, g.lon, g.country, g.country_code, g.city, SUM(a.request_count) as total
 		FROM access_log a
 		JOIN geo_cache g ON a.client_ip = g.ip
@@ -163,6 +163,10 @@ func (s *Store) GetMapData(from, to time.Time, hostname string) ([]MapPoint, err
 	if hostname != "" {
 		query += " AND a.hostname = ?"
 		args = append(args, hostname)
+	}
+	if clientIP != "" {
+		query += " AND a.client_ip = ?"
+		args = append(args, clientIP)
 	}
 	query += " GROUP BY g.lat, g.lon, g.country, g.country_code, g.city ORDER BY total DESC"
 
@@ -183,7 +187,7 @@ func (s *Store) GetMapData(from, to time.Time, hostname string) ([]MapPoint, err
 	return points, rows.Err()
 }
 
-func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity string) ([]TimePoint, error) {
+func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientIP string) ([]TimePoint, error) {
 	var bucketSeconds int64 = 3600
 	if granularity == "day" {
 		bucketSeconds = 86400
@@ -197,6 +201,10 @@ func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity string) 
 	if hostname != "" {
 		query += " AND hostname = ?"
 		args = append(args, hostname)
+	}
+	if clientIP != "" {
+		query += " AND client_ip = ?"
+		args = append(args, clientIP)
 	}
 	query += " GROUP BY ts ORDER BY ts"
 
@@ -237,7 +245,7 @@ func (s *Store) GetHostnames() ([]string, error) {
 	return hostnames, rows.Err()
 }
 
-func (s *Store) GetTopPaths(from, to time.Time, hostname string, limit int) ([]PathStat, error) {
+func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP string, limit int) ([]PathStat, error) {
 	query := `SELECT path, method, hostname, SUM(request_count), SUM(error_count)
 		FROM access_log
 		WHERE bucket_start >= ? AND bucket_start <= ? AND path != ''`
@@ -246,6 +254,10 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname string, limit int) ([]P
 	if hostname != "" {
 		query += " AND hostname = ?"
 		args = append(args, hostname)
+	}
+	if clientIP != "" {
+		query += " AND client_ip = ?"
+		args = append(args, clientIP)
 	}
 	query += " GROUP BY path, method, hostname ORDER BY SUM(request_count) DESC LIMIT ?"
 	args = append(args, limit)

@@ -41,6 +41,20 @@
       </v-col>
     </v-row>
 
+    <!-- Active IP filter chip -->
+    <v-row v-if="selectedIP" class="mb-2" dense>
+      <v-col>
+        <v-chip
+          closable
+          color="primary"
+          size="small"
+          @click:close="clearIP"
+        >
+          IP: {{ selectedIP }}
+        </v-chip>
+      </v-col>
+    </v-row>
+
     <!-- World map + IP list -->
     <v-row class="mb-4" dense>
       <v-col cols="12" md="8">
@@ -60,6 +74,8 @@
             :items-per-page="10"
             density="compact"
             style="max-height: 430px; overflow-y: auto"
+            :row-props="({ item }) => ({ class: item.ip === selectedIP ? 'bg-primary-lighten-5' : 'cursor-pointer', style: 'cursor: pointer' })"
+            @click:row="(_, { item }) => toggleIP(item.ip)"
           >
             <template #item.ip="{ item }">
               <span class="text-caption font-weight-medium">{{ item.ip }}</span>
@@ -118,6 +134,7 @@ export default {
       fromDate: weekAgo.toISOString().slice(0, 10),
       toDate: now.toISOString().slice(0, 10),
       granularity: 'hour',
+      selectedIP: '',
       mapData: [],
       chartData: [],
       pathData: [],
@@ -159,6 +176,14 @@ export default {
     await this.loadData()
   },
   methods: {
+    toggleIP(ip) {
+      this.selectedIP = this.selectedIP === ip ? '' : ip
+      this.loadData()
+    },
+    clearIP() {
+      this.selectedIP = ''
+      this.loadData()
+    },
     async loadTileConfig() {
       try {
         const data = await apiGet('metrics/config')
@@ -177,11 +202,12 @@ export default {
       const from = new Date(this.fromDate).toISOString()
       const to = new Date(this.toDate + 'T23:59:59').toISOString()
       const hn = this.selectedHostname ? `&hostname=${encodeURIComponent(this.selectedHostname)}` : ''
+      const ip = this.selectedIP ? `&ip=${encodeURIComponent(this.selectedIP)}` : ''
 
       const [map, ts, paths, ips] = await Promise.all([
-        apiGet(`metrics/map?from=${from}&to=${to}${hn}`).catch(() => []),
-        apiGet(`metrics/timeseries?from=${from}&to=${to}&granularity=${this.granularity}${hn}`).catch(() => []),
-        apiGet(`metrics/paths?from=${from}&to=${to}${hn}`).catch(() => []),
+        apiGet(`metrics/map?from=${from}&to=${to}${hn}${ip}`).catch(() => []),
+        apiGet(`metrics/timeseries?from=${from}&to=${to}&granularity=${this.granularity}${hn}${ip}`).catch(() => []),
+        apiGet(`metrics/paths?from=${from}&to=${to}${hn}${ip}`).catch(() => []),
         apiGet(`metrics/ips?from=${from}&to=${to}${hn}`).catch(() => [])
       ])
       this.mapData = Array.isArray(map) ? map : []

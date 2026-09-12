@@ -46,7 +46,7 @@ func (ep *Endpoints) GET_MetricsMap(c *gin.Context) {
 		return
 	}
 
-	points, err := ep.Gateway.metricsStore.GetMapData(from, to, c.Query("hostname"))
+	points, err := ep.Gateway.metricsStore.GetMapData(from, to, c.Query("hostname"), c.Query("ip"))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -69,7 +69,7 @@ func (ep *Endpoints) GET_MetricsTimeSeries(c *gin.Context) {
 		return
 	}
 
-	points, err := ep.Gateway.metricsStore.GetTimeSeries(from, to, c.Query("hostname"), c.DefaultQuery("granularity", "hour"))
+	points, err := ep.Gateway.metricsStore.GetTimeSeries(from, to, c.Query("hostname"), c.DefaultQuery("granularity", "hour"), c.Query("ip"))
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -115,7 +115,7 @@ func (ep *Endpoints) GET_MetricsPaths(c *gin.Context) {
 		return
 	}
 
-	stats, err := ep.Gateway.metricsStore.GetTopPaths(from, to, c.Query("hostname"), 100)
+	stats, err := ep.Gateway.metricsStore.GetTopPaths(from, to, c.Query("hostname"), c.Query("ip"), 100)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
