@@ -35,6 +35,10 @@
                   <v-icon start>mdi-email</v-icon>
                   Mail
                 </v-tab>
+                <v-tab value="metrics">
+                  <v-icon start>mdi-chart-line</v-icon>
+                  Metrics
+                </v-tab>
               </v-tabs>
 
               <v-card-text class="pa-6">
@@ -76,6 +80,11 @@
                   <v-tabs-window-item value="mail">
                     <MailTab />
                   </v-tabs-window-item>
+
+                  <!-- Metrics Tab -->
+                  <v-tabs-window-item value="metrics">
+                    <MetricsTab :is-active="activeTab === 'metrics'" />
+                  </v-tabs-window-item>
                 </v-tabs-window>
               </v-card-text>
             </v-card>
@@ -91,6 +100,7 @@ import DnsTab from '../components/tabs/DnsTab.vue'
 import DomainsTab from '../components/tabs/DomainsTab.vue'
 import UsersTab from '../components/tabs/UsersTab.vue'
 import MailTab from '../components/tabs/MailTab.vue'
+import MetricsTab from '../components/tabs/MetricsTab.vue'
 import { apiRequest, apiGet, apiPost } from '../../../shared/utils/homeassistant.js'
 
 export default {
@@ -99,7 +109,8 @@ export default {
     DnsTab,
     DomainsTab,
     UsersTab,
-    MailTab
+    MailTab,
+    MetricsTab
   },
   data() {
     return {

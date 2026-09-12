@@ -3,62 +3,48 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
 	"net"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
+	"github.com/dueckminor/home-assistant-addons/go/services/localmetrics"
 	"github.com/dueckminor/home-assistant-addons/go/utils/network"
 )
 
-// GeoLocation stores geographical information for an IP address
-type GeoLocation struct {
-	Country     string  `json:"country"`
-	CountryCode string  `json:"countryCode"`
-	City        string  `json:"city"`
-	Region      string  `json:"regionName"`
-	Lat         float64 `json:"lat"`
-	Lon         float64 `json:"lon"`
-	ISP         string  `json:"isp"`
-	Org         string  `json:"org"`
-}
-
-// RouteMetrics stores metrics for a specific route and client
+// RouteMetrics stores metrics for a specific route and client during the aggregation window
 type RouteMetrics struct {
 	ClientAddr    string
 	Hostname      string
 	Method        string
-	GeoLocation   *GeoLocation
+	GeoLocation   *localmetrics.GeoLocation
 	RequestCount  int64
 	TotalDuration time.Duration
 	MinDuration   time.Duration
 	MaxDuration   time.Duration
 	ErrorCount    int64
-	StatusCodes   map[int]int64
 }
 
-// MetricsCollector aggregates HTTP metrics and sends them to InfluxDB periodically
+// MetricsCollector aggregates HTTP metrics and writes them to local SQLite storage periodically
 type MetricsCollector struct {
 	mu         sync.Mutex
 	routes     map[string]*RouteMetrics
-	influxDB   influxdb.Client
+	store      *localmetrics.Store
 	interval   time.Duration
 	stopChan   chan struct{}
 	wg         sync.WaitGroup
-	geoCache   map[string]*GeoLocation
+	geoCache   map[string]*localmetrics.GeoLocation
 	geoCacheMu sync.RWMutex
 }
 
 // NewMetricsCollector creates a new metrics collector
-func NewMetricsCollector(influxClient influxdb.Client, interval time.Duration) *MetricsCollector {
+func NewMetricsCollector(store *localmetrics.Store, interval time.Duration) *MetricsCollector {
 	return &MetricsCollector{
 		routes:   make(map[string]*RouteMetrics),
-		influxDB: influxClient,
+		store:    store,
 		interval: interval,
 		stopChan: make(chan struct{}),
-		geoCache: make(map[string]*GeoLocation),
+		geoCache: make(map[string]*localmetrics.GeoLocation),
 	}
 }
 
@@ -67,13 +53,6 @@ func (mc *MetricsCollector) RecordMetric(metric network.Metric) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
-	// Create key from client address, hostname, method, and path for individual client tracking
-	// Special cases:
-	// - ResponseCode 666: Unknown hostname (port scan attack) - no method/path
-	// - ResponseCode 667: TLS handshake failure - no method/path
-	var key string
-
-	// Remove the port from client address for key (safely)
 	clientIP := metric.ClientAddr
 	if host, _, err := net.SplitHostPort(metric.ClientAddr); err == nil {
 		clientIP = host
@@ -88,7 +67,7 @@ func (mc *MetricsCollector) RecordMetric(metric network.Metric) {
 		method = "NONE"
 	}
 
-	key = fmt.Sprintf("%s/%s/%s", clientIP, hostname, method)
+	key := fmt.Sprintf("%s/%s/%s", clientIP, hostname, method)
 
 	metrics, exists := mc.routes[key]
 	if !exists {
@@ -96,8 +75,6 @@ func (mc *MetricsCollector) RecordMetric(metric network.Metric) {
 			Hostname:    hostname,
 			Method:      method,
 			ClientAddr:  clientIP,
-			GeoLocation: nil, // Will be resolved during sendMetrics
-			StatusCodes: make(map[int]int64),
 			MinDuration: metric.Duration,
 		}
 		mc.routes[key] = metrics
@@ -116,8 +93,6 @@ func (mc *MetricsCollector) RecordMetric(metric network.Metric) {
 	if metric.ResponseCode >= 400 || metric.ResponseCode == 666 || metric.ResponseCode == 667 {
 		metrics.ErrorCount++
 	}
-
-	metrics.StatusCodes[metric.ResponseCode]++
 }
 
 // Start begins the periodic metrics reporting
@@ -130,12 +105,8 @@ func (mc *MetricsCollector) Start() {
 func (mc *MetricsCollector) Stop() {
 	close(mc.stopChan)
 	mc.wg.Wait()
-	if mc.influxDB != nil {
-		mc.influxDB.Close()
-	}
 }
 
-// reportLoop sends metrics to InfluxDB at regular intervals
 func (mc *MetricsCollector) reportLoop() {
 	defer mc.wg.Done()
 
@@ -147,129 +118,61 @@ func (mc *MetricsCollector) reportLoop() {
 		case <-ticker.C:
 			mc.sendMetrics()
 		case <-mc.stopChan:
-			// Send final metrics before stopping
 			mc.sendMetrics()
+			if err := mc.store.Cleanup(90); err != nil {
+				fmt.Printf("metrics cleanup error: %v\n", err)
+			}
 			return
 		}
 	}
 }
 
-// sendMetrics sends all collected metrics to InfluxDB and resets counters
 func (mc *MetricsCollector) sendMetrics() {
 	mc.mu.Lock()
-
-	// Snapshot current metrics and reset
 	snapshot := mc.routes
 	mc.routes = make(map[string]*RouteMetrics)
-
 	mc.mu.Unlock()
 
-	if mc.influxDB == nil || len(snapshot) == 0 {
+	if len(snapshot) == 0 {
 		return
 	}
 
-	now := time.Now()
+	bucketStart := time.Now().Truncate(mc.interval)
 
 	for _, metrics := range snapshot {
-		// Parse route key: "clientaddr:hostname:method:path"
-
-		// Resolve geolocation for this client IP (async, won't block requests)
 		if metrics.GeoLocation == nil {
 			metrics.GeoLocation = mc.getGeoLocation(metrics.ClientAddr)
 		}
 
-		// Create optimized tags (low cardinality)
-		tags := map[string]string{
-			"hostname": metrics.Hostname,
-			"method":   metrics.Method,
-		}
-
-		// Create comprehensive fields (numeric and string data)
-		fields := map[string]any{
-			"request_count": float64(metrics.RequestCount),
-			"error_count":   float64(metrics.ErrorCount),
-			"client_ip":     metrics.ClientAddr,
-		}
-
-		// Add response time fields
-		if metrics.RequestCount > 0 {
-			fields["response_time_avg"] = float64(metrics.TotalDuration.Milliseconds()) / float64(metrics.RequestCount)
-		}
-		if metrics.MinDuration > 0 {
-			fields["response_time_min"] = float64(metrics.MinDuration.Milliseconds())
-		}
-		if metrics.MaxDuration > 0 {
-			fields["response_time_max"] = float64(metrics.MaxDuration.Milliseconds())
-		}
-
-		// Add geolocation fields (numeric and string)
 		if metrics.GeoLocation != nil {
-			fields["latitude"] = metrics.GeoLocation.Lat
-			fields["longitude"] = metrics.GeoLocation.Lon
-			fields["country_name"] = metrics.GeoLocation.Country
-			fields["city_name"] = metrics.GeoLocation.City
-		}
-
-		// Add individual status code counts as fields
-		var status2xx, status3xx, status4xx, status5xx, statusSpecial float64
-		for statusCode, count := range metrics.StatusCodes {
-			fieldName := fmt.Sprintf("status_%d", statusCode)
-			fields[fieldName] = float64(count)
-
-			// Group status codes by category
-			switch {
-			case statusCode >= 200 && statusCode < 300:
-				status2xx += float64(count)
-			case statusCode >= 300 && statusCode < 400:
-				status3xx += float64(count)
-			case statusCode >= 400 && statusCode < 500:
-				status4xx += float64(count)
-			case statusCode >= 500 && statusCode < 600:
-				status5xx += float64(count)
-			case statusCode == 666 || statusCode == 667:
-				statusSpecial += float64(count)
+			if err := mc.store.SetGeoLocation(metrics.ClientAddr, *metrics.GeoLocation); err != nil {
+				fmt.Printf("geo cache write error: %v\n", err)
 			}
 		}
 
-		// Add grouped status code fields
-		if status2xx > 0 {
-			fields["status_2xx"] = status2xx
-		}
-		if status3xx > 0 {
-			fields["status_3xx"] = status3xx
-		}
-		if status4xx > 0 {
-			fields["status_4xx"] = status4xx
-		}
-		if status5xx > 0 {
-			fields["status_5xx"] = status5xx
-		}
-		if statusSpecial > 0 {
-			fields["status_special"] = statusSpecial
+		var avgMs int64
+		if metrics.RequestCount > 0 {
+			avgMs = metrics.TotalDuration.Milliseconds() / metrics.RequestCount
 		}
 
-		// Send single consolidated metric
-		if err := mc.influxDB.SendMetricWithFieldsAtTs("gateway_metrics", fields, tags, now); err != nil {
-			fmt.Printf("Failed to send gateway metrics: %v\n", err)
+		if err := mc.store.RecordBatch(bucketStart, metrics.Hostname, metrics.ClientAddr, metrics.Method, localmetrics.RouteMetricsSnapshot{
+			RequestCount:  metrics.RequestCount,
+			ErrorCount:    metrics.ErrorCount,
+			DurationAvgMs: avgMs,
+			DurationMinMs: metrics.MinDuration.Milliseconds(),
+			DurationMaxMs: metrics.MaxDuration.Milliseconds(),
+		}); err != nil {
+			fmt.Printf("metrics write error: %v\n", err)
 		}
 	}
 }
 
-// getGeoLocation retrieves geolocation data for an IP address
-func (mc *MetricsCollector) getGeoLocation(ipAddr string) *GeoLocation {
-	// Skip localhost and private IPs
-	if ipAddr == "127.0.0.1" || ipAddr == "::1" || ipAddr == "localhost" {
-		return &GeoLocation{
-			Country:     "Local",
-			CountryCode: "LC",
-			City:        "Localhost",
-			Region:      "Local",
-			ISP:         "Local",
-			Org:         "Local",
-		}
+func (mc *MetricsCollector) getGeoLocation(ipAddr string) *localmetrics.GeoLocation {
+	if localmetrics.IsPrivateIP(ipAddr) {
+		return &localmetrics.GeoLocation{Country: "Local", CountryCode: "LC", City: "Localhost"}
 	}
 
-	// Check cache first
+	// Check in-memory cache
 	mc.geoCacheMu.RLock()
 	if cached, exists := mc.geoCache[ipAddr]; exists {
 		mc.geoCacheMu.RUnlock()
@@ -277,15 +180,23 @@ func (mc *MetricsCollector) getGeoLocation(ipAddr string) *GeoLocation {
 	}
 	mc.geoCacheMu.RUnlock()
 
-	// Use free ip-api.com service (100 requests per minute limit)
+	// Check persisted SQLite cache
+	if geo, found, err := mc.store.GetGeoLocation(ipAddr); err == nil && found {
+		mc.geoCacheMu.Lock()
+		mc.geoCache[ipAddr] = geo
+		mc.geoCacheMu.Unlock()
+		return geo
+	}
+
+	// Call ip-api.com
 	resp, err := http.Get(fmt.Sprintf("http://ip-api.com/json/%s?fields=status,country,countryCode,regionName,city,lat,lon,isp,org", ipAddr))
 	if err != nil {
-		fmt.Printf("Failed to get geolocation for %s: %v\n", ipAddr, err)
+		fmt.Printf("geolocation lookup error for %s: %v\n", ipAddr, err)
 		return nil
 	}
 	defer resp.Body.Close()
 
-	var apiResponse struct {
+	var apiResp struct {
 		Status      string  `json:"status"`
 		Country     string  `json:"country"`
 		CountryCode string  `json:"countryCode"`
@@ -296,38 +207,28 @@ func (mc *MetricsCollector) getGeoLocation(ipAddr string) *GeoLocation {
 		ISP         string  `json:"isp"`
 		Org         string  `json:"org"`
 	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&apiResponse); err != nil {
-		fmt.Printf("Failed to decode geolocation response for %s: %v\n", ipAddr, err)
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
+		fmt.Printf("geolocation decode error for %s: %v\n", ipAddr, err)
+		return nil
+	}
+	if apiResp.Status != "success" {
 		return nil
 	}
 
-	if apiResponse.Status != "success" {
-		return nil
+	geo := &localmetrics.GeoLocation{
+		Country:     apiResp.Country,
+		CountryCode: apiResp.CountryCode,
+		City:        apiResp.City,
+		Region:      apiResp.Region,
+		Lat:         apiResp.Lat,
+		Lon:         apiResp.Lon,
+		ISP:         apiResp.ISP,
+		Org:         apiResp.Org,
 	}
 
-	geoLocation := &GeoLocation{
-		Country:     apiResponse.Country,
-		CountryCode: apiResponse.CountryCode,
-		City:        apiResponse.City,
-		Region:      apiResponse.Region,
-		Lat:         apiResponse.Lat,
-		Lon:         apiResponse.Lon,
-		ISP:         apiResponse.ISP,
-		Org:         apiResponse.Org,
-	}
-
-	// Cache the result
 	mc.geoCacheMu.Lock()
-	mc.geoCache[ipAddr] = geoLocation
+	mc.geoCache[ipAddr] = geo
 	mc.geoCacheMu.Unlock()
 
-	return geoLocation
-}
-
-// simpleHash creates a simple numeric hash of a string for privacy-preserving IP tracking
-func simpleHash(s string) uint32 {
-	h := fnv.New32a()
-	h.Write([]byte(s))
-	return h.Sum32()
+	return geo
 }

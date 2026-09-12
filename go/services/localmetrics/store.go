@@ -1,0 +1,246 @@
+package localmetrics
+
+import (
+	"database/sql"
+	"net"
+	"time"
+
+	"github.com/dueckminor/home-assistant-addons/go/services/sqlite"
+)
+
+type GeoLocation struct {
+	Country     string  `json:"country"`
+	CountryCode string  `json:"countryCode"`
+	City        string  `json:"city"`
+	Region      string  `json:"regionName"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	ISP         string  `json:"isp"`
+	Org         string  `json:"org"`
+}
+
+type RouteMetricsSnapshot struct {
+	RequestCount  int64
+	ErrorCount    int64
+	DurationAvgMs int64
+	DurationMinMs int64
+	DurationMaxMs int64
+}
+
+type MapPoint struct {
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	Country     string  `json:"country"`
+	CountryCode string  `json:"country_code"`
+	City        string  `json:"city"`
+	Count       int64   `json:"count"`
+}
+
+type TimePoint struct {
+	Timestamp time.Time `json:"timestamp"`
+	Count     int64     `json:"count"`
+	Errors    int64     `json:"errors"`
+}
+
+type Store struct {
+	db sqlite.Database
+}
+
+func NewStore(dbPath string) (*Store, error) {
+	db, err := sqlite.OpenDatabase(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	s := &Store{db: db}
+	if err := s.migrate(); err != nil {
+		db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *Store) migrate() error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS access_log (
+			id              INTEGER PRIMARY KEY AUTOINCREMENT,
+			bucket_start    INTEGER NOT NULL,
+			hostname        TEXT    NOT NULL,
+			client_ip       TEXT    NOT NULL,
+			method          TEXT    NOT NULL,
+			request_count   INTEGER NOT NULL,
+			error_count     INTEGER NOT NULL,
+			duration_avg_ms INTEGER NOT NULL,
+			duration_min_ms INTEGER NOT NULL,
+			duration_max_ms INTEGER NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_access_log_bucket   ON access_log(bucket_start)`,
+		`CREATE INDEX IF NOT EXISTS idx_access_log_hostname ON access_log(hostname)`,
+		`CREATE TABLE IF NOT EXISTS geo_cache (
+			ip           TEXT PRIMARY KEY,
+			lat          REAL,
+			lon          REAL,
+			country      TEXT,
+			country_code TEXT,
+			city         TEXT,
+			region       TEXT,
+			isp          TEXT,
+			org          TEXT,
+			updated_at   INTEGER NOT NULL
+		)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := s.db.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) RecordBatch(bucketStart time.Time, hostname, clientIP, method string, rm RouteMetricsSnapshot) error {
+	_, err := s.db.Exec(
+		`INSERT INTO access_log (bucket_start, hostname, client_ip, method, request_count, error_count, duration_avg_ms, duration_min_ms, duration_max_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		bucketStart.Unix(), hostname, clientIP, method,
+		rm.RequestCount, rm.ErrorCount, rm.DurationAvgMs, rm.DurationMinMs, rm.DurationMaxMs,
+	)
+	return err
+}
+
+func (s *Store) SetGeoLocation(ip string, geo GeoLocation) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO geo_cache (ip, lat, lon, country, country_code, city, region, isp, org, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ip, geo.Lat, geo.Lon, geo.Country, geo.CountryCode, geo.City, geo.Region, geo.ISP, geo.Org, time.Now().Unix(),
+	)
+	return err
+}
+
+func (s *Store) GetGeoLocation(ip string) (*GeoLocation, bool, error) {
+	row := s.db.QueryRow(
+		`SELECT lat, lon, country, country_code, city, region, isp, org FROM geo_cache WHERE ip = ?`, ip,
+	)
+	var geo GeoLocation
+	err := row.Scan(&geo.Lat, &geo.Lon, &geo.Country, &geo.CountryCode, &geo.City, &geo.Region, &geo.ISP, &geo.Org)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return &geo, true, nil
+}
+
+func (s *Store) GetMapData(from, to time.Time, hostname string) ([]MapPoint, error) {
+	query := `SELECT g.lat, g.lon, g.country, g.country_code, g.city, SUM(a.request_count) as total
+		FROM access_log a
+		JOIN geo_cache g ON a.client_ip = g.ip
+		WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
+	args := []any{from.Unix(), to.Unix()}
+
+	if hostname != "" {
+		query += " AND a.hostname = ?"
+		args = append(args, hostname)
+	}
+	query += " GROUP BY g.lat, g.lon, g.country, g.country_code, g.city ORDER BY total DESC"
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []MapPoint
+	for rows.Next() {
+		var p MapPoint
+		if err := rows.Scan(&p.Lat, &p.Lon, &p.Country, &p.CountryCode, &p.City, &p.Count); err != nil {
+			return nil, err
+		}
+		points = append(points, p)
+	}
+	return points, rows.Err()
+}
+
+func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity string) ([]TimePoint, error) {
+	var bucketSeconds int64 = 3600
+	if granularity == "day" {
+		bucketSeconds = 86400
+	}
+
+	query := `SELECT (bucket_start / ?) * ? as ts, SUM(request_count), SUM(error_count)
+		FROM access_log
+		WHERE bucket_start >= ? AND bucket_start <= ?`
+	args := []any{bucketSeconds, bucketSeconds, from.Unix(), to.Unix()}
+
+	if hostname != "" {
+		query += " AND hostname = ?"
+		args = append(args, hostname)
+	}
+	query += " GROUP BY ts ORDER BY ts"
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var points []TimePoint
+	for rows.Next() {
+		var ts int64
+		var p TimePoint
+		if err := rows.Scan(&ts, &p.Count, &p.Errors); err != nil {
+			return nil, err
+		}
+		p.Timestamp = time.Unix(ts, 0).UTC()
+		points = append(points, p)
+	}
+	return points, rows.Err()
+}
+
+func (s *Store) GetHostnames() ([]string, error) {
+	rows, err := s.db.Query(`SELECT DISTINCT hostname FROM access_log ORDER BY hostname`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var hostnames []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return nil, err
+		}
+		hostnames = append(hostnames, h)
+	}
+	return hostnames, rows.Err()
+}
+
+func (s *Store) Cleanup(retentionDays int) error {
+	cutoff := time.Now().Unix() - int64(retentionDays)*86400
+	_, err := s.db.Exec(`DELETE FROM access_log WHERE bucket_start < ?`, cutoff)
+	return err
+}
+
+func (s *Store) Close() error {
+	return s.db.Close()
+}
+
+var privateNets []*net.IPNet
+
+func init() {
+	cidrs := []string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7"}
+	for _, cidr := range cidrs {
+		_, n, _ := net.ParseCIDR(cidr)
+		privateNets = append(privateNets, n)
+	}
+}
+
+func IsPrivateIP(ipStr string) bool {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return false
+	}
+	for _, n := range privateNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
