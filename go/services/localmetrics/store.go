@@ -112,22 +112,21 @@ func (s *Store) migrate() error {
 			org          TEXT,
 			updated_at   INTEGER NOT NULL
 		)`,
+		// hostname_status: one row per hostname, is_valid=1 once the hostname ever
+		// had request_count > error_count. Maintained at write time so all read
+		// queries can use a cheap PK join instead of a full-table CTE scan.
+		`CREATE TABLE IF NOT EXISTS hostname_status (
+			hostname TEXT PRIMARY KEY,
+			is_valid INTEGER NOT NULL DEFAULT 0
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.Exec(stmt); err != nil {
 			return err
 		}
 	}
-	// Add path column to existing databases that predate this migration
-	var hasPath int
-	row := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('access_log') WHERE name='path'`)
-	if row.Scan(&hasPath) == nil && hasPath == 0 {
-		if _, err := s.db.Exec(`ALTER TABLE access_log ADD COLUMN path TEXT NOT NULL DEFAULT ''`); err != nil {
-			return err
-		}
-	}
-	// Normalize all local network entries to consistent values so they group as a single map point.
-	// Catches variations: city='Localhost', country='Local', etc. from older code.
+	// Normalize all local network entries to a fixed position so they group as a
+	// single map point. Kept here so the position can later be made configurable.
 	if _, err := s.db.Exec(`UPDATE geo_cache SET lat = 30, lon = -40, country = 'Local Network', country_code = 'LC', city = 'Local'
 		WHERE country IN ('Local Network', 'Local') OR city IN ('Local', 'Localhost')`); err != nil {
 		return err
@@ -140,6 +139,20 @@ func (s *Store) RecordBatch(bucketStart time.Time, hostname, clientIP, method, p
 		`INSERT INTO access_log (bucket_start, hostname, client_ip, method, path, request_count, error_count, duration_avg_ms, duration_min_ms, duration_max_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		bucketStart.Unix(), hostname, clientIP, method, path,
 		rm.RequestCount, rm.ErrorCount, rm.DurationAvgMs, rm.DurationMinMs, rm.DurationMaxMs,
+	)
+	if err != nil {
+		return err
+	}
+	isValid := 0
+	if rm.RequestCount > rm.ErrorCount {
+		isValid = 1
+	}
+	// Upsert: insert with current is_valid, or bump to 1 if this batch shows success.
+	// MAX ensures is_valid never goes from 1 back to 0.
+	_, err = s.db.Exec(
+		`INSERT INTO hostname_status (hostname, is_valid) VALUES (?, ?)
+		 ON CONFLICT(hostname) DO UPDATE SET is_valid = MAX(is_valid, excluded.is_valid)`,
+		hostname, isValid,
 	)
 	return err
 }
@@ -168,19 +181,13 @@ func (s *Store) GetGeoLocation(ip string) (*GeoLocation, bool, error) {
 }
 
 func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]MapPoint, error) {
-	// A hostname is "valid" (known/configured) if it ever had successful requests across all time.
-	// Requests to unknown/blocked hostnames (including no-SNI stored as 'NONE') have request_count = error_count
-	// in every row, so they never appear in the valid set and are classified as blocked.
-	query := `WITH valid AS (
-		SELECT DISTINCT hostname FROM access_log WHERE request_count > error_count
-	)
-	SELECT g.lat, g.lon, g.country, g.country_code, g.city,
-		SUM(CASE WHEN v.hostname IS NULL THEN a.request_count ELSE 0 END) AS blocked,
-		SUM(CASE WHEN v.hostname IS NOT NULL THEN a.error_count ELSE 0 END) AS errors,
-		SUM(CASE WHEN v.hostname IS NOT NULL THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
+	query := `SELECT g.lat, g.lon, g.country, g.country_code, g.city,
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 0 THEN a.request_count ELSE 0 END) AS blocked,
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN a.error_count ELSE 0 END) AS errors,
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
 	FROM access_log a
 	JOIN geo_cache g ON a.client_ip = g.ip
-	LEFT JOIN valid v ON a.hostname = v.hostname
+	LEFT JOIN hostname_status hs ON a.hostname = hs.hostname
 	WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
 	args := []any{from.Unix(), to.Unix()}
 
@@ -218,15 +225,12 @@ func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientI
 	}
 	hasLocation := city != "" && country != ""
 
-	query := `WITH valid AS (
-		SELECT DISTINCT hostname FROM access_log WHERE request_count > error_count
-	)
-	SELECT (a.bucket_start / ?) * ? as ts,
-		SUM(CASE WHEN v.hostname IS NULL THEN a.request_count ELSE 0 END) AS blocked,
-		SUM(CASE WHEN v.hostname IS NOT NULL THEN a.error_count ELSE 0 END) AS errors,
-		SUM(CASE WHEN v.hostname IS NOT NULL THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
+	query := `SELECT (a.bucket_start / ?) * ? as ts,
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 0 THEN a.request_count ELSE 0 END) AS blocked,
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN a.error_count ELSE 0 END) AS errors,
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
 	FROM access_log a
-	LEFT JOIN valid v ON a.hostname = v.hostname`
+	LEFT JOIN hostname_status hs ON a.hostname = hs.hostname`
 	if hasLocation {
 		query += ` JOIN geo_cache g ON a.client_ip = g.ip`
 	}
@@ -308,9 +312,7 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 		args = append(args, city, country)
 	}
 
-	query := `WITH valid AS (
-		SELECT DISTINCT hostname FROM access_log WHERE request_count > error_count
-	), filtered AS (
+	query := `WITH filtered AS (
 		SELECT a.path, a.method, a.hostname, a.request_count, a.error_count
 		` + filteredFrom + `
 	)
@@ -318,7 +320,7 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 	FROM (
 		SELECT f.path, f.method, f.hostname, SUM(f.request_count) AS total, SUM(f.error_count) AS errors
 		FROM filtered f
-		JOIN valid v ON f.hostname = v.hostname
+		JOIN hostname_status hs ON f.hostname = hs.hostname AND hs.is_valid = 1
 		WHERE f.path != ''
 		GROUP BY f.path, f.method, f.hostname
 		ORDER BY total DESC LIMIT ?
@@ -326,8 +328,8 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 	UNION ALL
 	SELECT '' AS path, '' AS method, f.hostname, SUM(f.request_count) AS total, 0, 1
 	FROM filtered f
-	LEFT JOIN valid v ON f.hostname = v.hostname
-	WHERE v.hostname IS NULL
+	LEFT JOIN hostname_status hs ON f.hostname = hs.hostname
+	WHERE COALESCE(hs.is_valid, 0) = 0
 	GROUP BY f.hostname`
 	args = append(args, limit)
 
@@ -351,18 +353,15 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 }
 
 func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IPStat, error) {
-	query := `WITH valid AS (
-		SELECT DISTINCT hostname FROM access_log WHERE request_count > error_count
-	)
-	SELECT a.client_ip,
+	query := `SELECT a.client_ip,
 		COALESCE(g.country,''), COALESCE(g.country_code,''), COALESCE(g.city,''),
 		COALESCE(g.lat,0), COALESCE(g.lon,0),
-		SUM(CASE WHEN v.hostname IS NULL THEN a.request_count ELSE 0 END) AS blocked,
-		SUM(CASE WHEN v.hostname IS NOT NULL THEN a.error_count ELSE 0 END) AS errors,
-		SUM(CASE WHEN v.hostname IS NOT NULL THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 0 THEN a.request_count ELSE 0 END) AS blocked,
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN a.error_count ELSE 0 END) AS errors,
+		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
 	FROM access_log a
 	LEFT JOIN geo_cache g ON a.client_ip = g.ip
-	LEFT JOIN valid v ON a.hostname = v.hostname
+	LEFT JOIN hostname_status hs ON a.hostname = hs.hostname
 	WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
 	args := []any{from.Unix(), to.Unix()}
 
