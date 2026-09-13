@@ -314,18 +314,21 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 		SELECT a.path, a.method, a.hostname, a.request_count, a.error_count
 		` + filteredFrom + `
 	)
-	SELECT f.path, f.method, f.hostname, SUM(f.request_count) AS total, SUM(f.error_count), 0
-	FROM filtered f
-	JOIN valid v ON f.hostname = v.hostname
-	WHERE f.path != ''
-	GROUP BY f.path, f.method, f.hostname
+	SELECT path, method, hostname, total, errors, 0
+	FROM (
+		SELECT f.path, f.method, f.hostname, SUM(f.request_count) AS total, SUM(f.error_count) AS errors
+		FROM filtered f
+		JOIN valid v ON f.hostname = v.hostname
+		WHERE f.path != ''
+		GROUP BY f.path, f.method, f.hostname
+		ORDER BY total DESC LIMIT ?
+	)
 	UNION ALL
 	SELECT '' AS path, '' AS method, f.hostname, SUM(f.request_count) AS total, 0, 1
 	FROM filtered f
 	LEFT JOIN valid v ON f.hostname = v.hostname
 	WHERE v.hostname IS NULL
-	GROUP BY f.hostname
-	ORDER BY total DESC LIMIT ?`
+	GROUP BY f.hostname`
 	args = append(args, limit)
 
 	rows, err := s.db.Query(query, args...)

@@ -35,10 +35,13 @@ function makePieSVG(segments, r, opacity) {
 export default {
   name: 'WorldMap',
   props: {
-    locations:    { type: Array,  default: () => [] },
-    mapStyle:     { type: String, default: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json' },
-    highlightLat: { type: Number, default: null },
-    highlightLon: { type: Number, default: null }
+    locations:    { type: Array,   default: () => [] },
+    mapStyle:     { type: String,  default: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json' },
+    highlightLat: { type: Number,  default: null },
+    highlightLon: { type: Number,  default: null },
+    showSuccess:  { type: Boolean, default: true },
+    showErrors:   { type: Boolean, default: true },
+    showBlocked:  { type: Boolean, default: true }
   },
   data() {
     return { map: null, mapLoaded: false }
@@ -47,6 +50,9 @@ export default {
     locations()    { this.updateData(this.locations) },
     highlightLat() { this.updateData(this.locations) },
     highlightLon() { this.updateData(this.locations) },
+    showSuccess()  { this.updateData(this.locations) },
+    showErrors()   { this.updateData(this.locations) },
+    showBlocked()  { this.updateData(this.locations) },
     mapStyle(style) {
       if (!this.map) return
       this.mapLoaded = false
@@ -122,18 +128,18 @@ export default {
         const loc = locations[i]
         if (loc.lat == null || loc.lon == null) continue
 
-        const total = totals[i]
-        if (total === 0) continue
+        const segments = [
+          this.showSuccess ? { value: loc.success || 0, color: '#43a047' } : null,
+          this.showErrors  ? { value: loc.errors  || 0, color: '#e53935' } : null,
+          this.showBlocked ? { value: loc.blocked || 0, color: '#fb8c00' } : null,
+        ].filter(Boolean)
+
+        const visibleTotal = segments.reduce((s, x) => s + x.value, 0)
+        if (visibleTotal === 0) continue
 
         const isHighlighted = !hasHighlight || (loc.lat === this.highlightLat && loc.lon === this.highlightLon)
         const opacity = isHighlighted ? 1 : 0.2
-        const radius = Math.max(8, Math.min(30, Math.sqrt(total / maxCount) * 30))
-
-        const segments = [
-          { value: loc.success || 0, color: '#43a047' },
-          { value: loc.errors  || 0, color: '#e53935' },
-          { value: loc.blocked || 0, color: '#fb8c00' }
-        ]
+        const radius = Math.max(8, Math.min(30, Math.sqrt(totals[i] / maxCount) * 30))
 
         const el = document.createElement('div')
         el.innerHTML = makePieSVG(segments, radius, opacity)

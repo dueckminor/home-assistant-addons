@@ -1,7 +1,7 @@
 <template>
   <div>
     <!-- Filter bar -->
-    <v-row class="mb-4 align-center" dense>
+    <v-row class="mb-2 align-center" dense>
       <v-col cols="12" sm="4">
         <v-select
           v-model="selectedHostname"
@@ -41,6 +41,25 @@
       </v-col>
     </v-row>
 
+    <!-- Category checkboxes -->
+    <v-row class="mb-4 align-center" dense>
+      <v-col cols="auto">
+        <v-checkbox v-model="showSuccess" density="compact" hide-details color="#43a047">
+          <template #label><span style="color:#43a047">Success</span></template>
+        </v-checkbox>
+      </v-col>
+      <v-col cols="auto">
+        <v-checkbox v-model="showErrors" density="compact" hide-details color="#e53935">
+          <template #label><span style="color:#e53935">Errors</span></template>
+        </v-checkbox>
+      </v-col>
+      <v-col cols="auto">
+        <v-checkbox v-model="showBlocked" density="compact" hide-details color="#fb8c00">
+          <template #label><span style="color:#fb8c00">Blocked</span></template>
+        </v-checkbox>
+      </v-col>
+    </v-row>
+
     <!-- World map + IP list + chart -->
     <v-row class="mb-4" dense>
       <v-col cols="12" md="4">
@@ -53,6 +72,9 @@
               :map-style="mapStyle"
               :highlight-lat="highlightLat"
               :highlight-lon="highlightLon"
+              :show-success="showSuccess"
+              :show-errors="showErrors"
+              :show-blocked="showBlocked"
               style="height: 400px"
               @click-location="toggleLocation($event.lat, $event.lon, $event.city, $event.country)"
             />
@@ -64,7 +86,7 @@
           <v-card-title class="text-subtitle-1">Top IPs</v-card-title>
           <v-data-table
             :headers="ipHeaders"
-            :items="ipData"
+            :items="filteredIPData"
             :items-per-page="10"
             density="compact"
             style="max-height: 430px; overflow-y: auto"
@@ -101,7 +123,7 @@
         <v-card height="100%">
           <v-card-title class="text-subtitle-1">Request Volume</v-card-title>
           <v-card-text style="height: 400px; padding-bottom: 8px">
-            <AccessChart :data-points="chartData" :granularity="granularity" style="height: 100%" />
+            <AccessChart :data-points="chartData" :granularity="granularity" :show-success="showSuccess" :show-errors="showErrors" :show-blocked="showBlocked" style="height: 100%" />
           </v-card-text>
         </v-card>
       </v-col>
@@ -112,7 +134,7 @@
       <v-card-title class="text-subtitle-1">Top Paths</v-card-title>
       <v-data-table
         :headers="pathHeaders"
-        :items="pathData"
+        :items="filteredPathData"
         :items-per-page="20"
         density="compact"
       >
@@ -127,11 +149,14 @@
         <template #item.hostname="{ item }">
           <span :style="item.blocked ? 'color:#fb8c00' : ''">{{ item.hostname }}</span>
         </template>
-        <template #item.count="{ item }">
-          <span :style="item.blocked ? 'color:#fb8c00' : ''">{{ item.count.toLocaleString() }}</span>
+        <template #item.pathSuccess="{ item }">
+          <span style="color:#43a047">{{ item.blocked ? 0 : (item.count - item.errors).toLocaleString() }}</span>
         </template>
         <template #item.errors="{ item }">
-          <span :class="item.errors > 0 ? 'text-error' : ''">{{ item.errors }}</span>
+          <span style="color:#e53935">{{ (item.errors || 0).toLocaleString() }}</span>
+        </template>
+        <template #item.pathBlocked="{ item }">
+          <span style="color:#fb8c00">{{ item.blocked ? item.count.toLocaleString() : 0 }}</span>
         </template>
       </v-data-table>
     </v-card>
@@ -159,32 +184,56 @@ export default {
       fromDate: weekAgo.toISOString().slice(0, 10),
       toDate: now.toISOString().slice(0, 10),
       granularity: 'hour',
+      showSuccess: true,
+      showErrors: true,
+      showBlocked: true,
       selectedIP: '',
       selectedLocation: null,  // { lat, lon, city, country }
       mapData: [],
       chartData: [],
       pathData: [],
       ipData: [],
-      ipHeaders: [
-        { title: 'IP',       key: 'ip',       sortable: true },
-        { title: 'Location', key: 'location', sortable: false },
-        { title: 'Success',  key: 'success',  sortable: true },
-        { title: 'Errors',   key: 'errors',   sortable: true },
-        { title: 'Blocked',  key: 'blocked',  sortable: true }
-      ],
-      pathHeaders: [
-        { title: 'Method',   key: 'method',   sortable: true },
-        { title: 'Hostname', key: 'hostname', sortable: true },
-        { title: 'Path',     key: 'path',     sortable: true },
-        { title: 'Requests', key: 'count',    sortable: true },
-        { title: 'Errors',   key: 'errors',   sortable: true }
-      ],
       mapStyle: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json'
     }
   },
   computed: {
     hostnameItems() {
       return [{ title: 'All hostnames', value: '' }, ...this.hostnames.map(h => ({ title: h, value: h }))]
+    },
+    ipHeaders() {
+      const headers = [
+        { title: 'IP',       key: 'ip',       sortable: true },
+        { title: 'Location', key: 'location', sortable: false }
+      ]
+      if (this.showSuccess) headers.push({ title: 'Success', key: 'success', sortable: true })
+      if (this.showErrors)  headers.push({ title: 'Errors',  key: 'errors',  sortable: true })
+      if (this.showBlocked) headers.push({ title: 'Blocked', key: 'blocked', sortable: true })
+      return headers
+    },
+    pathHeaders() {
+      const headers = [
+        { title: 'Method',   key: 'method',   sortable: true },
+        { title: 'Hostname', key: 'hostname', sortable: true },
+        { title: 'Path',     key: 'path',     sortable: true }
+      ]
+      if (this.showSuccess) headers.push({ title: 'Success', key: 'pathSuccess', sortable: false })
+      if (this.showErrors)  headers.push({ title: 'Errors',  key: 'errors',      sortable: true })
+      if (this.showBlocked) headers.push({ title: 'Blocked', key: 'pathBlocked', sortable: false })
+      return headers
+    },
+    filteredIPData() {
+      return this.ipData.filter(ip =>
+        (ip.success > 0 && this.showSuccess) ||
+        (ip.errors  > 0 && this.showErrors)  ||
+        (ip.blocked > 0 && this.showBlocked)
+      )
+    },
+    filteredPathData() {
+      return this.pathData.filter(p => {
+        if (p.blocked) return this.showBlocked
+        const successCount = p.count - p.errors
+        return (successCount > 0 && this.showSuccess) || (p.errors > 0 && this.showErrors)
+      })
     },
     highlightLat() {
       if (this.selectedLocation) return this.selectedLocation.lat

@@ -25,8 +25,11 @@ export default {
   name: 'AccessChart',
   components: { Line },
   props: {
-    dataPoints: { type: Array, default: () => [] },
-    granularity: { type: String, default: 'hour' }
+    dataPoints:   { type: Array,   default: () => [] },
+    granularity:  { type: String,  default: 'hour' },
+    showSuccess:  { type: Boolean, default: true },
+    showErrors:   { type: Boolean, default: true },
+    showBlocked:  { type: Boolean, default: true }
   },
   mounted() {
     this._resizeObserver = new ResizeObserver(() => {
@@ -42,38 +45,29 @@ export default {
     chartData() {
       const labels = this.dataPoints.map(p => new Date(p.timestamp))
       const pointRadius = this.dataPoints.length > 100 ? 0 : 3
-      return {
-        labels,
-        datasets: [
-          {
-            label: 'Success',
-            data: this.dataPoints.map(p => p.success),
-            borderColor: '#43a047',
-            backgroundColor: 'rgba(67, 160, 71, 0.1)',
-            fill: true,
-            tension: 0.2,
-            pointRadius
-          },
-          {
-            label: 'Errors',
-            data: this.dataPoints.map(p => p.errors),
-            borderColor: '#e53935',
-            backgroundColor: 'rgba(229, 57, 53, 0.1)',
-            fill: true,
-            tension: 0.2,
-            pointRadius
-          },
-          {
-            label: 'Blocked',
-            data: this.dataPoints.map(p => p.blocked),
-            borderColor: '#fb8c00',
-            backgroundColor: 'rgba(251, 140, 0, 0.1)',
-            fill: true,
-            tension: 0.2,
-            pointRadius
-          }
-        ]
-      }
+      const datasets = []
+      if (this.showSuccess) datasets.push({
+        label: 'Success',
+        data: this.dataPoints.map(p => p.success),
+        borderColor: '#43a047',
+        backgroundColor: 'rgba(67, 160, 71, 0.1)',
+        fill: true, tension: 0.2, pointRadius
+      })
+      if (this.showErrors) datasets.push({
+        label: 'Errors',
+        data: this.dataPoints.map(p => p.errors),
+        borderColor: '#e53935',
+        backgroundColor: 'rgba(229, 57, 53, 0.1)',
+        fill: true, tension: 0.2, pointRadius
+      })
+      if (this.showBlocked) datasets.push({
+        label: 'Blocked',
+        data: this.dataPoints.map(p => p.blocked),
+        borderColor: '#fb8c00',
+        backgroundColor: 'rgba(251, 140, 0, 0.1)',
+        fill: true, tension: 0.2, pointRadius
+      })
+      return { labels, datasets }
     },
     chartOptions() {
       return {
