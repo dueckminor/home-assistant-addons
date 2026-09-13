@@ -1,5 +1,7 @@
 <template>
-  <Line :data="chartData" :options="chartOptions" />
+  <div ref="container" style="position: relative; height: 100%">
+    <Line ref="line" :data="chartData" :options="chartOptions" />
+  </div>
 </template>
 
 <script>
@@ -25,6 +27,16 @@ export default {
   props: {
     dataPoints: { type: Array, default: () => [] },
     granularity: { type: String, default: 'hour' }
+  },
+  mounted() {
+    this._resizeObserver = new ResizeObserver(() => {
+      const chart = this.$refs.line?.chart
+      if (chart) chart.resize()
+    })
+    this._resizeObserver.observe(this.$refs.container)
+  },
+  beforeUnmount() {
+    if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null }
   },
   computed: {
     chartData() {

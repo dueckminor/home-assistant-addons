@@ -51,11 +51,13 @@ type PathStat struct {
 }
 
 type IPStat struct {
-	IP          string `json:"ip"`
-	Country     string `json:"country"`
-	CountryCode string `json:"country_code"`
-	City        string `json:"city"`
-	Count       int64  `json:"count"`
+	IP          string  `json:"ip"`
+	Country     string  `json:"country"`
+	CountryCode string  `json:"country_code"`
+	City        string  `json:"city"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	Count       int64   `json:"count"`
 }
 
 type Store struct {
@@ -280,7 +282,7 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP string, limit
 }
 
 func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IPStat, error) {
-	query := `SELECT a.client_ip, COALESCE(g.country,''), COALESCE(g.country_code,''), COALESCE(g.city,''), SUM(a.request_count) as total
+	query := `SELECT a.client_ip, COALESCE(g.country,''), COALESCE(g.country_code,''), COALESCE(g.city,''), COALESCE(g.lat,0), COALESCE(g.lon,0), SUM(a.request_count) as total
 		FROM access_log a
 		LEFT JOIN geo_cache g ON a.client_ip = g.ip
 		WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
@@ -302,7 +304,7 @@ func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IP
 	var stats []IPStat
 	for rows.Next() {
 		var p IPStat
-		if err := rows.Scan(&p.IP, &p.Country, &p.CountryCode, &p.City, &p.Count); err != nil {
+		if err := rows.Scan(&p.IP, &p.Country, &p.CountryCode, &p.City, &p.Lat, &p.Lon, &p.Count); err != nil {
 			return nil, err
 		}
 		stats = append(stats, p)

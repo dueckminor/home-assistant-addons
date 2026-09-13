@@ -9,8 +9,10 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 export default {
   name: 'WorldMap',
   props: {
-    locations: { type: Array,  default: () => [] },
-    mapStyle:  { type: String, default: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json' }
+    locations:    { type: Array,  default: () => [] },
+    mapStyle:     { type: String, default: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json' },
+    highlightLat: { type: Number, default: null },
+    highlightLon: { type: Number, default: null }
   },
   data() {
     return { map: null, mapLoaded: false }
@@ -19,6 +21,8 @@ export default {
     locations(val) {
       this.updateData(val)
     },
+    highlightLat() { this.updateData(this.locations) },
+    highlightLon()  { this.updateData(this.locations) },
     mapStyle(style) {
       if (!this.map) return
       this.mapLoaded = false
@@ -99,9 +103,10 @@ export default {
           paint: {
             'circle-radius': ['get', 'radius'],
             'circle-color': '#1976d2',
-            'circle-opacity': 0.6,
+            'circle-opacity': ['get', 'opacity'],
             'circle-stroke-width': 1,
-            'circle-stroke-color': '#1565c0'
+            'circle-stroke-color': '#1565c0',
+            'circle-stroke-opacity': ['get', 'opacity']
           }
         })
       }
@@ -114,20 +119,26 @@ export default {
     toGeoJSON(locations) {
       if (!locations || !locations.length) return { type: 'FeatureCollection', features: [] }
       const maxCount = Math.max(...locations.map(l => l.count))
+      const hasHighlight = this.highlightLat !== null && this.highlightLon !== null
       return {
         type: 'FeatureCollection',
         features: locations
           .filter(l => l.lat != null && l.lon != null)
-          .map(loc => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [loc.lon, loc.lat] },
-            properties: {
-              count: loc.count,
-              city: loc.city || '?',
-              country: loc.country || '?',
-              radius: Math.max(6, Math.min(30, Math.sqrt(loc.count / maxCount) * 30))
+          .map(loc => {
+            const isHighlighted = hasHighlight && loc.lat === this.highlightLat && loc.lon === this.highlightLon
+            const opacity = hasHighlight ? (isHighlighted ? 0.8 : 0.2) : 0.7
+            return {
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [loc.lon, loc.lat] },
+              properties: {
+                count: loc.count,
+                city: loc.city || '?',
+                country: loc.country || '?',
+                radius: Math.max(6, Math.min(30, Math.sqrt(loc.count / maxCount) * 30)),
+                opacity
+              }
             }
-          }))
+          })
       }
     }
   }

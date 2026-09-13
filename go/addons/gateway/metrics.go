@@ -171,7 +171,7 @@ func (mc *MetricsCollector) sendMetrics() {
 
 func (mc *MetricsCollector) getGeoLocation(ipAddr string) *localmetrics.GeoLocation {
 	if localmetrics.IsPrivateIP(ipAddr) {
-		return &localmetrics.GeoLocation{Country: "Local", CountryCode: "LC", City: "Localhost"}
+		return &localmetrics.GeoLocation{Country: "Local Network", CountryCode: "LC", City: "Local", Lat: 30, Lon: -40}
 	}
 
 	// Check in-memory cache

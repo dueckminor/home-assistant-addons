@@ -41,27 +41,13 @@
       </v-col>
     </v-row>
 
-    <!-- Active IP filter chip -->
-    <v-row v-if="selectedIP" class="mb-2" dense>
-      <v-col>
-        <v-chip
-          closable
-          color="primary"
-          size="small"
-          @click:close="clearIP"
-        >
-          IP: {{ selectedIP }}
-        </v-chip>
-      </v-col>
-    </v-row>
-
-    <!-- World map + IP list -->
+    <!-- World map + IP list + chart -->
     <v-row class="mb-4" dense>
-      <v-col cols="12" md="8">
+      <v-col cols="12" md="4">
         <v-card height="100%">
           <v-card-title class="text-subtitle-1">Access Locations</v-card-title>
           <v-card-text class="pa-0">
-            <WorldMap ref="worldMap" :locations="mapData" :map-style="mapStyle" style="height: 400px" />
+            <WorldMap ref="worldMap" :locations="mapData" :map-style="mapStyle" :highlight-lat="highlightLat" :highlight-lon="highlightLon" style="height: 400px" />
           </v-card-text>
         </v-card>
       </v-col>
@@ -78,23 +64,26 @@
             @click:row="(_, { item }) => toggleIP(item.ip)"
           >
             <template #item.ip="{ item }">
-              <span class="text-caption font-weight-medium">{{ item.ip }}</span>
+              <span class="text-caption" :class="item.ip === selectedIP ? 'font-weight-bold' : ''">{{ item.ip }}</span>
             </template>
             <template #item.location="{ item }">
-              <span class="text-caption">{{ [item.city, item.country].filter(Boolean).join(', ') }}</span>
+              <span class="text-caption">
+                {{ countryFlag(item.country_code) }}
+                {{ [item.city, item.country].filter(Boolean).join(', ') }}
+              </span>
             </template>
           </v-data-table>
         </v-card>
       </v-col>
+      <v-col cols="12" md="4">
+        <v-card height="100%">
+          <v-card-title class="text-subtitle-1">Request Volume</v-card-title>
+          <v-card-text style="height: 400px; padding-bottom: 8px">
+            <AccessChart :data-points="chartData" :granularity="granularity" style="height: 100%" />
+          </v-card-text>
+        </v-card>
+      </v-col>
     </v-row>
-
-    <!-- Time series chart -->
-    <v-card class="mb-4">
-      <v-card-title class="text-subtitle-1">Request Volume</v-card-title>
-      <v-card-text>
-        <AccessChart :data-points="chartData" :granularity="granularity" style="height: 260px" />
-      </v-card-text>
-    </v-card>
 
     <!-- Top paths table -->
     <v-card>
@@ -145,9 +134,9 @@ export default {
         { title: 'Requests', key: 'count',    sortable: true }
       ],
       pathHeaders: [
-        { title: 'Path',     key: 'path',     sortable: true },
         { title: 'Method',   key: 'method',   sortable: true },
         { title: 'Hostname', key: 'hostname', sortable: true },
+        { title: 'Path',     key: 'path',     sortable: true },
         { title: 'Requests', key: 'count',    sortable: true },
         { title: 'Errors',   key: 'errors',   sortable: true }
       ],
@@ -157,6 +146,16 @@ export default {
   computed: {
     hostnameItems() {
       return [{ title: 'All hostnames', value: '' }, ...this.hostnames.map(h => ({ title: h, value: h }))]
+    },
+    highlightLat() {
+      if (!this.selectedIP) return null
+      const entry = this.ipData.find(d => d.ip === this.selectedIP)
+      return entry ? entry.lat : null
+    },
+    highlightLon() {
+      if (!this.selectedIP) return null
+      const entry = this.ipData.find(d => d.ip === this.selectedIP)
+      return entry ? entry.lon : null
     }
   },
   watch: {
@@ -176,6 +175,12 @@ export default {
     await this.loadData()
   },
   methods: {
+    countryFlag(code) {
+      if (!code || code.length !== 2) return ''
+      return String.fromCodePoint(
+        ...code.toUpperCase().split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
+      )
+    },
     toggleIP(ip) {
       this.selectedIP = this.selectedIP === ip ? '' : ip
       this.loadData()
@@ -205,7 +210,7 @@ export default {
       const ip = this.selectedIP ? `&ip=${encodeURIComponent(this.selectedIP)}` : ''
 
       const [map, ts, paths, ips] = await Promise.all([
-        apiGet(`metrics/map?from=${from}&to=${to}${hn}${ip}`).catch(() => []),
+        apiGet(`metrics/map?from=${from}&to=${to}${hn}`).catch(() => []),
         apiGet(`metrics/timeseries?from=${from}&to=${to}&granularity=${this.granularity}${hn}${ip}`).catch(() => []),
         apiGet(`metrics/paths?from=${from}&to=${to}${hn}${ip}`).catch(() => []),
         apiGet(`metrics/ips?from=${from}&to=${to}${hn}`).catch(() => [])
