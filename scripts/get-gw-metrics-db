@@ -1,0 +1,25 @@
+#!/bin/bash
+set -eou pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}" )/.." && pwd)"
+cd "${ROOT_DIR}"
+
+HOMEASSISTANT=homeassistant.local
+if [[ -f "${ROOT_DIR}/gen/ha.txt" ]]; then
+    HOMEASSISTANT=$(cat "${ROOT_DIR}/gen/ha.txt")
+fi
+
+CONTAINER=$(ssh "hassio@${HOMEASSISTANT}" "sudo docker ps --format '{{.Names}}' | grep -i gateway | head -1")
+
+if [[ -z "${CONTAINER}" ]]; then
+    echo "ERROR: no running gateway container found" >&2
+    exit 1
+fi
+
+echo "container: ${CONTAINER}"
+
+mkdir -p "${ROOT_DIR}/gen/data/gateway"
+ssh "hassio@${HOMEASSISTANT}" "sudo docker exec ${CONTAINER} cat /data/metrics.db" \
+    > "${ROOT_DIR}/gen/data/gateway/metrics.db"
+
+echo "saved to gen/data/gateway/metrics.db"

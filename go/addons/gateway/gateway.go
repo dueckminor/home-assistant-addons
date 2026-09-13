@@ -16,6 +16,7 @@ import (
 	"github.com/dueckminor/home-assistant-addons/go/services/acme"
 	"github.com/dueckminor/home-assistant-addons/go/services/dns"
 	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
+	"github.com/dueckminor/home-assistant-addons/go/services/localmetrics"
 	"github.com/dueckminor/home-assistant-addons/go/services/smtp"
 	"github.com/dueckminor/home-assistant-addons/go/utils/ginutil"
 	"github.com/dueckminor/home-assistant-addons/go/utils/network"
@@ -67,7 +68,7 @@ type Gateway struct {
 	externalIPv4 dns.ExternalIP
 	externalIPv6 dns.ExternalIP
 
-	influxDBConfig   *homeassistant.InfluxDBConfig
+	metricsStore     *localmetrics.Store
 	metricsCollector *MetricsCollector
 
 	debug bool
@@ -81,99 +82,16 @@ func (g *Gateway) Wait() {
 	g.wg.Wait()
 }
 
-func (g *Gateway) detectInfluxDB() {
-	// Only attempt detection if running in Home Assistant (SUPERVISOR_TOKEN is set)
-	if os.Getenv("SUPERVISOR_TOKEN") == "" {
-		fmt.Println("InfluxDB detection skipped: not running in Home Assistant environment")
-		return
-	}
-
-	supervisorClient := homeassistant.NewSupervisorClient()
-	config, err := supervisorClient.DetectInfluxDB()
-	if err != nil {
-		fmt.Printf("InfluxDB detection error: %v\n", err)
-		return
-	}
-
-	if config.Found {
-		g.influxDBConfig = config
-
-		// Try to get credentials from environment variables (set by add-on options)
-		envUsername := os.Getenv("INFLUXDB_USERNAME")
-		envPassword := os.Getenv("INFLUXDB_PASSWORD")
-		envDatabase := os.Getenv("INFLUXDB_DATABASE")
-		envInfluxURL := os.Getenv("INFLUXDB_URL")
-
-		// Override URL if provided
-		if envInfluxURL != "" {
-			g.influxDBConfig.URL = envInfluxURL
-		}
-
-		if envUsername != "" {
-			g.influxDBConfig.Username = envUsername
-			g.influxDBConfig.Password = envPassword
-		}
-
-		// Override database name if provided
-		if envDatabase != "" {
-			g.influxDBConfig.Database = envDatabase
-		}
-
-		fmt.Printf("✅ InfluxDB detected: %s\n", config.Name)
-		fmt.Printf("   URL: %s\n", config.URL)
-		fmt.Printf("   Database: %s\n", g.influxDBConfig.Database)
-		if g.influxDBConfig.Username != "" {
-			fmt.Printf("   Username: %s\n", g.influxDBConfig.Username)
-		} else {
-			fmt.Println("   ⚠️  No credentials configured - metrics disabled")
-			fmt.Println("   Configure in Home Assistant add-on settings")
-		}
-
-		// Only send startup metric if credentials are available
-		if g.influxDBConfig.Username != "" {
-			g.sendStartupMetric()
-			g.startMetricsCollector()
-		}
-	} else {
-		fmt.Println("ℹ️  No InfluxDB add-on detected")
-	}
-}
-
 func (g *Gateway) startMetricsCollector() {
-	client, err := g.influxDBConfig.CreateClient()
+	store, err := localmetrics.NewStore(path.Join(g.dataDir, "metrics.db"))
 	if err != nil {
-		fmt.Printf("⚠️  Failed to create InfluxDB client for metrics: %v\n", err)
+		fmt.Printf("failed to open metrics store: %v\n", err)
 		return
 	}
-
-	// Create metrics collector with 1-minute interval
-	g.metricsCollector = NewMetricsCollector(client, 1*time.Minute)
+	g.metricsStore = store
+	g.metricsCollector = NewMetricsCollector(store, 1*time.Minute)
 	g.metricsCollector.Start()
-
-	fmt.Println("📊 Metrics collector started (reporting every 1 minute)")
-}
-
-func (g *Gateway) sendStartupMetric() {
-	client, err := g.influxDBConfig.CreateClient()
-	if err != nil {
-		fmt.Printf("⚠️  Failed to create InfluxDB client: %v\n", err)
-		return
-	}
-	defer client.Close()
-
-	// Send startup event with value 1
-	tags := map[string]string{
-		"service": "gateway",
-		"event":   "startup",
-	}
-
-	err = client.SendMetric("gateway_events", 1, tags)
-	if err != nil {
-		fmt.Printf("⚠️  Failed to send startup metric: %v\n", err)
-		return
-	}
-
-	fmt.Println("✅ Startup metric sent to InfluxDB successfully")
+	fmt.Println("metrics collector started")
 }
 
 func (g *Gateway) metricCallback(metric network.Metric) {
@@ -199,8 +117,8 @@ func (g *Gateway) Start(ctx context.Context, dnsPort int, httpPort int, httpsPor
 		g.dnsServer.AddDomains(domain.Name)
 	}
 
-	// Detect InfluxDB add-on at startup
-	g.detectInfluxDB()
+	// Start metrics collector with local SQLite storage
+	g.startMetricsCollector()
 
 	if err == nil {
 		err = g.StartHttpServer(ctx, httpPort)

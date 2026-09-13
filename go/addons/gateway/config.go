@@ -106,11 +106,16 @@ type ConfigMail struct {
 	FromName  string `yaml:"from_name" json:"from_name"`
 }
 
+type ConfigMetrics struct {
+	CartoApiKey string `yaml:"carto_api_key,omitempty" json:"carto_api_key,omitempty"`
+}
+
 type Config struct {
 	file    string
 	Domains []*ConfigDomain `yaml:"domains" json:"domains"`
 	Dns     ConfigDns       `yaml:"dns" json:"dns"`
 	Mail    ConfigMail      `yaml:"mail" json:"mail"`
+	Metrics ConfigMetrics   `yaml:"metrics,omitempty" json:"metrics,omitempty"`
 }
 
 func (config *Config) GetDomain(guid string) *ConfigDomain {
