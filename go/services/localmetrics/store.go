@@ -122,6 +122,12 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+	// Normalize all local network entries to consistent values so they group as a single map point.
+	// Catches variations: city='Localhost', country='Local', etc. from older code.
+	if _, err := s.db.Exec(`UPDATE geo_cache SET lat = 30, lon = -40, country = 'Local Network', country_code = 'LC', city = 'Local'
+		WHERE country IN ('Local Network', 'Local') OR city IN ('Local', 'Localhost')`); err != nil {
+		return err
+	}
 	return nil
 }
 
