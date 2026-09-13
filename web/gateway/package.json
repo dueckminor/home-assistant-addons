@@ -13,7 +13,7 @@
     "@mdi/font": "^7.4.47",
     "chart.js": "^4.4.0",
     "chartjs-adapter-date-fns": "^3.0.0",
-    "date-fns": "^3.6.0",
+    "date-fns": "^4.0.0",
     "maplibre-gl": "^5.0.0",
     "vue": "^3.4.23",
     "vue-chartjs": "^5.3.1",
