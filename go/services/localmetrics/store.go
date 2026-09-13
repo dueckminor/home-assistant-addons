@@ -33,7 +33,9 @@ type MapPoint struct {
 	Country     string  `json:"country"`
 	CountryCode string  `json:"country_code"`
 	City        string  `json:"city"`
-	Count       int64   `json:"count"`
+	Success     int64   `json:"success"`
+	Errors      int64   `json:"errors"`
+	Blocked     int64   `json:"blocked"`
 }
 
 type TimePoint struct {
@@ -156,10 +158,20 @@ func (s *Store) GetGeoLocation(ip string) (*GeoLocation, bool, error) {
 }
 
 func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]MapPoint, error) {
-	query := `SELECT g.lat, g.lon, g.country, g.country_code, g.city, SUM(a.request_count) as total
-		FROM access_log a
-		JOIN geo_cache g ON a.client_ip = g.ip
-		WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
+	// A hostname is "valid" (known/configured) if it ever had successful requests across all time.
+	// Requests to unknown/blocked hostnames (including no-SNI stored as 'NONE') have request_count = error_count
+	// in every row, so they never appear in the valid set and are classified as blocked.
+	query := `WITH valid AS (
+		SELECT DISTINCT hostname FROM access_log WHERE request_count > error_count
+	)
+	SELECT g.lat, g.lon, g.country, g.country_code, g.city,
+		SUM(CASE WHEN v.hostname IS NULL THEN a.request_count ELSE 0 END) AS blocked,
+		SUM(CASE WHEN v.hostname IS NOT NULL THEN a.error_count ELSE 0 END) AS errors,
+		SUM(CASE WHEN v.hostname IS NOT NULL THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
+	FROM access_log a
+	JOIN geo_cache g ON a.client_ip = g.ip
+	LEFT JOIN valid v ON a.hostname = v.hostname
+	WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
 	args := []any{from.Unix(), to.Unix()}
 
 	if hostname != "" {
@@ -170,7 +182,7 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 		query += " AND a.client_ip = ?"
 		args = append(args, clientIP)
 	}
-	query += " GROUP BY g.lat, g.lon, g.country, g.country_code, g.city ORDER BY total DESC"
+	query += " GROUP BY g.lat, g.lon, g.country, g.country_code, g.city ORDER BY SUM(a.request_count) DESC"
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -181,7 +193,7 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 	var points []MapPoint
 	for rows.Next() {
 		var p MapPoint
-		if err := rows.Scan(&p.Lat, &p.Lon, &p.Country, &p.CountryCode, &p.City, &p.Count); err != nil {
+		if err := rows.Scan(&p.Lat, &p.Lon, &p.Country, &p.CountryCode, &p.City, &p.Blocked, &p.Errors, &p.Success); err != nil {
 			return nil, err
 		}
 		points = append(points, p)
