@@ -41,26 +41,36 @@ export default {
   computed: {
     chartData() {
       const labels = this.dataPoints.map(p => new Date(p.timestamp))
+      const pointRadius = this.dataPoints.length > 100 ? 0 : 3
       return {
         labels,
         datasets: [
           {
-            label: 'Requests',
-            data: this.dataPoints.map(p => p.count),
-            borderColor: '#1976d2',
-            backgroundColor: 'rgba(25, 118, 210, 0.1)',
+            label: 'Success',
+            data: this.dataPoints.map(p => p.success),
+            borderColor: '#43a047',
+            backgroundColor: 'rgba(67, 160, 71, 0.1)',
             fill: true,
             tension: 0.2,
-            pointRadius: this.dataPoints.length > 100 ? 0 : 3
+            pointRadius
           },
           {
             label: 'Errors',
             data: this.dataPoints.map(p => p.errors),
-            borderColor: '#d32f2f',
-            backgroundColor: 'rgba(211, 47, 47, 0.1)',
+            borderColor: '#e53935',
+            backgroundColor: 'rgba(229, 57, 53, 0.1)',
             fill: true,
             tension: 0.2,
-            pointRadius: this.dataPoints.length > 100 ? 0 : 3
+            pointRadius
+          },
+          {
+            label: 'Blocked',
+            data: this.dataPoints.map(p => p.blocked),
+            borderColor: '#fb8c00',
+            backgroundColor: 'rgba(251, 140, 0, 0.1)',
+            fill: true,
+            tension: 0.2,
+            pointRadius
           }
         ]
       }

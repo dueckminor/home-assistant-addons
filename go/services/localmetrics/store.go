@@ -40,8 +40,9 @@ type MapPoint struct {
 
 type TimePoint struct {
 	Timestamp time.Time `json:"timestamp"`
-	Count     int64     `json:"count"`
+	Success   int64     `json:"success"`
 	Errors    int64     `json:"errors"`
+	Blocked   int64     `json:"blocked"`
 }
 
 type PathStat struct {
@@ -59,7 +60,9 @@ type IPStat struct {
 	City        string  `json:"city"`
 	Lat         float64 `json:"lat"`
 	Lon         float64 `json:"lon"`
-	Count       int64   `json:"count"`
+	Success     int64   `json:"success"`
+	Errors      int64   `json:"errors"`
+	Blocked     int64   `json:"blocked"`
 }
 
 type Store struct {
@@ -214,8 +217,15 @@ func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientI
 	}
 	hasLocation := city != "" && country != ""
 
-	query := `SELECT (a.bucket_start / ?) * ? as ts, SUM(a.request_count), SUM(a.error_count)
-		FROM access_log a`
+	query := `WITH valid AS (
+		SELECT DISTINCT hostname FROM access_log WHERE request_count > error_count
+	)
+	SELECT (a.bucket_start / ?) * ? as ts,
+		SUM(CASE WHEN v.hostname IS NULL THEN a.request_count ELSE 0 END) AS blocked,
+		SUM(CASE WHEN v.hostname IS NOT NULL THEN a.error_count ELSE 0 END) AS errors,
+		SUM(CASE WHEN v.hostname IS NOT NULL THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
+	FROM access_log a
+	LEFT JOIN valid v ON a.hostname = v.hostname`
 	if hasLocation {
 		query += ` JOIN geo_cache g ON a.client_ip = g.ip`
 	}
@@ -246,7 +256,7 @@ func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientI
 	for rows.Next() {
 		var ts int64
 		var p TimePoint
-		if err := rows.Scan(&ts, &p.Count, &p.Errors); err != nil {
+		if err := rows.Scan(&ts, &p.Blocked, &p.Errors, &p.Success); err != nil {
 			return nil, err
 		}
 		p.Timestamp = time.Unix(ts, 0).UTC()
@@ -317,17 +327,26 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 }
 
 func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IPStat, error) {
-	query := `SELECT a.client_ip, COALESCE(g.country,''), COALESCE(g.country_code,''), COALESCE(g.city,''), COALESCE(g.lat,0), COALESCE(g.lon,0), SUM(a.request_count) as total
-		FROM access_log a
-		LEFT JOIN geo_cache g ON a.client_ip = g.ip
-		WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
+	query := `WITH valid AS (
+		SELECT DISTINCT hostname FROM access_log WHERE request_count > error_count
+	)
+	SELECT a.client_ip,
+		COALESCE(g.country,''), COALESCE(g.country_code,''), COALESCE(g.city,''),
+		COALESCE(g.lat,0), COALESCE(g.lon,0),
+		SUM(CASE WHEN v.hostname IS NULL THEN a.request_count ELSE 0 END) AS blocked,
+		SUM(CASE WHEN v.hostname IS NOT NULL THEN a.error_count ELSE 0 END) AS errors,
+		SUM(CASE WHEN v.hostname IS NOT NULL THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
+	FROM access_log a
+	LEFT JOIN geo_cache g ON a.client_ip = g.ip
+	LEFT JOIN valid v ON a.hostname = v.hostname
+	WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
 	args := []any{from.Unix(), to.Unix()}
 
 	if hostname != "" {
 		query += " AND a.hostname = ?"
 		args = append(args, hostname)
 	}
-	query += " GROUP BY a.client_ip ORDER BY total DESC LIMIT ?"
+	query += " GROUP BY a.client_ip ORDER BY SUM(a.request_count) DESC LIMIT ?"
 	args = append(args, limit)
 
 	rows, err := s.db.Query(query, args...)
@@ -339,7 +358,7 @@ func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IP
 	var stats []IPStat
 	for rows.Next() {
 		var p IPStat
-		if err := rows.Scan(&p.IP, &p.Country, &p.CountryCode, &p.City, &p.Lat, &p.Lon, &p.Count); err != nil {
+		if err := rows.Scan(&p.IP, &p.Country, &p.CountryCode, &p.City, &p.Lat, &p.Lon, &p.Blocked, &p.Errors, &p.Success); err != nil {
 			return nil, err
 		}
 		stats = append(stats, p)

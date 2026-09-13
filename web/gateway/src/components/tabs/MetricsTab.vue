@@ -85,6 +85,15 @@
                 {{ [item.city, item.country].filter(Boolean).join(', ') }}
               </span>
             </template>
+            <template #item.success="{ item }">
+              <span style="color:#43a047">{{ (item.success || 0).toLocaleString() }}</span>
+            </template>
+            <template #item.errors="{ item }">
+              <span style="color:#e53935">{{ (item.errors || 0).toLocaleString() }}</span>
+            </template>
+            <template #item.blocked="{ item }">
+              <span style="color:#fb8c00">{{ (item.blocked || 0).toLocaleString() }}</span>
+            </template>
           </v-data-table>
         </v-card>
       </v-col>
@@ -145,7 +154,9 @@ export default {
       ipHeaders: [
         { title: 'IP',       key: 'ip',       sortable: true },
         { title: 'Location', key: 'location', sortable: false },
-        { title: 'Requests', key: 'count',    sortable: true }
+        { title: 'Success',  key: 'success',  sortable: true },
+        { title: 'Errors',   key: 'errors',   sortable: true },
+        { title: 'Blocked',  key: 'blocked',  sortable: true }
       ],
       pathHeaders: [
         { title: 'Method',   key: 'method',   sortable: true },
