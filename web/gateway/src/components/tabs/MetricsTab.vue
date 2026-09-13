@@ -116,6 +116,20 @@
         :items-per-page="20"
         density="compact"
       >
+        <template #item.method="{ item }">
+          <span v-if="item.blocked" style="color:#fb8c00">—</span>
+          <span v-else>{{ item.method }}</span>
+        </template>
+        <template #item.path="{ item }">
+          <span v-if="item.blocked" style="color:#fb8c00">—</span>
+          <span v-else>{{ item.path }}</span>
+        </template>
+        <template #item.hostname="{ item }">
+          <span :style="item.blocked ? 'color:#fb8c00' : ''">{{ item.hostname }}</span>
+        </template>
+        <template #item.count="{ item }">
+          <span :style="item.blocked ? 'color:#fb8c00' : ''">{{ item.count.toLocaleString() }}</span>
+        </template>
         <template #item.errors="{ item }">
           <span :class="item.errors > 0 ? 'text-error' : ''">{{ item.errors }}</span>
         </template>

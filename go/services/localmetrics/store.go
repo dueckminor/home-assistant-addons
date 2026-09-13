@@ -51,6 +51,7 @@ type PathStat struct {
 	Hostname string `json:"hostname"`
 	Count    int64  `json:"count"`
 	Errors   int64  `json:"errors"`
+	Blocked  bool   `json:"blocked"`
 }
 
 type IPStat struct {
@@ -286,27 +287,45 @@ func (s *Store) GetHostnames() ([]string, error) {
 func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, country string, limit int) ([]PathStat, error) {
 	hasLocation := city != "" && country != ""
 
-	query := `SELECT a.path, a.method, a.hostname, SUM(a.request_count), SUM(a.error_count)
-		FROM access_log a`
+	// Build the inner WHERE clause used in the `filtered` CTE.
+	filteredFrom := "FROM access_log a"
 	if hasLocation {
-		query += ` JOIN geo_cache g ON a.client_ip = g.ip`
+		filteredFrom += " JOIN geo_cache g ON a.client_ip = g.ip"
 	}
-	query += ` WHERE a.bucket_start >= ? AND a.bucket_start <= ? AND a.path != ''`
+	filteredFrom += " WHERE a.bucket_start >= ? AND a.bucket_start <= ?"
 	args := []any{from.Unix(), to.Unix()}
 
 	if hostname != "" {
-		query += " AND a.hostname = ?"
+		filteredFrom += " AND a.hostname = ?"
 		args = append(args, hostname)
 	}
 	if clientIP != "" {
-		query += " AND a.client_ip = ?"
+		filteredFrom += " AND a.client_ip = ?"
 		args = append(args, clientIP)
 	}
 	if hasLocation {
-		query += " AND g.city = ? AND g.country = ?"
+		filteredFrom += " AND g.city = ? AND g.country = ?"
 		args = append(args, city, country)
 	}
-	query += " GROUP BY a.path, a.method, a.hostname ORDER BY SUM(a.request_count) DESC LIMIT ?"
+
+	query := `WITH valid AS (
+		SELECT DISTINCT hostname FROM access_log WHERE request_count > error_count
+	), filtered AS (
+		SELECT a.path, a.method, a.hostname, a.request_count, a.error_count
+		` + filteredFrom + `
+	)
+	SELECT f.path, f.method, f.hostname, SUM(f.request_count) AS total, SUM(f.error_count), 0
+	FROM filtered f
+	JOIN valid v ON f.hostname = v.hostname
+	WHERE f.path != ''
+	GROUP BY f.path, f.method, f.hostname
+	UNION ALL
+	SELECT '' AS path, '' AS method, f.hostname, SUM(f.request_count) AS total, 0, 1
+	FROM filtered f
+	LEFT JOIN valid v ON f.hostname = v.hostname
+	WHERE v.hostname IS NULL
+	GROUP BY f.hostname
+	ORDER BY total DESC LIMIT ?`
 	args = append(args, limit)
 
 	rows, err := s.db.Query(query, args...)
@@ -318,9 +337,11 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 	var stats []PathStat
 	for rows.Next() {
 		var p PathStat
-		if err := rows.Scan(&p.Path, &p.Method, &p.Hostname, &p.Count, &p.Errors); err != nil {
+		var isBlocked int
+		if err := rows.Scan(&p.Path, &p.Method, &p.Hostname, &p.Count, &p.Errors, &isBlocked); err != nil {
 			return nil, err
 		}
+		p.Blocked = isBlocked == 1
 		stats = append(stats, p)
 	}
 	return stats, rows.Err()
