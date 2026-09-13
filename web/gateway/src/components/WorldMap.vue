@@ -59,6 +59,7 @@ export default {
   },
   mounted() {
     this._markers = []
+    this._popups = []
     this.map = new maplibregl.Map({
       container: this.$refs.mapContainer,
       style: this.mapStyle,
@@ -88,7 +89,9 @@ export default {
   beforeUnmount() {
     if (this._resizeObserver) { this._resizeObserver.disconnect(); this._resizeObserver = null }
     this._markers.forEach(m => m.remove())
+    this._popups.forEach(p => p.remove())
     this._markers = []
+    this._popups = []
     if (this.map) { this.map.remove(); this.map = null }
   },
   methods: {
@@ -105,7 +108,9 @@ export default {
       if (!this.map || !this.mapLoaded) return
 
       this._markers.forEach(m => m.remove())
+      this._popups.forEach(p => p.remove())
       this._markers = []
+      this._popups = []
 
       if (!locations || !locations.length) return
 
@@ -134,16 +139,21 @@ export default {
         el.innerHTML = makePieSVG(segments, radius, opacity)
         el.style.cursor = 'pointer'
 
-        const popup = new maplibregl.Popup({ offset: radius + 4 }).setHTML(
-          `<strong>${loc.city || '?'}, ${loc.country || '?'}</strong><br>` +
-          `<span style="color:#43a047">&#9679;</span> Success: ${(loc.success || 0).toLocaleString()}<br>` +
-          `<span style="color:#e53935">&#9679;</span> Errors: ${(loc.errors || 0).toLocaleString()}<br>` +
-          `<span style="color:#fb8c00">&#9679;</span> Blocked: ${(loc.blocked || 0).toLocaleString()}`
-        )
+        const popup = new maplibregl.Popup({ offset: radius + 4, closeButton: false, closeOnClick: false })
+          .setLngLat([loc.lon, loc.lat])
+          .setHTML(
+            `<strong>${loc.city || '?'}, ${loc.country || '?'}</strong><br>` +
+            `<span style="color:#43a047">&#9679;</span> Success: ${(loc.success || 0).toLocaleString()}<br>` +
+            `<span style="color:#e53935">&#9679;</span> Errors: ${(loc.errors || 0).toLocaleString()}<br>` +
+            `<span style="color:#fb8c00">&#9679;</span> Blocked: ${(loc.blocked || 0).toLocaleString()}`
+          )
+        this._popups.push(popup)
+
+        el.addEventListener('mouseenter', () => popup.addTo(this.map))
+        el.addEventListener('mouseleave', () => popup.remove())
 
         const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat([loc.lon, loc.lat])
-          .setPopup(popup)
           .addTo(this.map)
 
         this._markers.push(marker)
