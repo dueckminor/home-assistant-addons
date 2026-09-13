@@ -151,6 +151,7 @@ export default {
 
         el.addEventListener('mouseenter', () => popup.addTo(this.map))
         el.addEventListener('mouseleave', () => popup.remove())
+        el.addEventListener('click', () => this.$emit('click-location', { lat: loc.lat, lon: loc.lon, city: loc.city, country: loc.country }))
 
         const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
           .setLngLat([loc.lon, loc.lat])

@@ -69,7 +69,8 @@ func (ep *Endpoints) GET_MetricsTimeSeries(c *gin.Context) {
 		return
 	}
 
-	points, err := ep.Gateway.metricsStore.GetTimeSeries(from, to, c.Query("hostname"), c.DefaultQuery("granularity", "hour"), c.Query("ip"))
+	city, country := parseLocationFilter(c)
+	points, err := ep.Gateway.metricsStore.GetTimeSeries(from, to, c.Query("hostname"), c.DefaultQuery("granularity", "hour"), c.Query("ip"), city, country)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -115,7 +116,8 @@ func (ep *Endpoints) GET_MetricsPaths(c *gin.Context) {
 		return
 	}
 
-	stats, err := ep.Gateway.metricsStore.GetTopPaths(from, to, c.Query("hostname"), c.Query("ip"), 100)
+	city, country := parseLocationFilter(c)
+	stats, err := ep.Gateway.metricsStore.GetTopPaths(from, to, c.Query("hostname"), c.Query("ip"), city, country, 100)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
@@ -124,6 +126,10 @@ func (ep *Endpoints) GET_MetricsPaths(c *gin.Context) {
 		stats = []localmetrics.PathStat{}
 	}
 	c.JSON(200, stats)
+}
+
+func parseLocationFilter(c *gin.Context) (city, country string) {
+	return c.Query("city"), c.Query("country")
 }
 
 func parseTimeRange(c *gin.Context) (from, to time.Time, err error) {

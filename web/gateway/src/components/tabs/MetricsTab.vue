@@ -47,7 +47,15 @@
         <v-card height="100%">
           <v-card-title class="text-subtitle-1">Access Locations</v-card-title>
           <v-card-text class="pa-0">
-            <WorldMap ref="worldMap" :locations="mapData" :map-style="mapStyle" :highlight-lat="highlightLat" :highlight-lon="highlightLon" style="height: 400px" />
+            <WorldMap
+              ref="worldMap"
+              :locations="mapData"
+              :map-style="mapStyle"
+              :highlight-lat="highlightLat"
+              :highlight-lon="highlightLon"
+              style="height: 400px"
+              @click-location="toggleLocation($event.lat, $event.lon, $event.city, $event.country)"
+            />
           </v-card-text>
         </v-card>
       </v-col>
@@ -60,14 +68,19 @@
             :items-per-page="10"
             density="compact"
             style="max-height: 430px; overflow-y: auto"
-            :row-props="({ item }) => ({ class: item.ip === selectedIP ? 'bg-primary-lighten-5' : 'cursor-pointer', style: 'cursor: pointer' })"
+            :row-props="rowProps"
             @click:row="(_, { item }) => toggleIP(item.ip)"
           >
             <template #item.ip="{ item }">
               <span class="text-caption" :class="item.ip === selectedIP ? 'font-weight-bold' : ''">{{ item.ip }}</span>
             </template>
             <template #item.location="{ item }">
-              <span class="text-caption">
+              <span
+                class="text-caption"
+                :class="isLocationSelected(item) ? 'font-weight-bold' : ''"
+                style="cursor: pointer"
+                @click.stop="toggleLocation(item.lat, item.lon, item.city, item.country)"
+              >
                 {{ countryFlag(item.country_code) }}
                 {{ [item.city, item.country].filter(Boolean).join(', ') }}
               </span>
@@ -124,6 +137,7 @@ export default {
       toDate: now.toISOString().slice(0, 10),
       granularity: 'hour',
       selectedIP: '',
+      selectedLocation: null,  // { lat, lon, city, country }
       mapData: [],
       chartData: [],
       pathData: [],
@@ -148,17 +162,23 @@ export default {
       return [{ title: 'All hostnames', value: '' }, ...this.hostnames.map(h => ({ title: h, value: h }))]
     },
     highlightLat() {
+      if (this.selectedLocation) return this.selectedLocation.lat
       if (!this.selectedIP) return null
       const entry = this.ipData.find(d => d.ip === this.selectedIP)
       return entry ? entry.lat : null
     },
     highlightLon() {
+      if (this.selectedLocation) return this.selectedLocation.lon
       if (!this.selectedIP) return null
       const entry = this.ipData.find(d => d.ip === this.selectedIP)
       return entry ? entry.lon : null
+    },
+    rowProps() {
+      return ({ item }) => ({
+        class: (item.ip === this.selectedIP || this.isLocationSelected(item)) ? 'bg-primary-lighten-5' : '',
+        style: 'cursor: pointer'
+      })
     }
-  },
-  watch: {
   },
   async mounted() {
     await this.loadTileConfig()
@@ -172,12 +192,23 @@ export default {
         ...code.toUpperCase().split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
       )
     },
+    isLocationSelected(item) {
+      return this.selectedLocation !== null &&
+        item.city === this.selectedLocation.city &&
+        item.country === this.selectedLocation.country
+    },
     toggleIP(ip) {
       this.selectedIP = this.selectedIP === ip ? '' : ip
+      this.selectedLocation = null
       this.loadData()
     },
-    clearIP() {
-      this.selectedIP = ''
+    toggleLocation(lat, lon, city, country) {
+      if (this.selectedLocation?.city === city && this.selectedLocation?.country === country) {
+        this.selectedLocation = null
+      } else {
+        this.selectedLocation = { lat, lon, city, country }
+        this.selectedIP = ''
+      }
       this.loadData()
     },
     async loadTileConfig() {
@@ -198,12 +229,14 @@ export default {
       const from = new Date(this.fromDate).toISOString()
       const to = new Date(this.toDate + 'T23:59:59').toISOString()
       const hn = this.selectedHostname ? `&hostname=${encodeURIComponent(this.selectedHostname)}` : ''
-      const ip = this.selectedIP ? `&ip=${encodeURIComponent(this.selectedIP)}` : ''
+      const filter = this.selectedIP
+        ? `&ip=${encodeURIComponent(this.selectedIP)}`
+        : (this.selectedLocation ? `&city=${encodeURIComponent(this.selectedLocation.city)}&country=${encodeURIComponent(this.selectedLocation.country)}` : '')
 
       const [map, ts, paths, ips] = await Promise.all([
         apiGet(`metrics/map?from=${from}&to=${to}${hn}`).catch(() => []),
-        apiGet(`metrics/timeseries?from=${from}&to=${to}&granularity=${this.granularity}${hn}${ip}`).catch(() => []),
-        apiGet(`metrics/paths?from=${from}&to=${to}${hn}${ip}`).catch(() => []),
+        apiGet(`metrics/timeseries?from=${from}&to=${to}&granularity=${this.granularity}${hn}${filter}`).catch(() => []),
+        apiGet(`metrics/paths?from=${from}&to=${to}${hn}${filter}`).catch(() => []),
         apiGet(`metrics/ips?from=${from}&to=${to}${hn}`).catch(() => [])
       ])
       this.mapData = Array.isArray(map) ? map : []

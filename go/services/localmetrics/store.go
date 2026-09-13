@@ -207,24 +207,32 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 	return points, rows.Err()
 }
 
-func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientIP string) ([]TimePoint, error) {
+func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientIP, city, country string) ([]TimePoint, error) {
 	var bucketSeconds int64 = 3600
 	if granularity == "day" {
 		bucketSeconds = 86400
 	}
+	hasLocation := city != "" && country != ""
 
-	query := `SELECT (bucket_start / ?) * ? as ts, SUM(request_count), SUM(error_count)
-		FROM access_log
-		WHERE bucket_start >= ? AND bucket_start <= ?`
+	query := `SELECT (a.bucket_start / ?) * ? as ts, SUM(a.request_count), SUM(a.error_count)
+		FROM access_log a`
+	if hasLocation {
+		query += ` JOIN geo_cache g ON a.client_ip = g.ip`
+	}
+	query += ` WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
 	args := []any{bucketSeconds, bucketSeconds, from.Unix(), to.Unix()}
 
 	if hostname != "" {
-		query += " AND hostname = ?"
+		query += " AND a.hostname = ?"
 		args = append(args, hostname)
 	}
 	if clientIP != "" {
-		query += " AND client_ip = ?"
+		query += " AND a.client_ip = ?"
 		args = append(args, clientIP)
+	}
+	if hasLocation {
+		query += " AND g.city = ? AND g.country = ?"
+		args = append(args, city, country)
 	}
 	query += " GROUP BY ts ORDER BY ts"
 
@@ -265,21 +273,30 @@ func (s *Store) GetHostnames() ([]string, error) {
 	return hostnames, rows.Err()
 }
 
-func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP string, limit int) ([]PathStat, error) {
-	query := `SELECT path, method, hostname, SUM(request_count), SUM(error_count)
-		FROM access_log
-		WHERE bucket_start >= ? AND bucket_start <= ? AND path != ''`
+func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, country string, limit int) ([]PathStat, error) {
+	hasLocation := city != "" && country != ""
+
+	query := `SELECT a.path, a.method, a.hostname, SUM(a.request_count), SUM(a.error_count)
+		FROM access_log a`
+	if hasLocation {
+		query += ` JOIN geo_cache g ON a.client_ip = g.ip`
+	}
+	query += ` WHERE a.bucket_start >= ? AND a.bucket_start <= ? AND a.path != ''`
 	args := []any{from.Unix(), to.Unix()}
 
 	if hostname != "" {
-		query += " AND hostname = ?"
+		query += " AND a.hostname = ?"
 		args = append(args, hostname)
 	}
 	if clientIP != "" {
-		query += " AND client_ip = ?"
+		query += " AND a.client_ip = ?"
 		args = append(args, clientIP)
 	}
-	query += " GROUP BY path, method, hostname ORDER BY SUM(request_count) DESC LIMIT ?"
+	if hasLocation {
+		query += " AND g.city = ? AND g.country = ?"
+		args = append(args, city, country)
+	}
+	query += " GROUP BY a.path, a.method, a.hostname ORDER BY SUM(a.request_count) DESC LIMIT ?"
 	args = append(args, limit)
 
 	rows, err := s.db.Query(query, args...)
