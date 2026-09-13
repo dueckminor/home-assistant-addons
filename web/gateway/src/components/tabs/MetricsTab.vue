@@ -159,15 +159,6 @@ export default {
     }
   },
   watch: {
-    isActive(active) {
-      if (active) {
-        this.$nextTick(() => {
-          if (this.$refs.worldMap) this.$refs.worldMap.invalidateSize()
-        })
-        this.loadHostnames()
-        this.loadData()
-      }
-    }
   },
   async mounted() {
     await this.loadTileConfig()
