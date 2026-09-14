@@ -13,7 +13,7 @@ const vuetify = createVuetify({
   components,
   directives,
   theme: {
-    defaultTheme: 'light'
+    defaultTheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
 })
 

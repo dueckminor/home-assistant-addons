@@ -1,5 +1,5 @@
 <template>
-  <v-app>
+  <v-app :theme="isDark ? 'dark' : 'light'">
     <v-main class="app-main">
       <!-- Video Player Section - Takes remaining space -->
       <div class="video-section">
@@ -55,6 +55,8 @@
 </template>
 
 <script>
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useTheme } from 'vuetify'
 import VideoPlayer from './components/VideoPlayer.vue'
 import ThumbnailNavigation from './components/ThumbnailNavigation.vue'
 import Timeline from './components/Timeline.vue'
@@ -68,6 +70,27 @@ export default {
     ThumbnailNavigation,
     Timeline,
     NavigationControls
+  },
+  setup() {
+    const theme = useTheme()
+    const isDark = ref(false)
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const applyTheme = (dark) => {
+      isDark.value = dark
+      theme.global.name.value = dark ? 'dark' : 'light'
+    }
+    const onMediaChange = (e) => applyTheme(e.matches)
+
+    onMounted(() => {
+      applyTheme(mediaQuery.matches)
+      mediaQuery.addEventListener('change', onMediaChange)
+    })
+
+    onUnmounted(() => {
+      mediaQuery.removeEventListener('change', onMediaChange)
+    })
+
+    return { isDark }
   },
   data() {
     return {
@@ -485,8 +508,8 @@ export default {
 
 .bottom-controls {
   flex-shrink: 0; /* Don't shrink */
-  background: rgba(255, 255, 255, 0.95);
-  border-top: 1px solid #e0e0e0;
+  background: rgba(var(--v-theme-surface), 0.95);
+  border-top: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
   padding: 8px;
   overflow-y: auto; /* Allow scrolling if needed */
   max-height: 40vh; /* Use viewport height instead of fixed pixels */

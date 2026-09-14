@@ -1,5 +1,5 @@
 <template>
-  <v-app>
+  <v-app :theme="isDark ? 'dark' : 'light'">
     <!-- Header -->
     <v-app-bar color="primary" dark elevation="2">
       <v-icon class="me-3">mdi-gateway</v-icon>
@@ -89,6 +89,8 @@
 </template>
 
 <script>
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useTheme } from 'vuetify'
 import DnsTab from '../components/tabs/DnsTab.vue'
 import DomainsTab from '../components/tabs/DomainsTab.vue'
 import UsersTab from '../components/tabs/UsersTab.vue'
@@ -104,6 +106,27 @@ export default {
     UsersTab,
     MailTab,
     MetricsTab
+  },
+  setup() {
+    const theme = useTheme()
+    const isDark = ref(false)
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const applyTheme = (dark) => {
+      isDark.value = dark
+      theme.global.name.value = dark ? 'dark' : 'light'
+    }
+    const onMediaChange = (e) => applyTheme(e.matches)
+
+    onMounted(() => {
+      applyTheme(mediaQuery.matches)
+      mediaQuery.addEventListener('change', onMediaChange)
+    })
+
+    onUnmounted(() => {
+      mediaQuery.removeEventListener('change', onMediaChange)
+    })
+
+    return { isDark }
   },
   data() {
     return {

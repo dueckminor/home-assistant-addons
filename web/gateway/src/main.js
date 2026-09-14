@@ -7,7 +7,7 @@ import App from './App.vue'
 
 const vuetify = createVuetify({
   theme: {
-    defaultTheme: 'light'
+    defaultTheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
 })
 
