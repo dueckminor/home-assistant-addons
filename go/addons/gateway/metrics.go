@@ -6,195 +6,80 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/dueckminor/home-assistant-addons/go/services/localmetrics"
 	"github.com/dueckminor/home-assistant-addons/go/utils/network"
 )
 
-// RouteMetrics stores metrics for a specific route and client during the aggregation window
-type RouteMetrics struct {
-	ClientAddr    string
-	Hostname      string
-	Method        string
-	Path          string
-	GeoLocation   *localmetrics.GeoLocation
-	RequestCount  int64
-	TotalDuration time.Duration
-	MinDuration   time.Duration
-	MaxDuration   time.Duration
-	ErrorCount    int64
-}
-
-// MetricsCollector aggregates HTTP metrics and writes them to local SQLite storage periodically
+// MetricsCollector writes per-request metrics to local SQLite storage and
+// manages an in-process geo-location cache.
 type MetricsCollector struct {
-	mu         sync.Mutex
-	routes     map[string]*RouteMetrics
 	store      *localmetrics.Store
-	interval   time.Duration
-	stopChan   chan struct{}
-	wg         sync.WaitGroup
-	geoCache   map[string]*localmetrics.GeoLocation
 	geoCacheMu sync.RWMutex
+	geoCache   map[string]*localmetrics.GeoLocation
 }
 
-// NewMetricsCollector creates a new metrics collector
-func NewMetricsCollector(store *localmetrics.Store, interval time.Duration) *MetricsCollector {
+func NewMetricsCollector(store *localmetrics.Store) *MetricsCollector {
 	return &MetricsCollector{
-		routes:   make(map[string]*RouteMetrics),
 		store:    store,
-		interval: interval,
-		stopChan: make(chan struct{}),
 		geoCache: make(map[string]*localmetrics.GeoLocation),
 	}
 }
 
-// RecordMetric records metrics from a network.Metric
+// RecordMetric persists a single request and triggers geo lookup if needed.
 func (mc *MetricsCollector) RecordMetric(metric network.Metric) {
-	mc.mu.Lock()
-	defer mc.mu.Unlock()
-
 	clientIP := metric.ClientAddr
 	if host, _, err := net.SplitHostPort(metric.ClientAddr); err == nil {
 		clientIP = host
 	}
 
-	hostname := metric.Hostname
-	if hostname == "" {
-		hostname = "NONE"
-	}
-	method := metric.Method
-	if method == "" {
-		method = "NONE"
-	}
+	// Kick off a geo lookup asynchronously so it's warm for the next request.
+	go mc.ensureGeoLocation(clientIP)
 
-	key := fmt.Sprintf("%s/%s/%s/%s", clientIP, hostname, method, metric.Path)
-
-	metrics, exists := mc.routes[key]
-	if !exists {
-		metrics = &RouteMetrics{
-			Hostname:    hostname,
-			Method:      method,
-			Path:        metric.Path,
-			ClientAddr:  clientIP,
-			MinDuration: metric.Duration,
-		}
-		mc.routes[key] = metrics
-	}
-
-	metrics.RequestCount++
-	metrics.TotalDuration += metric.Duration
-
-	if metric.Duration < metrics.MinDuration || metrics.MinDuration == 0 {
-		metrics.MinDuration = metric.Duration
-	}
-	if metric.Duration > metrics.MaxDuration {
-		metrics.MaxDuration = metric.Duration
-	}
-
-	if metric.ResponseCode >= 400 || metric.ResponseCode == 666 || metric.ResponseCode == 667 {
-		metrics.ErrorCount++
+	durationMs := metric.Duration.Milliseconds()
+	if err := mc.store.RecordRequest(
+		metric.Timestamp,
+		metric.Hostname,
+		clientIP,
+		metric.Method,
+		metric.Path,
+		metric.ResponseCode,
+		durationMs,
+		metric.Classification,
+	); err != nil {
+		fmt.Printf("metrics write error: %v\n", err)
 	}
 }
 
-// Start begins the periodic metrics reporting
-func (mc *MetricsCollector) Start() {
-	mc.wg.Add(1)
-	go mc.reportLoop()
-}
-
-// Stop stops the metrics collector
-func (mc *MetricsCollector) Stop() {
-	close(mc.stopChan)
-	mc.wg.Wait()
-}
-
-func (mc *MetricsCollector) reportLoop() {
-	defer mc.wg.Done()
-
-	ticker := time.NewTicker(mc.interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			mc.sendMetrics()
-		case <-mc.stopChan:
-			mc.sendMetrics()
-			if err := mc.store.Cleanup(90); err != nil {
-				fmt.Printf("metrics cleanup error: %v\n", err)
-			}
-			return
-		}
-	}
-}
-
-func (mc *MetricsCollector) sendMetrics() {
-	mc.mu.Lock()
-	snapshot := mc.routes
-	mc.routes = make(map[string]*RouteMetrics)
-	mc.mu.Unlock()
-
-	if len(snapshot) == 0 {
+// ensureGeoLocation looks up geo data for the IP and caches it in the store.
+func (mc *MetricsCollector) ensureGeoLocation(ipAddr string) {
+	if localmetrics.IsPrivateIP(ipAddr) {
+		geo := &localmetrics.GeoLocation{Country: "Local Network", CountryCode: "LC", City: "Local", Lat: 30, Lon: -40}
+		mc.geoCacheMu.Lock()
+		mc.geoCache[ipAddr] = geo
+		mc.geoCacheMu.Unlock()
+		_ = mc.store.SetGeoLocation(ipAddr, *geo)
 		return
 	}
 
-	bucketStart := time.Now().Truncate(mc.interval)
-
-	for _, metrics := range snapshot {
-		if metrics.GeoLocation == nil {
-			metrics.GeoLocation = mc.getGeoLocation(metrics.ClientAddr)
-		}
-
-		if metrics.GeoLocation != nil {
-			if err := mc.store.SetGeoLocation(metrics.ClientAddr, *metrics.GeoLocation); err != nil {
-				fmt.Printf("geo cache write error: %v\n", err)
-			}
-		}
-
-		var avgMs int64
-		if metrics.RequestCount > 0 {
-			avgMs = metrics.TotalDuration.Milliseconds() / metrics.RequestCount
-		}
-
-		if err := mc.store.RecordBatch(bucketStart, metrics.Hostname, metrics.ClientAddr, metrics.Method, metrics.Path, localmetrics.RouteMetricsSnapshot{
-			RequestCount:  metrics.RequestCount,
-			ErrorCount:    metrics.ErrorCount,
-			DurationAvgMs: avgMs,
-			DurationMinMs: metrics.MinDuration.Milliseconds(),
-			DurationMaxMs: metrics.MaxDuration.Milliseconds(),
-		}); err != nil {
-			fmt.Printf("metrics write error: %v\n", err)
-		}
-	}
-}
-
-func (mc *MetricsCollector) getGeoLocation(ipAddr string) *localmetrics.GeoLocation {
-	if localmetrics.IsPrivateIP(ipAddr) {
-		return &localmetrics.GeoLocation{Country: "Local Network", CountryCode: "LC", City: "Local", Lat: 30, Lon: -40}
-	}
-
-	// Check in-memory cache
 	mc.geoCacheMu.RLock()
-	if cached, exists := mc.geoCache[ipAddr]; exists {
-		mc.geoCacheMu.RUnlock()
-		return cached
-	}
+	_, cached := mc.geoCache[ipAddr]
 	mc.geoCacheMu.RUnlock()
+	if cached {
+		return
+	}
 
-	// Check persisted SQLite cache
 	if geo, found, err := mc.store.GetGeoLocation(ipAddr); err == nil && found {
 		mc.geoCacheMu.Lock()
 		mc.geoCache[ipAddr] = geo
 		mc.geoCacheMu.Unlock()
-		return geo
+		return
 	}
 
-	// Call ip-api.com
 	resp, err := http.Get(fmt.Sprintf("http://ip-api.com/json/%s?fields=status,country,countryCode,regionName,city,lat,lon,isp,org", ipAddr))
 	if err != nil {
 		fmt.Printf("geolocation lookup error for %s: %v\n", ipAddr, err)
-		return nil
+		return
 	}
 	defer resp.Body.Close()
 
@@ -209,12 +94,8 @@ func (mc *MetricsCollector) getGeoLocation(ipAddr string) *localmetrics.GeoLocat
 		ISP         string  `json:"isp"`
 		Org         string  `json:"org"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
-		fmt.Printf("geolocation decode error for %s: %v\n", ipAddr, err)
-		return nil
-	}
-	if apiResp.Status != "success" {
-		return nil
+	if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil || apiResp.Status != "success" {
+		return
 	}
 
 	geo := &localmetrics.GeoLocation{
@@ -231,6 +112,5 @@ func (mc *MetricsCollector) getGeoLocation(ipAddr string) *localmetrics.GeoLocat
 	mc.geoCacheMu.Lock()
 	mc.geoCache[ipAddr] = geo
 	mc.geoCacheMu.Unlock()
-
-	return geo
+	_ = mc.store.SetGeoLocation(ipAddr, *geo)
 }

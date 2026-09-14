@@ -89,8 +89,8 @@ func (g *Gateway) startMetricsCollector() {
 		return
 	}
 	g.metricsStore = store
-	g.metricsCollector = NewMetricsCollector(store, 1*time.Minute)
-	g.metricsCollector.Start()
+	g.metricsCollector = NewMetricsCollector(store)
+	store.StartBackgroundCleanup(90)
 	fmt.Println("metrics collector started")
 }
 
