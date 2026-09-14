@@ -1,5 +1,5 @@
 <template>
-  <v-app>
+  <v-app :theme="isDark ? 'dark' : 'light'">
     <!-- Header -->
     <v-app-bar color="primary" dark elevation="2">
       <v-icon class="me-3">mdi-solar-power</v-icon>
@@ -180,6 +180,7 @@
 
 <script>
 import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { useTheme } from 'vuetify'
 import MetricCard from './components/MetricCard.vue'
 import PowerChart from './components/PowerChart.vue'
 import SocChart from './components/SocChart.vue'
@@ -195,6 +196,15 @@ export default {
     GapsView
   },
   setup() {
+    const theme = useTheme()
+    const isDark = ref(false)
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const applyTheme = (dark) => {
+      isDark.value = dark
+      theme.global.name.value = dark ? 'dark' : 'light'
+    }
+    const onMediaChange = (e) => applyTheme(e.matches)
+
     const loading = ref(false)
     const selectedDate = ref(new Date())
     const datePickerMenu = ref(false)
@@ -420,18 +430,22 @@ export default {
     }
     
     onMounted(() => {
+      applyTheme(mediaQuery.matches)
+      mediaQuery.addEventListener('change', onMediaChange)
       refreshData()
       // Refresh every 30 seconds
       refreshInterval = setInterval(refreshData, 30000)
     })
-    
+
     onUnmounted(() => {
+      mediaQuery.removeEventListener('change', onMediaChange)
       if (refreshInterval) {
         clearInterval(refreshInterval)
       }
     })
     
     return {
+      isDark,
       loading,
       connectionStatus,
       metrics,

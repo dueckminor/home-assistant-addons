@@ -1,5 +1,5 @@
 <template>
-  <v-app>
+  <v-app :theme="isDark ? 'dark' : 'light'">
     <!-- Header -->
     <v-app-bar color="primary" dark elevation="2">
       <v-icon class="me-3">mdi-network-outline</v-icon>
@@ -51,6 +51,8 @@
 </template>
 
 <script>
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useTheme } from 'vuetify'
 import MqttTab from './components/tabs/MqttTab.vue'
 import EspLogsTab from './components/tabs/EspLogsTab.vue'
 
@@ -59,6 +61,27 @@ export default {
   components: {
     MqttTab,
     EspLogsTab
+  },
+  setup() {
+    const theme = useTheme()
+    const isDark = ref(false)
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const applyTheme = (dark) => {
+      isDark.value = dark
+      theme.global.name.value = dark ? 'dark' : 'light'
+    }
+    const onMediaChange = (e) => applyTheme(e.matches)
+
+    onMounted(() => {
+      applyTheme(mediaQuery.matches)
+      mediaQuery.addEventListener('change', onMediaChange)
+    })
+
+    onUnmounted(() => {
+      mediaQuery.removeEventListener('change', onMediaChange)
+    })
+
+    return { isDark }
   },
   data() {
     return {
