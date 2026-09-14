@@ -97,6 +97,7 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 	redirectToAuthURI.RawQuery = values.Encode()
 
 	c.Header("Location", redirectToAuthURI.String())
+	c.Set("metric_classification", "auth_redirect")
 	c.AbortWithStatus(http.StatusFound)
 }
 

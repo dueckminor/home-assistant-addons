@@ -19,14 +19,6 @@ type GeoLocation struct {
 	Org         string  `json:"org"`
 }
 
-type RouteMetricsSnapshot struct {
-	RequestCount  int64
-	ErrorCount    int64
-	DurationAvgMs int64
-	DurationMinMs int64
-	DurationMaxMs int64
-}
-
 type MapPoint struct {
 	Lat         float64 `json:"lat"`
 	Lon         float64 `json:"lon"`
@@ -66,8 +58,18 @@ type IPStat struct {
 	Blocked     int64   `json:"blocked"`
 }
 
+// classification values stored in access_log.classification
+const (
+	clsPending  = 0 // auth redirect, awaiting resolution
+	clsSuccess  = 1
+	clsError    = 2
+	clsBlocked  = 3
+	clsInternal = 4 // auth callback (/login/callback) — excluded from stats
+)
+
 type Store struct {
-	db sqlite.Database
+	db   sqlite.Database
+	stop chan struct{}
 }
 
 func NewStore(dbPath string) (*Store, error) {
@@ -75,7 +77,7 @@ func NewStore(dbPath string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{db: db}
+	s := &Store{db: db, stop: make(chan struct{})}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -86,20 +88,19 @@ func NewStore(dbPath string) (*Store, error) {
 func (s *Store) migrate() error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS access_log (
-			id              INTEGER PRIMARY KEY AUTOINCREMENT,
-			bucket_start    INTEGER NOT NULL,
-			hostname        TEXT    NOT NULL,
-			client_ip       TEXT    NOT NULL,
-			method          TEXT    NOT NULL,
-			path            TEXT    NOT NULL DEFAULT '',
-			request_count   INTEGER NOT NULL,
-			error_count     INTEGER NOT NULL,
-			duration_avg_ms INTEGER NOT NULL,
-			duration_min_ms INTEGER NOT NULL,
-			duration_max_ms INTEGER NOT NULL
+			id             INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp      INTEGER NOT NULL,
+			hostname       TEXT    NOT NULL,
+			client_ip      TEXT    NOT NULL,
+			method         TEXT    NOT NULL DEFAULT '',
+			path           TEXT    NOT NULL DEFAULT '',
+			status_code    INTEGER NOT NULL DEFAULT 0,
+			duration_ms    INTEGER NOT NULL DEFAULT 0,
+			classification INTEGER NOT NULL DEFAULT 0
 		)`,
-		`CREATE INDEX IF NOT EXISTS idx_access_log_bucket   ON access_log(bucket_start)`,
+		`CREATE INDEX IF NOT EXISTS idx_access_log_ts       ON access_log(timestamp)`,
 		`CREATE INDEX IF NOT EXISTS idx_access_log_hostname ON access_log(hostname)`,
+		`CREATE INDEX IF NOT EXISTS idx_access_log_ip_ts    ON access_log(client_ip, hostname, timestamp)`,
 		`CREATE TABLE IF NOT EXISTS geo_cache (
 			ip           TEXT PRIMARY KEY,
 			lat          REAL,
@@ -112,49 +113,86 @@ func (s *Store) migrate() error {
 			org          TEXT,
 			updated_at   INTEGER NOT NULL
 		)`,
-		// hostname_status: one row per hostname, is_valid=1 once the hostname ever
-		// had request_count > error_count. Maintained at write time so all read
-		// queries can use a cheap PK join instead of a full-table CTE scan.
-		`CREATE TABLE IF NOT EXISTS hostname_status (
-			hostname TEXT PRIMARY KEY,
-			is_valid INTEGER NOT NULL DEFAULT 0
-		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.Exec(stmt); err != nil {
 			return err
 		}
 	}
-	// Normalize all local network entries to a fixed position so they group as a
-	// single map point. Kept here so the position can later be made configurable.
+
+	// Normalise local network geo entries once.
 	if _, err := s.db.Exec(`UPDATE geo_cache SET lat = 30, lon = -40, country = 'Local Network', country_code = 'LC', city = 'Local'
 		WHERE country IN ('Local Network', 'Local') OR city IN ('Local', 'Localhost')`); err != nil {
 		return err
 	}
+
 	return nil
 }
 
-func (s *Store) RecordBatch(bucketStart time.Time, hostname, clientIP, method, path string, rm RouteMetricsSnapshot) error {
+// StartBackgroundCleanup runs the pending-timeout and retention cleanup loops.
+// Call it once after NewStore; stop by closing the Store.
+func (s *Store) StartBackgroundCleanup(retentionDays int) {
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				// Age out auth redirects that were never followed up.
+				cutoff := time.Now().Add(-10 * time.Minute).Unix()
+				_, _ = s.db.Exec(
+					`UPDATE access_log SET classification=? WHERE classification=? AND timestamp<?`,
+					clsBlocked, clsPending, cutoff,
+				)
+			case <-s.stop:
+				// Final retention cleanup.
+				cutoff := time.Now().Unix() - int64(retentionDays)*86400
+				_, _ = s.db.Exec(`DELETE FROM access_log WHERE timestamp<?`, cutoff)
+				return
+			}
+		}
+	}()
+}
+
+// RecordRequest writes a single request to the store and resolves pending auth records
+// when an auth callback succeeds.
+func (s *Store) RecordRequest(ts time.Time, hostname, clientIP, method, path string, statusCode int, durationMs int64, classification string) error {
+	cls := s.classify(path, statusCode, classification)
 	_, err := s.db.Exec(
-		`INSERT INTO access_log (bucket_start, hostname, client_ip, method, path, request_count, error_count, duration_avg_ms, duration_min_ms, duration_max_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		bucketStart.Unix(), hostname, clientIP, method, path,
-		rm.RequestCount, rm.ErrorCount, rm.DurationAvgMs, rm.DurationMinMs, rm.DurationMaxMs,
+		`INSERT INTO access_log (timestamp, hostname, client_ip, method, path, status_code, duration_ms, classification) VALUES (?,?,?,?,?,?,?,?)`,
+		ts.Unix(), hostname, clientIP, method, path, statusCode, durationMs, cls,
 	)
 	if err != nil {
 		return err
 	}
-	isValid := 0
-	if rm.RequestCount > rm.ErrorCount {
-		isValid = 1
+	if cls == clsInternal {
+		s.resolveAuthPending(clientIP, hostname, ts)
 	}
-	// Upsert: insert with current is_valid, or bump to 1 if this batch shows success.
-	// MAX ensures is_valid never goes from 1 back to 0.
-	_, err = s.db.Exec(
-		`INSERT INTO hostname_status (hostname, is_valid) VALUES (?, ?)
-		 ON CONFLICT(hostname) DO UPDATE SET is_valid = MAX(is_valid, excluded.is_valid)`,
-		hostname, isValid,
+	return nil
+}
+
+func (s *Store) classify(path string, statusCode int, classification string) int {
+	switch classification {
+	case "blocked":
+		return clsBlocked
+	case "auth_redirect":
+		return clsPending
+	}
+	if path == "/login/callback" && statusCode == 302 {
+		return clsInternal
+	}
+	if statusCode >= 400 {
+		return clsError
+	}
+	return clsSuccess
+}
+
+func (s *Store) resolveAuthPending(clientIP, hostname string, callbackTime time.Time) {
+	window := callbackTime.Add(-10 * time.Minute).Unix()
+	_, _ = s.db.Exec(
+		`UPDATE access_log SET classification=? WHERE client_ip=? AND hostname=? AND classification=? AND timestamp>=? AND timestamp<=?`,
+		clsSuccess, clientIP, hostname, clsPending, window, callbackTime.Unix(),
 	)
-	return err
 }
 
 func (s *Store) SetGeoLocation(ip string, geo GeoLocation) error {
@@ -182,14 +220,14 @@ func (s *Store) GetGeoLocation(ip string) (*GeoLocation, bool, error) {
 
 func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]MapPoint, error) {
 	query := `SELECT g.lat, g.lon, g.country, g.country_code, g.city,
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 0 THEN a.request_count ELSE 0 END) AS blocked,
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN a.error_count ELSE 0 END) AS errors,
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS success,
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS errors,
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS blocked
 	FROM access_log a
 	JOIN geo_cache g ON a.client_ip = g.ip
-	LEFT JOIN hostname_status hs ON a.hostname = hs.hostname
-	WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
-	args := []any{from.Unix(), to.Unix()}
+	WHERE a.timestamp >= ? AND a.timestamp <= ?
+	  AND a.classification NOT IN (?,?)`
+	args := []any{clsSuccess, clsError, clsBlocked, from.Unix(), to.Unix(), clsPending, clsInternal}
 
 	if hostname != "" {
 		query += " AND a.hostname = ?"
@@ -199,7 +237,7 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 		query += " AND a.client_ip = ?"
 		args = append(args, clientIP)
 	}
-	query += " GROUP BY g.lat, g.lon, g.country, g.country_code, g.city ORDER BY SUM(a.request_count) DESC"
+	query += " GROUP BY g.lat, g.lon, g.country, g.country_code, g.city ORDER BY COUNT(*) DESC"
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -210,7 +248,7 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 	var points []MapPoint
 	for rows.Next() {
 		var p MapPoint
-		if err := rows.Scan(&p.Lat, &p.Lon, &p.Country, &p.CountryCode, &p.City, &p.Blocked, &p.Errors, &p.Success); err != nil {
+		if err := rows.Scan(&p.Lat, &p.Lon, &p.Country, &p.CountryCode, &p.City, &p.Success, &p.Errors, &p.Blocked); err != nil {
 			return nil, err
 		}
 		points = append(points, p)
@@ -225,17 +263,16 @@ func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientI
 	}
 	hasLocation := city != "" && country != ""
 
-	query := `SELECT (a.bucket_start / ?) * ? as ts,
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 0 THEN a.request_count ELSE 0 END) AS blocked,
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN a.error_count ELSE 0 END) AS errors,
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
-	FROM access_log a
-	LEFT JOIN hostname_status hs ON a.hostname = hs.hostname`
+	query := `SELECT (a.timestamp / ?) * ? as ts,
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS blocked,
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS errors,
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS success
+	FROM access_log a`
 	if hasLocation {
 		query += ` JOIN geo_cache g ON a.client_ip = g.ip`
 	}
-	query += ` WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
-	args := []any{bucketSeconds, bucketSeconds, from.Unix(), to.Unix()}
+	query += ` WHERE a.timestamp >= ? AND a.timestamp <= ? AND a.classification NOT IN (?,?)`
+	args := []any{bucketSeconds, bucketSeconds, clsBlocked, clsError, clsSuccess, from.Unix(), to.Unix(), clsPending, clsInternal}
 
 	if hostname != "" {
 		query += " AND a.hostname = ?"
@@ -291,12 +328,11 @@ func (s *Store) GetHostnames() ([]string, error) {
 func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, country string, limit int) ([]PathStat, error) {
 	hasLocation := city != "" && country != ""
 
-	// Build the inner WHERE clause used in the `filtered` CTE.
 	filteredFrom := "FROM access_log a"
 	if hasLocation {
 		filteredFrom += " JOIN geo_cache g ON a.client_ip = g.ip"
 	}
-	filteredFrom += " WHERE a.bucket_start >= ? AND a.bucket_start <= ?"
+	filteredFrom += " WHERE a.timestamp >= ? AND a.timestamp <= ?"
 	args := []any{from.Unix(), to.Unix()}
 
 	if hostname != "" {
@@ -313,25 +349,25 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 	}
 
 	query := `WITH filtered AS (
-		SELECT a.path, a.method, a.hostname, a.request_count, a.error_count
+		SELECT a.path, a.method, a.hostname, a.classification
 		` + filteredFrom + `
 	)
 	SELECT path, method, hostname, total, errors, 0
 	FROM (
-		SELECT f.path, f.method, f.hostname, SUM(f.request_count) AS total, SUM(f.error_count) AS errors
+		SELECT f.path, f.method, f.hostname,
+		       COUNT(*) AS total,
+		       COUNT(CASE WHEN f.classification=? THEN 1 END) AS errors
 		FROM filtered f
-		JOIN hostname_status hs ON f.hostname = hs.hostname AND hs.is_valid = 1
-		WHERE f.path != ''
+		WHERE f.classification IN (?,?) AND f.path != ''
 		GROUP BY f.path, f.method, f.hostname
 		ORDER BY total DESC LIMIT ?
 	)
 	UNION ALL
-	SELECT '' AS path, '' AS method, f.hostname, SUM(f.request_count) AS total, 0, 1
+	SELECT '' AS path, '' AS method, f.hostname, COUNT(*) AS total, 0, 1
 	FROM filtered f
-	LEFT JOIN hostname_status hs ON f.hostname = hs.hostname
-	WHERE COALESCE(hs.is_valid, 0) = 0
+	WHERE f.classification = ?
 	GROUP BY f.hostname`
-	args = append(args, limit)
+	args = append(args, clsError, clsSuccess, clsError, limit, clsBlocked)
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -356,20 +392,20 @@ func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IP
 	query := `SELECT a.client_ip,
 		COALESCE(g.country,''), COALESCE(g.country_code,''), COALESCE(g.city,''),
 		COALESCE(g.lat,0), COALESCE(g.lon,0),
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 0 THEN a.request_count ELSE 0 END) AS blocked,
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN a.error_count ELSE 0 END) AS errors,
-		SUM(CASE WHEN COALESCE(hs.is_valid,0) = 1 THEN MAX(0, a.request_count - a.error_count) ELSE 0 END) AS success
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS blocked,
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS errors,
+		COUNT(CASE WHEN a.classification=? THEN 1 END) AS success
 	FROM access_log a
 	LEFT JOIN geo_cache g ON a.client_ip = g.ip
-	LEFT JOIN hostname_status hs ON a.hostname = hs.hostname
-	WHERE a.bucket_start >= ? AND a.bucket_start <= ?`
-	args := []any{from.Unix(), to.Unix()}
+	WHERE a.timestamp >= ? AND a.timestamp <= ?
+	  AND a.classification NOT IN (?,?)`
+	args := []any{clsBlocked, clsError, clsSuccess, from.Unix(), to.Unix(), clsPending, clsInternal}
 
 	if hostname != "" {
 		query += " AND a.hostname = ?"
 		args = append(args, hostname)
 	}
-	query += " GROUP BY a.client_ip ORDER BY SUM(a.request_count) DESC LIMIT ?"
+	query += " GROUP BY a.client_ip ORDER BY COUNT(*) DESC LIMIT ?"
 	args = append(args, limit)
 
 	rows, err := s.db.Query(query, args...)
@@ -389,13 +425,8 @@ func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IP
 	return stats, rows.Err()
 }
 
-func (s *Store) Cleanup(retentionDays int) error {
-	cutoff := time.Now().Unix() - int64(retentionDays)*86400
-	_, err := s.db.Exec(`DELETE FROM access_log WHERE bucket_start < ?`, cutoff)
-	return err
-}
-
 func (s *Store) Close() error {
+	close(s.stop)
 	return s.db.Close()
 }
 

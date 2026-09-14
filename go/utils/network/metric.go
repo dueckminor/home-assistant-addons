@@ -7,13 +7,14 @@ import (
 )
 
 type Metric struct {
-	Timestamp    time.Time
-	ClientAddr   string
-	Duration     time.Duration
-	Hostname     string
-	Method       string
-	Path         string
-	ResponseCode int
+	Timestamp      time.Time
+	ClientAddr     string
+	Duration       time.Duration
+	Hostname       string
+	Method         string
+	Path           string
+	ResponseCode   int
+	Classification string // "blocked", "auth_redirect", or "" (normal)
 }
 
 type MetricCallback func(metric Metric)
@@ -30,7 +31,10 @@ func MetricMiddleware(callback MetricCallback) func(c *gin.Context) {
 			metric.Method = c.Request.Method
 			metric.Path = c.Request.URL.Path
 			metric.ResponseCode = c.Writer.Status()
-			callback(metric)
+			if cls, ok := c.Get("metric_classification"); ok {
+				metric.Classification = cls.(string)
+			}
+			go callback(metric)
 		}()
 		c.Next()
 	}

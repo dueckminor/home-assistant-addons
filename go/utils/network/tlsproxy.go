@@ -276,10 +276,10 @@ func (tp *tlsProxy) ServeCtx(ctx context.Context, conn net.Conn) {
 		fmt.Println("ServerName:", sni, "rejected")
 		if tp.metricCallback != nil {
 			tp.metricCallback(Metric{
-				Timestamp:    time.Now(),
-				ClientAddr:   clientAddr.String(),
-				Hostname:     sni,
-				ResponseCode: 666,
+				Timestamp:      time.Now(),
+				ClientAddr:     clientAddr.String(),
+				Hostname:       sni,
+				Classification: "blocked",
 			})
 		}
 		return

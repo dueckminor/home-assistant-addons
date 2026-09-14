@@ -17,7 +17,7 @@ def main():
     )
     args = parser.parse_args()
 
-    component_names = ["gateway", "security", "mqtt-bridge"]
+    component_names = ["gateway", "security", "mqtt-bridge", "alphaess"]
     if args.component:
         component_names = [args.component]
 
