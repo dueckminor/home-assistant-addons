@@ -49,8 +49,8 @@
         </v-checkbox>
       </v-col>
       <v-col cols="auto">
-        <v-checkbox v-model="showErrors" density="compact" hide-details color="#e53935">
-          <template #label><span style="color:#e53935">Errors</span></template>
+        <v-checkbox v-model="showRejected" density="compact" hide-details color="#e53935">
+          <template #label><span style="color:#e53935">Rejected</span></template>
         </v-checkbox>
       </v-col>
       <v-col cols="auto">
@@ -73,7 +73,7 @@
               :highlight-lat="highlightLat"
               :highlight-lon="highlightLon"
               :show-success="showSuccess"
-              :show-errors="showErrors"
+              :show-rejected="showRejected"
               :show-blocked="showBlocked"
               style="height: 400px"
               @click-location="toggleLocation($event.lat, $event.lon, $event.city, $event.country)"
@@ -112,8 +112,8 @@
                 </div>
                 <div class="d-flex flex-column align-end text-caption ml-2" style="white-space: nowrap; flex-shrink: 0">
                   <span :style="showSuccess ? 'color:#43a047' : 'visibility:hidden'">{{ (item.success || 0).toLocaleString() }}</span>
-                  <span :style="showErrors  ? 'color:#e53935' : 'visibility:hidden'">{{ (item.errors  || 0).toLocaleString() }}</span>
-                  <span :style="showBlocked ? 'color:#fb8c00' : 'visibility:hidden'">{{ (item.blocked || 0).toLocaleString() }}</span>
+                  <span :style="showRejected ? 'color:#e53935' : 'visibility:hidden'">{{ (item.rejected || 0).toLocaleString() }}</span>
+                  <span :style="showBlocked  ? 'color:#fb8c00' : 'visibility:hidden'">{{ (item.blocked  || 0).toLocaleString() }}</span>
                 </div>
               </div>
               <div v-if="!filteredIPData.length" class="text-caption text-medium-emphasis text-center pa-4">No data</div>
@@ -149,8 +149,8 @@
             <template #item.success="{ item }">
               <span style="color:#43a047">{{ (item.success || 0).toLocaleString() }}</span>
             </template>
-            <template #item.errors="{ item }">
-              <span style="color:#e53935">{{ (item.errors || 0).toLocaleString() }}</span>
+            <template #item.rejected="{ item }">
+              <span style="color:#e53935">{{ (item.rejected || 0).toLocaleString() }}</span>
             </template>
             <template #item.blocked="{ item }">
               <span style="color:#fb8c00">{{ (item.blocked || 0).toLocaleString() }}</span>
@@ -162,7 +162,7 @@
         <v-card height="100%">
           <v-card-title class="text-subtitle-1">Request Volume</v-card-title>
           <v-card-text style="height: 400px; padding-bottom: 8px">
-            <AccessChart :data-points="chartData" :granularity="granularity" :show-success="showSuccess" :show-errors="showErrors" :show-blocked="showBlocked" style="height: 100%" />
+            <AccessChart :data-points="chartData" :granularity="granularity" :show-success="showSuccess" :show-rejected="showRejected" :show-blocked="showBlocked" style="height: 100%" />
           </v-card-text>
         </v-card>
       </v-col>
@@ -192,9 +192,9 @@
               >{{ item.blocked ? '—' : item.path }}</span>
             </div>
             <div class="d-flex flex-column align-end text-caption ml-2" style="white-space: nowrap; flex-shrink: 0">
-              <span :style="showSuccess ? 'color:#43a047' : 'visibility:hidden'">{{ item.blocked ? 0 : (item.count - item.errors).toLocaleString() }}</span>
-              <span :style="showErrors  ? 'color:#e53935' : 'visibility:hidden'">{{ (item.errors  || 0).toLocaleString() }}</span>
-              <span :style="showBlocked ? 'color:#fb8c00' : 'visibility:hidden'">{{ item.blocked ? item.count.toLocaleString() : 0 }}</span>
+              <span :style="showSuccess  ? 'color:#43a047' : 'visibility:hidden'">{{ item.blocked ? 0 : (item.count - item.rejected).toLocaleString() }}</span>
+              <span :style="showRejected ? 'color:#e53935' : 'visibility:hidden'">{{ (item.rejected || 0).toLocaleString() }}</span>
+              <span :style="showBlocked  ? 'color:#fb8c00' : 'visibility:hidden'">{{ item.blocked ? item.count.toLocaleString() : 0 }}</span>
             </div>
           </div>
           <div v-if="!filteredPathData.length" class="text-caption text-medium-emphasis text-center pa-4">No data</div>
@@ -223,10 +223,10 @@
           <span :style="item.blocked ? 'color:#fb8c00' : ''">{{ item.hostname }}</span>
         </template>
         <template #item.pathSuccess="{ item }">
-          <span style="color:#43a047">{{ item.blocked ? 0 : (item.count - item.errors).toLocaleString() }}</span>
+          <span style="color:#43a047">{{ item.blocked ? 0 : (item.count - item.rejected).toLocaleString() }}</span>
         </template>
-        <template #item.errors="{ item }">
-          <span style="color:#e53935">{{ (item.errors || 0).toLocaleString() }}</span>
+        <template #item.rejected="{ item }">
+          <span style="color:#e53935">{{ (item.rejected || 0).toLocaleString() }}</span>
         </template>
         <template #item.pathBlocked="{ item }">
           <span style="color:#fb8c00">{{ item.blocked ? item.count.toLocaleString() : 0 }}</span>
@@ -258,7 +258,7 @@ export default {
       toDate: now.toISOString().slice(0, 10),
       granularity: 'hour',
       showSuccess: true,
-      showErrors: true,
+      showRejected: true,
       showBlocked: true,
       selectedIP: '',
       selectedLocation: null,  // { lat, lon, city, country }
@@ -279,8 +279,8 @@ export default {
         { title: 'Location', key: 'location', sortable: false }
       ]
       if (this.showSuccess) headers.push({ title: 'Success', key: 'success', sortable: true, width: '40px' })
-      if (this.showErrors)  headers.push({ title: 'Errors',  key: 'errors',  sortable: true, width: '40px' })
-      if (this.showBlocked) headers.push({ title: 'Blocked', key: 'blocked', sortable: true, width: '40px' })
+      if (this.showRejected) headers.push({ title: 'Rejected', key: 'rejected', sortable: true, width: '40px' })
+      if (this.showBlocked)  headers.push({ title: 'Blocked',  key: 'blocked',  sortable: true, width: '40px' })
       return headers
     },
     pathHeaders() {
@@ -290,22 +290,22 @@ export default {
         { title: 'Path',     key: 'path',     sortable: true }
       ]
       if (this.showSuccess) headers.push({ title: 'Success', key: 'pathSuccess', sortable: false, width: '40px' })
-      if (this.showErrors)  headers.push({ title: 'Errors',  key: 'errors',      sortable: true,  width: '40px' })
-      if (this.showBlocked) headers.push({ title: 'Blocked', key: 'pathBlocked', sortable: false, width: '40px' })
+      if (this.showRejected) headers.push({ title: 'Rejected', key: 'rejected', sortable: true,  width: '40px' })
+      if (this.showBlocked)  headers.push({ title: 'Blocked',  key: 'pathBlocked', sortable: false, width: '40px' })
       return headers
     },
     filteredIPData() {
       return this.ipData.filter(ip =>
         (ip.success > 0 && this.showSuccess) ||
-        (ip.errors  > 0 && this.showErrors)  ||
-        (ip.blocked > 0 && this.showBlocked)
+        (ip.rejected > 0 && this.showRejected) ||
+        (ip.blocked  > 0 && this.showBlocked)
       )
     },
     filteredPathData() {
       return this.pathData.filter(p => {
         if (p.blocked) return this.showBlocked
-        const successCount = p.count - p.errors
-        return (successCount > 0 && this.showSuccess) || (p.errors > 0 && this.showErrors)
+        const successCount = p.count - p.rejected
+        return (successCount > 0 && this.showSuccess) || (p.rejected > 0 && this.showRejected)
       })
     },
     highlightLat() {

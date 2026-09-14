@@ -28,7 +28,7 @@ export default {
     dataPoints:   { type: Array,   default: () => [] },
     granularity:  { type: String,  default: 'hour' },
     showSuccess:  { type: Boolean, default: true },
-    showErrors:   { type: Boolean, default: true },
+    showRejected: { type: Boolean, default: true },
     showBlocked:  { type: Boolean, default: true }
   },
   mounted() {
@@ -53,18 +53,18 @@ export default {
         backgroundColor: 'rgba(67, 160, 71, 0.1)',
         fill: true, tension: 0.2, pointRadius
       })
-      if (this.showErrors) datasets.push({
-        label: 'Errors',
-        data: this.dataPoints.map(p => p.errors),
+      if (this.showRejected) datasets.push({
+        label: 'Rejected',
+        data: this.dataPoints.map(p => p.rejected),
         borderColor: '#e53935',
-        backgroundColor: 'rgba(229, 57, 53, 0.1)',
+        backgroundColor: 'rgba(251, 140, 0, 0.1)',
         fill: true, tension: 0.2, pointRadius
       })
       if (this.showBlocked) datasets.push({
         label: 'Blocked',
         data: this.dataPoints.map(p => p.blocked),
         borderColor: '#fb8c00',
-        backgroundColor: 'rgba(251, 140, 0, 0.1)',
+        backgroundColor: 'rgba(229, 57, 53, 0.1)',
         fill: true, tension: 0.2, pointRadius
       })
       return { labels, datasets }
