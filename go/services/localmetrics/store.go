@@ -258,8 +258,11 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 
 func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientIP, city, country string) ([]TimePoint, error) {
 	var bucketSeconds int64 = 3600
-	if granularity == "day" {
+	switch granularity {
+	case "day":
 		bucketSeconds = 86400
+	case "week":
+		bucketSeconds = 604800
 	}
 	hasLocation := city != "" && country != ""
 

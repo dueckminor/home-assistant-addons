@@ -13,7 +13,7 @@
           @update:model-value="loadData"
         />
       </v-col>
-      <v-col cols="12" sm="3">
+      <v-col cols="12" sm="4">
         <v-text-field
           v-model="fromDate"
           label="From"
@@ -23,7 +23,7 @@
           @change="loadData"
         />
       </v-col>
-      <v-col cols="12" sm="3">
+      <v-col cols="12" sm="4">
         <v-text-field
           v-model="toDate"
           label="To"
@@ -32,12 +32,6 @@
           hide-details
           @change="loadData"
         />
-      </v-col>
-      <v-col cols="12" sm="2">
-        <v-btn-toggle v-model="granularity" density="compact" mandatory @update:model-value="loadData">
-          <v-btn value="hour" size="small">Hour</v-btn>
-          <v-btn value="day" size="small">Day</v-btn>
-        </v-btn-toggle>
       </v-col>
     </v-row>
 
@@ -162,7 +156,7 @@
         <v-card height="100%">
           <v-card-title class="text-subtitle-1">Request Volume</v-card-title>
           <v-card-text style="height: 400px; padding-bottom: 8px">
-            <AccessChart :data-points="chartData" :granularity="granularity" :show-success="showSuccess" :show-rejected="showRejected" :show-blocked="showBlocked" style="height: 100%" />
+            <AccessChart :data-points="chartData" :granularity="autoGranularity" :show-success="showSuccess" :show-rejected="showRejected" :show-blocked="showBlocked" style="height: 100%" />
           </v-card-text>
         </v-card>
       </v-col>
@@ -249,14 +243,13 @@ export default {
   },
   data() {
     const now = new Date()
-    const weekAgo = new Date(now)
-    weekAgo.setDate(weekAgo.getDate() - 7)
+    const yesterday = new Date(now)
+    yesterday.setDate(yesterday.getDate() - 1)
     return {
       hostnames: [],
       selectedHostname: '',
-      fromDate: weekAgo.toISOString().slice(0, 10),
+      fromDate: yesterday.toISOString().slice(0, 10),
       toDate: now.toISOString().slice(0, 10),
-      granularity: 'hour',
       showSuccess: true,
       showRejected: true,
       showBlocked: true,
@@ -270,6 +263,14 @@ export default {
     }
   },
   computed: {
+    autoGranularity() {
+      const from = new Date(this.fromDate)
+      const to   = new Date(this.toDate + 'T23:59:59')
+      const hours = (to - from) / 3_600_000
+      if (hours <= 60)       return 'hour'
+      if (hours / 24 <= 60)  return 'day'
+      return 'week'
+    },
     hostnameItems() {
       return [{ title: 'All hostnames', value: '' }, ...this.hostnames.map(h => ({ title: h, value: h }))]
     },
@@ -382,7 +383,7 @@ export default {
 
       const [map, ts, paths, ips] = await Promise.all([
         apiGet(`metrics/map?from=${from}&to=${to}${hn}`).catch(() => []),
-        apiGet(`metrics/timeseries?from=${from}&to=${to}&granularity=${this.granularity}${hn}${filter}`).catch(() => []),
+        apiGet(`metrics/timeseries?from=${from}&to=${to}&granularity=${this.autoGranularity}${hn}${filter}`).catch(() => []),
         apiGet(`metrics/paths?from=${from}&to=${to}${hn}${filter}`).catch(() => []),
         apiGet(`metrics/ips?from=${from}&to=${to}${hn}`).catch(() => [])
       ])
