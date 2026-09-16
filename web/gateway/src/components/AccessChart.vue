@@ -1,39 +1,37 @@
 <template>
   <div ref="container" style="position: relative; height: 100%">
-    <Line ref="line" :data="chartData" :options="chartOptions" />
+    <Bar ref="bar" :data="chartData" :options="chartOptions" />
   </div>
 </template>
 
 <script>
-import { Line } from 'vue-chartjs'
+import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS,
   TimeScale,
   LinearScale,
-  PointElement,
-  LineElement,
+  BarElement,
   Title,
   Tooltip,
-  Legend,
-  Filler
+  Legend
 } from 'chart.js'
 import 'chartjs-adapter-date-fns'
 
-ChartJS.register(TimeScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
+ChartJS.register(TimeScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 export default {
   name: 'AccessChart',
-  components: { Line },
+  components: { Bar },
   props: {
     dataPoints:   { type: Array,   default: () => [] },
     granularity:  { type: String,  default: 'hour' },
     showSuccess:  { type: Boolean, default: true },
-    showErrors:   { type: Boolean, default: true },
+    showRejected: { type: Boolean, default: true },
     showBlocked:  { type: Boolean, default: true }
   },
   mounted() {
     this._resizeObserver = new ResizeObserver(() => {
-      const chart = this.$refs.line?.chart
+      const chart = this.$refs.bar?.chart
       if (chart) chart.resize()
     })
     this._resizeObserver.observe(this.$refs.container)
@@ -44,43 +42,43 @@ export default {
   computed: {
     chartData() {
       const labels = this.dataPoints.map(p => new Date(p.timestamp))
-      const pointRadius = this.dataPoints.length > 100 ? 0 : 3
       const datasets = []
+      // Stack order: success at bottom, blocked in middle, rejected on top (most alarming)
       if (this.showSuccess) datasets.push({
         label: 'Success',
         data: this.dataPoints.map(p => p.success),
-        borderColor: '#43a047',
-        backgroundColor: 'rgba(67, 160, 71, 0.1)',
-        fill: true, tension: 0.2, pointRadius
-      })
-      if (this.showErrors) datasets.push({
-        label: 'Errors',
-        data: this.dataPoints.map(p => p.errors),
-        borderColor: '#e53935',
-        backgroundColor: 'rgba(229, 57, 53, 0.1)',
-        fill: true, tension: 0.2, pointRadius
+        backgroundColor: 'rgba(67, 160, 71, 0.85)',
+        stack: 'requests'
       })
       if (this.showBlocked) datasets.push({
         label: 'Blocked',
         data: this.dataPoints.map(p => p.blocked),
-        borderColor: '#fb8c00',
-        backgroundColor: 'rgba(251, 140, 0, 0.1)',
-        fill: true, tension: 0.2, pointRadius
+        backgroundColor: 'rgba(251, 140, 0, 0.85)',
+        stack: 'requests'
+      })
+      if (this.showRejected) datasets.push({
+        label: 'Rejected',
+        data: this.dataPoints.map(p => p.rejected),
+        backgroundColor: 'rgba(229, 57, 53, 0.85)',
+        stack: 'requests'
       })
       return { labels, datasets }
     },
     chartOptions() {
+      const unit = this.granularity === 'week' ? 'week' : this.granularity === 'day' ? 'day' : 'hour'
       return {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
           x: {
             type: 'time',
-            time: { unit: this.granularity === 'day' ? 'day' : 'hour' },
-            ticks: { maxTicksLimit: 12 }
+            time: { unit },
+            ticks: { maxTicksLimit: 12 },
+            stacked: true
           },
           y: {
             beginAtZero: true,
+            stacked: true,
             ticks: { stepSize: 1 }
           }
         },

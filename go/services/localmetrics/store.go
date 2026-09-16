@@ -26,14 +26,14 @@ type MapPoint struct {
 	CountryCode string  `json:"country_code"`
 	City        string  `json:"city"`
 	Success     int64   `json:"success"`
-	Errors      int64   `json:"errors"`
+	Rejected    int64   `json:"rejected"`
 	Blocked     int64   `json:"blocked"`
 }
 
 type TimePoint struct {
 	Timestamp time.Time `json:"timestamp"`
 	Success   int64     `json:"success"`
-	Errors    int64     `json:"errors"`
+	Rejected  int64     `json:"rejected"`
 	Blocked   int64     `json:"blocked"`
 }
 
@@ -42,7 +42,7 @@ type PathStat struct {
 	Method   string `json:"method"`
 	Hostname string `json:"hostname"`
 	Count    int64  `json:"count"`
-	Errors   int64  `json:"errors"`
+	Rejected int64  `json:"rejected"`
 	Blocked  bool   `json:"blocked"`
 }
 
@@ -54,7 +54,7 @@ type IPStat struct {
 	Lat         float64 `json:"lat"`
 	Lon         float64 `json:"lon"`
 	Success     int64   `json:"success"`
-	Errors      int64   `json:"errors"`
+	Rejected    int64   `json:"rejected"`
 	Blocked     int64   `json:"blocked"`
 }
 
@@ -62,7 +62,7 @@ type IPStat struct {
 const (
 	clsPending  = 0 // auth redirect, awaiting resolution
 	clsSuccess  = 1
-	clsError    = 2
+	clsRejected = 2 // 401 or 403 — auth/authorization failure
 	clsBlocked  = 3
 	clsInternal = 4 // auth callback (/login/callback) — excluded from stats
 )
@@ -73,7 +73,7 @@ type Store struct {
 }
 
 func NewStore(dbPath string) (*Store, error) {
-	db, err := sqlite.OpenDatabase(dbPath)
+	db, err := sqlite.OpenWALDatabase(dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -181,8 +181,8 @@ func (s *Store) classify(path string, statusCode int, classification string) int
 	if path == "/login/callback" && statusCode == 302 {
 		return clsInternal
 	}
-	if statusCode >= 400 {
-		return clsError
+	if statusCode == 401 || statusCode == 403 {
+		return clsRejected
 	}
 	return clsSuccess
 }
@@ -227,7 +227,7 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 	JOIN geo_cache g ON a.client_ip = g.ip
 	WHERE a.timestamp >= ? AND a.timestamp <= ?
 	  AND a.classification NOT IN (?,?)`
-	args := []any{clsSuccess, clsError, clsBlocked, from.Unix(), to.Unix(), clsPending, clsInternal}
+	args := []any{clsSuccess, clsRejected, clsBlocked, from.Unix(), to.Unix(), clsPending, clsInternal}
 
 	if hostname != "" {
 		query += " AND a.hostname = ?"
@@ -248,7 +248,7 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 	var points []MapPoint
 	for rows.Next() {
 		var p MapPoint
-		if err := rows.Scan(&p.Lat, &p.Lon, &p.Country, &p.CountryCode, &p.City, &p.Success, &p.Errors, &p.Blocked); err != nil {
+		if err := rows.Scan(&p.Lat, &p.Lon, &p.Country, &p.CountryCode, &p.City, &p.Success, &p.Rejected, &p.Blocked); err != nil {
 			return nil, err
 		}
 		points = append(points, p)
@@ -258,8 +258,11 @@ func (s *Store) GetMapData(from, to time.Time, hostname, clientIP string) ([]Map
 
 func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientIP, city, country string) ([]TimePoint, error) {
 	var bucketSeconds int64 = 3600
-	if granularity == "day" {
+	switch granularity {
+	case "day":
 		bucketSeconds = 86400
+	case "week":
+		bucketSeconds = 604800
 	}
 	hasLocation := city != "" && country != ""
 
@@ -272,7 +275,7 @@ func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientI
 		query += ` JOIN geo_cache g ON a.client_ip = g.ip`
 	}
 	query += ` WHERE a.timestamp >= ? AND a.timestamp <= ? AND a.classification NOT IN (?,?)`
-	args := []any{bucketSeconds, bucketSeconds, clsBlocked, clsError, clsSuccess, from.Unix(), to.Unix(), clsPending, clsInternal}
+	args := []any{bucketSeconds, bucketSeconds, clsBlocked, clsRejected, clsSuccess, from.Unix(), to.Unix(), clsPending, clsInternal}
 
 	if hostname != "" {
 		query += " AND a.hostname = ?"
@@ -298,7 +301,7 @@ func (s *Store) GetTimeSeries(from, to time.Time, hostname, granularity, clientI
 	for rows.Next() {
 		var ts int64
 		var p TimePoint
-		if err := rows.Scan(&ts, &p.Blocked, &p.Errors, &p.Success); err != nil {
+		if err := rows.Scan(&ts, &p.Blocked, &p.Rejected, &p.Success); err != nil {
 			return nil, err
 		}
 		p.Timestamp = time.Unix(ts, 0).UTC()
@@ -367,7 +370,7 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 	FROM filtered f
 	WHERE f.classification = ?
 	GROUP BY f.hostname`
-	args = append(args, clsError, clsSuccess, clsError, limit, clsBlocked)
+	args = append(args, clsRejected, clsSuccess, clsRejected, limit, clsBlocked)
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -379,7 +382,7 @@ func (s *Store) GetTopPaths(from, to time.Time, hostname, clientIP, city, countr
 	for rows.Next() {
 		var p PathStat
 		var isBlocked int
-		if err := rows.Scan(&p.Path, &p.Method, &p.Hostname, &p.Count, &p.Errors, &isBlocked); err != nil {
+		if err := rows.Scan(&p.Path, &p.Method, &p.Hostname, &p.Count, &p.Rejected, &isBlocked); err != nil {
 			return nil, err
 		}
 		p.Blocked = isBlocked == 1
@@ -399,7 +402,7 @@ func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IP
 	LEFT JOIN geo_cache g ON a.client_ip = g.ip
 	WHERE a.timestamp >= ? AND a.timestamp <= ?
 	  AND a.classification NOT IN (?,?)`
-	args := []any{clsBlocked, clsError, clsSuccess, from.Unix(), to.Unix(), clsPending, clsInternal}
+	args := []any{clsBlocked, clsRejected, clsSuccess, from.Unix(), to.Unix(), clsPending, clsInternal}
 
 	if hostname != "" {
 		query += " AND a.hostname = ?"
@@ -417,7 +420,7 @@ func (s *Store) GetIPStats(from, to time.Time, hostname string, limit int) ([]IP
 	var stats []IPStat
 	for rows.Next() {
 		var p IPStat
-		if err := rows.Scan(&p.IP, &p.Country, &p.CountryCode, &p.City, &p.Lat, &p.Lon, &p.Blocked, &p.Errors, &p.Success); err != nil {
+		if err := rows.Scan(&p.IP, &p.Country, &p.CountryCode, &p.City, &p.Lat, &p.Lon, &p.Blocked, &p.Rejected, &p.Success); err != nil {
 			return nil, err
 		}
 		stats = append(stats, p)

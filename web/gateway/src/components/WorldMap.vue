@@ -40,7 +40,7 @@ export default {
     highlightLat: { type: Number,  default: null },
     highlightLon: { type: Number,  default: null },
     showSuccess:  { type: Boolean, default: true },
-    showErrors:   { type: Boolean, default: true },
+    showRejected: { type: Boolean, default: true },
     showBlocked:  { type: Boolean, default: true }
   },
   data() {
@@ -51,7 +51,7 @@ export default {
     highlightLat() { this.updateData(this.locations) },
     highlightLon() { this.updateData(this.locations) },
     showSuccess()  { this.updateData(this.locations) },
-    showErrors()   { this.updateData(this.locations) },
+    showRejected() { this.updateData(this.locations) },
     showBlocked()  { this.updateData(this.locations) },
     mapStyle(style) {
       if (!this.map) return
@@ -120,7 +120,7 @@ export default {
 
       if (!locations || !locations.length) return
 
-      const totals = locations.map(l => (l.success || 0) + (l.errors || 0) + (l.blocked || 0))
+      const totals = locations.map(l => (l.success || 0) + (l.rejected || 0) + (l.blocked || 0))
       const maxCount = Math.max(...totals)
       const hasHighlight = this.highlightLat !== null && this.highlightLon !== null
 
@@ -130,8 +130,8 @@ export default {
 
         const segments = [
           this.showSuccess ? { value: loc.success || 0, color: '#43a047' } : null,
-          this.showErrors  ? { value: loc.errors  || 0, color: '#e53935' } : null,
-          this.showBlocked ? { value: loc.blocked || 0, color: '#fb8c00' } : null,
+          this.showRejected ? { value: loc.rejected || 0, color: '#e53935' } : null,
+          this.showBlocked  ? { value: loc.blocked  || 0, color: '#fb8c00' } : null,
         ].filter(Boolean)
 
         const visibleTotal = segments.reduce((s, x) => s + x.value, 0)
@@ -150,8 +150,8 @@ export default {
           .setHTML(
             `<strong>${loc.city || '?'}, ${loc.country || '?'}</strong><br>` +
             `<span style="color:#43a047">&#9679;</span> Success: ${(loc.success || 0).toLocaleString()}<br>` +
-            `<span style="color:#e53935">&#9679;</span> Errors: ${(loc.errors || 0).toLocaleString()}<br>` +
-            `<span style="color:#fb8c00">&#9679;</span> Blocked: ${(loc.blocked || 0).toLocaleString()}`
+            `<span style="color:#e53935">&#9679;</span> Rejected: ${(loc.rejected || 0).toLocaleString()}<br>` +
+            `<span style="color:#fb8c00">&#9679;</span> Blocked: ${(loc.blocked  || 0).toLocaleString()}`
           )
         this._popups.push(popup)
 
@@ -176,4 +176,14 @@ export default {
   height: 100%;
   min-height: 300px;
 }
+
+:deep(.maplibregl-popup-content) {
+  color: #333;
+  background-color: #fff;
+}
+
+:deep(.maplibregl-popup-anchor-bottom .maplibregl-popup-tip) { border-top-color: #fff; }
+:deep(.maplibregl-popup-anchor-top .maplibregl-popup-tip) { border-bottom-color: #fff; }
+:deep(.maplibregl-popup-anchor-left .maplibregl-popup-tip) { border-right-color: #fff; }
+:deep(.maplibregl-popup-anchor-right .maplibregl-popup-tip) { border-left-color: #fff; }
 </style>
