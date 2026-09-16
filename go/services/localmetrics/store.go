@@ -73,7 +73,7 @@ type Store struct {
 }
 
 func NewStore(dbPath string) (*Store, error) {
-	db, err := sqlite.OpenDatabase(dbPath)
+	db, err := sqlite.OpenWALDatabase(dbPath)
 	if err != nil {
 		return nil, err
 	}
