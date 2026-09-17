@@ -19,7 +19,32 @@ fi
 echo "container: ${CONTAINER}"
 
 mkdir -p "${ROOT_DIR}/gen/data/gateway"
-ssh "hassio@${HOMEASSISTANT}" "sudo docker exec ${CONTAINER} cat /data/metrics.db" \
+
+# Remove any leftover local WAL/SHM before downloading to avoid stale-SHM mismatch
+rm -f "${ROOT_DIR}/gen/data/gateway/metrics.db" \
+      "${ROOT_DIR}/gen/data/gateway/metrics.db-wal" \
+      "${ROOT_DIR}/gen/data/gateway/metrics.db-shm"
+
+# Snapshot both files atomically on the remote before downloading
+ssh "hassio@${HOMEASSISTANT}" "sudo docker exec ${CONTAINER} sh -c \
+    'cp /data/metrics.db /tmp/metrics-snap.db && \
+     cp /data/metrics.db-wal /tmp/metrics-snap.db-wal 2>/dev/null || true'"
+
+ssh "hassio@${HOMEASSISTANT}" "sudo docker exec ${CONTAINER} cat /tmp/metrics-snap.db" \
     > "${ROOT_DIR}/gen/data/gateway/metrics.db"
+
+# Only download WAL if it exists on the remote (empty file would confuse sqlite3)
+if ssh "hassio@${HOMEASSISTANT}" "sudo docker exec ${CONTAINER} test -s /tmp/metrics-snap.db-wal"; then
+    ssh "hassio@${HOMEASSISTANT}" "sudo docker exec ${CONTAINER} cat /tmp/metrics-snap.db-wal" \
+        > "${ROOT_DIR}/gen/data/gateway/metrics.db-wal"
+fi
+
+# Merge WAL into a clean single-file DB using local sqlite3
+sqlite3 "${ROOT_DIR}/gen/data/gateway/metrics.db" \
+    ".backup ${ROOT_DIR}/gen/data/gateway/metrics-clean.db"
+mv "${ROOT_DIR}/gen/data/gateway/metrics-clean.db" \
+   "${ROOT_DIR}/gen/data/gateway/metrics.db"
+rm -f "${ROOT_DIR}/gen/data/gateway/metrics.db-wal" \
+      "${ROOT_DIR}/gen/data/gateway/metrics.db-shm"
 
 echo "saved to gen/data/gateway/metrics.db"

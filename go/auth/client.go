@@ -59,6 +59,9 @@ func (ac *AuthClient) handleAuth(c *gin.Context) {
 	}
 
 	if ac.Secret != "" {
+		if sessionVerified {
+			fmt.Println("session verified")
+		}
 		sessionVerified = ac.handleSecret(c, sessionVerified)
 	}
 
@@ -149,13 +152,7 @@ func (ac *AuthClient) handleSecret(c *gin.Context, sessionVerified bool) bool {
 		if path != pattern {
 			redirect = path[len(pattern):]
 		}
-
-		if c.Request.Method == "GET" {
-			c.Header("Location", redirect)
-			c.AbortWithStatus(http.StatusFound)
-		} else {
-			c.Request.URL.Path = redirect
-		}
+		c.Request.URL.Path = redirect
 		return true
 	}
 	return sessionVerified

@@ -257,6 +257,17 @@
                     <v-icon start>mdi-certificate-outline</v-icon>
                     mTLS (client certificate) is automatically enabled when auth is required.
                   </v-alert>
+
+                  <v-text-field
+                    v-if="routeData.options.auth"
+                    v-model="routeData.options.auth_secret"
+                    label="Path Secret (Optional)"
+                    variant="outlined"
+                    class="mt-4"
+                    placeholder="my-secret-key"
+                    hint="Access via /secret/my-secret-key sets a session cookie — needed for apps like the Bitwarden iOS client that don't support mTLS"
+                    persistent-hint
+                  ></v-text-field>
                 </v-card-text>
               </v-card>
             </v-col>
@@ -399,6 +410,11 @@
                     mTLS Enabled
                   </v-chip>
 
+                  <v-chip v-if="routeData.options.auth && routeData.options.auth_secret" size="small" color="info" variant="tonal" class="mb-2 mr-2">
+                    <v-icon start size="small">mdi-key</v-icon>
+                    Path secret: /secret/{{ routeData.options.auth_secret }}
+                  </v-chip>
+
                   <v-chip v-if="routeData.options.disable_service_worker" color="warning" class="mb-2 mr-2">
                     <v-icon start>mdi-cog-transfer</v-icon>
                     Service Worker Disabled
@@ -504,6 +520,7 @@ export default {
           insecure: false,
           use_target_hostname: false,
           auth: false,
+          auth_secret: '',
           disable_service_worker: false
         }
       },
@@ -794,6 +811,7 @@ export default {
           insecure: false,
           use_target_hostname: false,
           auth: false,
+          auth_secret: '',
           disable_service_worker: false
         }
       }

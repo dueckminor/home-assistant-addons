@@ -139,7 +139,7 @@ func (s *Store) StartBackgroundCleanup(retentionDays int) {
 			select {
 			case <-ticker.C:
 				// Age out auth redirects that were never followed up.
-				cutoff := time.Now().Add(-10 * time.Minute).Unix()
+				cutoff := time.Now().Add(-5 * time.Minute).Unix()
 				_, _ = s.db.Exec(
 					`UPDATE access_log SET classification=? WHERE classification=? AND timestamp<?`,
 					clsBlocked, clsPending, cutoff,
@@ -157,7 +157,7 @@ func (s *Store) StartBackgroundCleanup(retentionDays int) {
 // RecordRequest writes a single request to the store and resolves pending auth records
 // when an auth callback succeeds.
 func (s *Store) RecordRequest(ts time.Time, hostname, clientIP, method, path string, statusCode int, durationMs int64, classification string) error {
-	cls := s.classify(path, statusCode, classification)
+	cls := s.classify(method, path, statusCode, classification)
 	_, err := s.db.Exec(
 		`INSERT INTO access_log (timestamp, hostname, client_ip, method, path, status_code, duration_ms, classification) VALUES (?,?,?,?,?,?,?,?)`,
 		ts.Unix(), hostname, clientIP, method, path, statusCode, durationMs, cls,
@@ -166,16 +166,27 @@ func (s *Store) RecordRequest(ts time.Time, hostname, clientIP, method, path str
 		return err
 	}
 	if cls == clsInternal {
-		s.resolveAuthPending(clientIP, hostname, ts)
+		s.resolveAuthPending(clientIP, hostname, ts, 10*time.Minute)
+	}
+	if classification == "auth_page" && cls == clsSuccess {
+		s.resolveAuthPending(clientIP, hostname, ts, 5*time.Minute)
 	}
 	return nil
 }
 
-func (s *Store) classify(path string, statusCode int, classification string) int {
+func (s *Store) classify(method, path string, statusCode int, classification string) int {
 	switch classification {
 	case "blocked":
 		return clsBlocked
 	case "auth_redirect":
+		return clsPending
+	case "auth_page":
+		if statusCode == 401 || statusCode == 403 {
+			return clsRejected
+		}
+		if method == "POST" && path == "/login" {
+			return clsSuccess
+		}
 		return clsPending
 	}
 	if path == "/login/callback" && statusCode == 302 {
@@ -187,11 +198,11 @@ func (s *Store) classify(path string, statusCode int, classification string) int
 	return clsSuccess
 }
 
-func (s *Store) resolveAuthPending(clientIP, hostname string, callbackTime time.Time) {
-	window := callbackTime.Add(-10 * time.Minute).Unix()
+func (s *Store) resolveAuthPending(clientIP, hostname string, callbackTime time.Time, window time.Duration) {
+	cutoff := callbackTime.Add(-window).Unix()
 	_, _ = s.db.Exec(
 		`UPDATE access_log SET classification=? WHERE client_ip=? AND hostname=? AND classification=? AND timestamp>=? AND timestamp<=?`,
-		clsSuccess, clientIP, hostname, clsPending, window, callbackTime.Unix(),
+		clsSuccess, clientIP, hostname, clsPending, cutoff, callbackTime.Unix(),
 	)
 }
 
