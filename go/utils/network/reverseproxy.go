@@ -18,6 +18,7 @@ type ReverseProxyOptions struct {
 	Auth                 bool
 	DisableServiceWorker bool
 	AuthClient           *auth.AuthClient
+	AuthSecret           string
 	SessionStore         sessions.Store
 	MetricCallback       MetricCallback
 }
@@ -39,6 +40,9 @@ func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) http.Ha
 		}
 		if opt.AuthClient != nil {
 			combinedOptions.AuthClient = opt.AuthClient
+		}
+		if opt.AuthSecret != "" {
+			combinedOptions.AuthSecret = opt.AuthSecret
 		}
 		if opt.SessionStore != nil {
 			combinedOptions.SessionStore = opt.SessionStore
@@ -69,6 +73,9 @@ func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) http.Ha
 
 	if combinedOptions.AuthClient != nil {
 		r.Use(sessions.Sessions("MYPI_ROUTER_SESSION", combinedOptions.SessionStore))
+		if combinedOptions.AuthSecret != "" {
+			combinedOptions.AuthClient.Secret = combinedOptions.AuthSecret
+		}
 		combinedOptions.AuthClient.RegisterHandler(r)
 	}
 

@@ -25,6 +25,8 @@ export default {
   props: {
     dataPoints:   { type: Array,   default: () => [] },
     granularity:  { type: String,  default: 'hour' },
+    from:         { type: String,  default: '' },
+    to:           { type: String,  default: '' },
     showSuccess:  { type: Boolean, default: true },
     showRejected: { type: Boolean, default: true },
     showBlocked:  { type: Boolean, default: true }
@@ -66,16 +68,42 @@ export default {
     },
     chartOptions() {
       const unit = this.granularity === 'week' ? 'week' : this.granularity === 'day' ? 'day' : 'hour'
+
+      const fromD = this.from ? new Date(this.from) : null
+      const toD   = this.to   ? new Date(this.to)   : null
+      const multiDay = fromD && toD && (
+        fromD.getFullYear() !== toD.getFullYear() ||
+        fromD.getMonth()    !== toD.getMonth()    ||
+        fromD.getDate()     !== toD.getDate()
+      )
+
+      const pad = n => String(n).padStart(2, '0')
+
+      const xScale = {
+        type: 'time',
+        time: { unit },
+        ticks: {
+          maxTicksLimit: 12,
+          callback(value, index, ticks) {
+            const ts = ticks[index]?.value
+            if (ts == null) return value
+            const d = new Date(ts)
+            const date = `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.`
+            const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+            if (unit === 'hour' && multiDay) return [date, time]
+            if (unit === 'hour') return time
+            return date
+          }
+        },
+        stacked: true
+      }
+      if (this.from) xScale.min = new Date(this.from).getTime()
+      if (this.to)   xScale.max = new Date(this.to + 'T23:59:59').getTime()
       return {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-          x: {
-            type: 'time',
-            time: { unit },
-            ticks: { maxTicksLimit: 12 },
-            stacked: true
-          },
+          x: xScale,
           y: {
             beginAtZero: true,
             stacked: true,

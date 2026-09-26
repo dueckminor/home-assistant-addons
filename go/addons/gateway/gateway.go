@@ -252,6 +252,7 @@ func (g *Gateway) startRoute(route *ConfigRoute) {
 			UseTargetHostname:    route.Options.UseTargetHostname,
 			InsecureTLS:          route.Options.Insecure,
 			Auth:                 route.Options.Auth,
+			AuthSecret:           route.Options.AuthSecret,
 			DisableServiceWorker: route.Options.DisableServiceWorker,
 			MetricCallback:       g.metricCallback,
 		}
@@ -289,6 +290,10 @@ func (g *Gateway) startAuthServer(route *ConfigRoute) {
 
 	if g.metricsCollector != nil {
 		r.Use(network.MetricMiddleware(g.metricCallback))
+		r.Use(func(c *gin.Context) {
+			c.Set("metric_classification", "auth_page")
+			c.Next()
+		})
 	}
 
 	var err error

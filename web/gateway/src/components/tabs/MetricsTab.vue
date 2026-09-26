@@ -39,17 +39,17 @@
     <v-row class="mb-4 align-center" dense>
       <v-col cols="auto">
         <v-checkbox v-model="showSuccess" density="compact" hide-details color="#43a047">
-          <template #label><span style="color:#43a047">Success</span></template>
+          <template #label><span style="color:#43a047">Success <span v-if="totalSuccess">({{ totalSuccess.toLocaleString() }})</span></span></template>
         </v-checkbox>
       </v-col>
       <v-col cols="auto">
         <v-checkbox v-model="showRejected" density="compact" hide-details color="#e53935">
-          <template #label><span style="color:#e53935">Rejected</span></template>
+          <template #label><span style="color:#e53935">Rejected <span v-if="totalRejected">({{ totalRejected.toLocaleString() }})</span></span></template>
         </v-checkbox>
       </v-col>
       <v-col cols="auto">
         <v-checkbox v-model="showBlocked" density="compact" hide-details color="#fb8c00">
-          <template #label><span style="color:#fb8c00">Blocked</span></template>
+          <template #label><span style="color:#fb8c00">Blocked <span v-if="totalBlocked">({{ totalBlocked.toLocaleString() }})</span></span></template>
         </v-checkbox>
       </v-col>
     </v-row>
@@ -156,7 +156,7 @@
         <v-card height="100%">
           <v-card-title class="text-subtitle-1">Request Volume</v-card-title>
           <v-card-text style="height: 400px; padding-bottom: 8px">
-            <AccessChart :data-points="chartData" :granularity="autoGranularity" :show-success="showSuccess" :show-rejected="showRejected" :show-blocked="showBlocked" style="height: 100%" />
+            <AccessChart :data-points="chartData" :granularity="autoGranularity" :from="fromDate" :to="toDate" :show-success="showSuccess" :show-rejected="showRejected" :show-blocked="showBlocked" style="height: 100%" />
           </v-card-text>
         </v-card>
       </v-col>
@@ -178,7 +178,7 @@
           >
             <div class="d-flex flex-column text-caption" style="min-width: 0; overflow: hidden">
               <span :style="item.blocked ? 'color:#fb8c00' : ''">{{ item.blocked ? '—' : item.method }}</span>
-              <span :style="item.blocked ? 'color:#fb8c00' : 'color: rgba(0,0,0,0.6)'">{{ item.hostname }}</span>
+              <span :class="{ 'text-medium-emphasis': !item.blocked }" :style="item.blocked ? 'color:#fb8c00' : ''">{{ item.hostname }}</span>
               <span
                 class="text-medium-emphasis"
                 :style="item.blocked ? 'color:#fb8c00' : ''"
@@ -263,6 +263,15 @@ export default {
     }
   },
   computed: {
+    totalSuccess() {
+      return this.ipData.reduce((sum, ip) => sum + (ip.success || 0), 0)
+    },
+    totalRejected() {
+      return this.ipData.reduce((sum, ip) => sum + (ip.rejected || 0), 0)
+    },
+    totalBlocked() {
+      return this.ipData.reduce((sum, ip) => sum + (ip.blocked || 0), 0)
+    },
     autoGranularity() {
       const from = new Date(this.fromDate)
       const to   = new Date(this.toDate + 'T23:59:59')
