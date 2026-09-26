@@ -25,6 +25,7 @@ type ReverseProxyOptions struct {
 
 func NewHostImplReverseProxy(uri string, options ...ReverseProxyOptions) http.Handler {
 	r := gin.Default()
+	_ = r.SetTrustedProxies(nil)
 
 	combinedOptions := ReverseProxyOptions{}
 

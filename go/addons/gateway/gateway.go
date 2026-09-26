@@ -287,6 +287,7 @@ func (g *Gateway) startAuthServer(route *ConfigRoute) {
 		panic("only one auth-server allowed")
 	}
 	r := gin.Default()
+	_ = r.SetTrustedProxies(nil)
 
 	if g.metricsCollector != nil {
 		r.Use(network.MetricMiddleware(g.metricCallback))
@@ -568,6 +569,7 @@ func (g *Gateway) GetSMTPClient() *smtp.Client {
 
 func (g *Gateway) StartUI(ctx context.Context, port int) error {
 	r := gin.Default()
+	_ = r.SetTrustedProxies(nil)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
