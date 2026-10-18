@@ -15,7 +15,6 @@ require (
 	github.com/gonzalop/ftp v1.7.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
-	github.com/influxdata/influxdb1-client v0.0.0-20220302092344-a9ab5670611c
 	github.com/miekg/dns v1.1.73
 	github.com/simonvetter/modbus v1.6.4
 	golang.org/x/crypto v0.58.0

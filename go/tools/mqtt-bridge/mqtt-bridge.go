@@ -12,9 +12,7 @@ import (
 
 	"github.com/dueckminor/home-assistant-addons/go/addons/mqttbridge"
 	"github.com/dueckminor/home-assistant-addons/go/services/automation"
-	"github.com/dueckminor/home-assistant-addons/go/services/homeassistant"
 	"github.com/dueckminor/home-assistant-addons/go/services/homematic"
-	"github.com/dueckminor/home-assistant-addons/go/services/influxdb"
 	"github.com/dueckminor/home-assistant-addons/go/services/mqtt"
 	"github.com/dueckminor/home-assistant-addons/go/utils/crypto/rand"
 	"gopkg.in/yaml.v3"
@@ -52,35 +50,9 @@ type MqttConfig struct {
 	MqttPassword string `yaml:"mqtt_password"`
 }
 
-type InfluxDbConfig struct {
-	InfluxDbUri      string `yaml:"influx_db_uri"`
-	InfluxDbUser     string `yaml:"influx_db_user"`
-	InfluxDbPassword string `yaml:"influx_db_password"`
-}
-
 type BrigeConfig struct {
 	MqttConfig                `yaml:",inline"`
-	InfluxDbConfig            `yaml:",inline"`
 	homematic.HomematicConfig `yaml:",inline"`
-}
-type influxMeasurement struct {
-	config    homeassistant.Config
-	tags      map[string]string
-	available *influxAvailability
-	state     string
-}
-
-type influxAvailability struct {
-	measurements map[string]*influxMeasurement
-	available    bool
-}
-
-func toInflux(influxConfig InfluxDbConfig) {
-	influx, err := influxdb.NewClient(influxConfig.InfluxDbUri, "ha", influxConfig.InfluxDbUser, influxConfig.InfluxDbPassword)
-	if err != nil {
-		panic(err)
-	}
-	mqttbridge.EnableInflux(influx)
 }
 
 func main() {
@@ -120,10 +92,6 @@ func main() {
 	// Create server first so we can pass it to other functions
 	s := mqttbridge.NewServer(adminPort, distAdmin)
 	s.SetMqttConn(mqttConn)
-
-	if theConfig.InfluxDbUri != "" {
-		toInflux(theConfig.InfluxDbConfig)
-	}
 
 	if theConfig.HomematicUri != "" {
 		homematic.StartMqttBridge(theConfig.HomematicConfig)

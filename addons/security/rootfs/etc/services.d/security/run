@@ -4,7 +4,7 @@
 # s6-overlay docs: https://github.com/just-containers/s6-overlay
 # ==============================================================================
 
-# Read InfluxDB credentials from add-on options
+# Read FTP credentials from add-on options
 ftp_user=$(bashio::config 'ftp_user')
 ftp_password=$(bashio::config 'ftp_password')
 

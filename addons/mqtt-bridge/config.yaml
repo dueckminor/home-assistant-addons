@@ -18,9 +18,6 @@ options:
   mqtt_uri: "tcp://core-mosquitto:1883"
   mqtt_user: ""
   mqtt_password: ""
-  influx_db_uri: "http://a0d7b954-influxdb:8086"
-  influx_db_user: ""
-  influx_db_password: ""
   homematic_uri: ""
   homematic_user: ""
   homematic_password: ""
@@ -29,9 +26,6 @@ schema:
   mqtt_uri: str
   mqtt_user: str
   mqtt_password: str
-  influx_db_uri: str
-  influx_db_user: str
-  influx_db_password: str
   homematic_uri: str
   homematic_user: str
   homematic_password: str

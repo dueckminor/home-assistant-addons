@@ -3,16 +3,6 @@
 # Start the gateway service
 # ==============================================================================
 
-# Read InfluxDB credentials from add-on options
-influx_db_user=$(bashio::config 'influx_db_user')
-influx_db_password=$(bashio::config 'influx_db_password')
-influx_db_database=$(bashio::config 'influx_db_database')
-
-# Export as environment variables for the gateway
-export INFLUXDB_USERNAME="${influx_db_user}"
-export INFLUXDB_PASSWORD="${influx_db_password}"
-export INFLUXDB_DATABASE="${influx_db_database}"
-
 bashio::log.info "Starting Home Assistant Gateway..."
 
 ## Run gateway
