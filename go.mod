@@ -1,12 +1,12 @@
 module github.com/dueckminor/home-assistant-addons
 
-go 1.26.0
+go 1.26.10
 
 toolchain go1.27.3
 
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
-	github.com/gin-contrib/cors v1.7.9
+	github.com/gin-contrib/cors v1.7.10
 	github.com/gin-contrib/sessions v1.1.2
 	github.com/gin-contrib/static v1.1.8
 	github.com/gin-gonic/gin v1.12.0
