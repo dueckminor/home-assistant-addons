@@ -5,7 +5,7 @@ go 1.26.10
 toolchain go1.27.4
 
 require (
-	github.com/eclipse/paho.mqtt.golang v1.5.1
+	github.com/eclipse/paho.mqtt.golang v1.5.2
 	github.com/gin-contrib/cors v1.7.11
 	github.com/gin-contrib/sessions v1.1.4
 	github.com/gin-contrib/static v1.1.10
